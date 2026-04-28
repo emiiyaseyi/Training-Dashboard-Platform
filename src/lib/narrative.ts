@@ -24,9 +24,9 @@ export function generateExecutiveNarrative(data: GroupAnalytics): string[] {
 
   // Impact
   if (data.avgImpactScore > 0) {
-    const quality = data.avgImpactScore >= 70 ? 'high' : data.avgImpactScore >= 50 ? 'moderate' : 'low'
+    const quality = data.avgImpactScore >= 4.0 ? 'high' : data.avgImpactScore >= 3.0 ? 'moderate' : 'low'
     insights.push(
-      `Average training impact score is ${quality} at ${pct(data.avgImpactScore)}, based on participant confidence ratings.`
+      `Average training impact score is ${quality} at ${data.avgImpactScore.toFixed(1)}/5, based on participant confidence ratings.`
     )
   }
 

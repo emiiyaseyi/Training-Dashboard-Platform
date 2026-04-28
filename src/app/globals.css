@@ -6,9 +6,7 @@
   --font-inter: 'Inter', system-ui, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   background-color: #f8fafc;
@@ -21,56 +19,101 @@ body {
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* Chart containers */
 .plotly-chart { width: 100%; }
-
-/* Smooth transitions */
 .nav-link { transition: background-color 0.15s ease, color 0.15s ease; }
-
-/* Number formatting */
 .tabular-nums { font-variant-numeric: tabular-nums; }
 
-/* ── Print / PDF export ─────────────────────────────────────────── */
+/* BU panel slide animation */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.bu-panel-animate { animation: slideInRight 0.22s ease-out; }
+
+/* ── Standard print (dashboard pages, PDF export button) ──────────── */
 @media print {
   aside,
-  .no-print {
-    display: none !important;
-  }
+  .no-print { display: none !important; }
 
   body {
     background: #ffffff !important;
     font-size: 11pt;
-  }
-
-  main {
-    overflow: visible !important;
-    width: 100% !important;
-  }
-
-  @page {
-    size: A4 landscape;
-    margin: 15mm 12mm;
-  }
-
-  .bg-white,
-  .bg-slate-50 {
-    background: #ffffff !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .plotly-chart,
-  .rounded-xl {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+  main { overflow: visible !important; width: 100% !important; }
 
-  tr {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+  @page { size: A4 landscape; margin: 15mm 12mm; }
 
+  .bg-white, .bg-slate-50 { background: #ffffff !important; }
+  .plotly-chart, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
   h1 { font-size: 16pt !important; }
   h2 { font-size: 12pt !important; }
   p, li, td, th { font-size: 10pt !important; }
+}
+
+/* ── BU deep-dive panel print (triggered by body.bu-printing class) ── */
+body.bu-printing aside,
+body.bu-printing .no-print,
+body.bu-printing main > div > *:not(.bu-panel-host) {
+  display: none !important;
+}
+
+body.bu-printing .bu-panel-backdrop { display: none !important; }
+
+body.bu-printing #bu-deep-dive-panel {
+  position: static !important;
+  width: 100% !important;
+  height: auto !important;
+  max-width: 100% !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body.bu-printing .bu-panel-body {
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
+}
+
+@media print {
+  body.bu-printing {
+    background: #ffffff !important;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.bu-printing @page { size: A4 portrait; margin: 12mm; }
+
+  body.bu-printing aside,
+  body.bu-printing .no-print,
+  body.bu-printing main > div > *:not(.bu-panel-host) {
+    display: none !important;
+  }
+
+  body.bu-printing .bu-panel-backdrop { display: none !important; }
+
+  body.bu-printing #bu-deep-dive-panel {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  body.bu-printing .bu-panel-body {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  body.bu-printing section { break-inside: avoid; margin-bottom: 12px; }
+  body.bu-printing h3 { font-size: 10pt !important; }
+  body.bu-printing td, body.bu-printing th { padding: 4px 8px !important; font-size: 9pt !important; }
+  body.bu-printing .plotly-chart { break-inside: avoid; }
 }

@@ -65,6 +65,8 @@ export interface BUDetailAnalytics {
     impactAreas: { area: string; count: number }[]
   }
   subscriptionBreakdown: { org: string; count: number; totalAmount: number }[]
+  trainingParticipation: StaffParticipation
+  subscriptionParticipation: StaffParticipation
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -185,11 +187,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const totalStaffCount = businessUnits.reduce((s, b) => s + b.staffCount, 0)
   const groupCoverageRatio = totalStaffCount > 0 ? (uniqueStaffTrained / totalStaffCount) * 100 : 0
 
-  // ── Impact score ──
+  // ── Impact score — raw average on 0–5 scale ──
   const validFeedback = feedbackRecords.filter((f) => f.confidenceRating != null)
   const avgImpactScore =
     validFeedback.length > 0
-      ? (validFeedback.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validFeedback.length / 5) * 100
+      ? validFeedback.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validFeedback.length
       : 0
 
   const trainingSharePct = totalLearningInvestment > 0 ? (totalTrainingCost / totalLearningInvestment) * 100 : 0
@@ -232,13 +234,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     .sort((a, b) => b.totalAmount - a.totalAmount)
     .slice(0, 10)
 
-  // ── Impact distribution ──
+  // ── Impact distribution (0–5 scale) ──
   const bands = [
-    { range: '0–20%', min: 0, max: 1 },
-    { range: '20–40%', min: 1, max: 2 },
-    { range: '40–60%', min: 2, max: 3 },
-    { range: '60–80%', min: 3, max: 4 },
-    { range: '80–100%', min: 4, max: 5 },
+    { range: '0–1', min: 0, max: 1 },
+    { range: '1–2', min: 1, max: 2 },
+    { range: '2–3', min: 2, max: 3 },
+    { range: '3–4', min: 3, max: 4 },
+    { range: '4–5', min: 4, max: 5 },
   ]
   const impactDistribution = bands.map(({ range, min, max }) => ({
     range,
@@ -290,7 +292,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const validF = fRecs.filter((f) => f.confidenceRating != null)
     const avgImpact =
       validF.length > 0
-        ? (validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length / 5) * 100
+        ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
         : 0
     const subscriptionRatio = totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0
     const budgetUtilisation = budget > 0 ? (trainingCost / budget) * 100 : 0
@@ -443,5 +445,19 @@ export async function computeBUAnalytics(buName: string): Promise<BUDetailAnalyt
     .map(([org, v]) => ({ org, ...v }))
     .sort((a, b) => b.totalAmount - a.totalAmount)
 
-  return { bu, monthlyTrainingSpend, topTrainings, feedbackSummary, subscriptionBreakdown }
+  const trainingParticipation = computeParticipation(trainingRecords, staffTrained)
+  const subscriptionParticipation = computeParticipation(
+    subscriptionRecords.map((r) => ({ staffId: r.staffId, staffName: r.staffName })),
+    subscriptionStaff,
+  )
+
+  return {
+    bu,
+    monthlyTrainingSpend,
+    topTrainings,
+    feedbackSummary,
+    subscriptionBreakdown,
+    trainingParticipation,
+    subscriptionParticipation,
+  }
 }
