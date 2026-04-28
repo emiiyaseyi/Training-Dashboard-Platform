@@ -29,6 +29,7 @@ function fmt(n: number) {
   return `₦${n.toLocaleString()}`
 }
 function pct(n: number) { return `${n.toFixed(1)}%` }
+function rating(n: number) { return `${n.toFixed(1)}/5` }
 
 export default function ExecutiveDashboard() {
   const [data, setData] = useState<DashData | null>(null)
@@ -79,7 +80,7 @@ export default function ExecutiveDashboard() {
     'Total Investment (₦)': b.totalInvestment,
     'Staff Trained': b.staffTrained,
     'Coverage %': parseFloat(b.coverageRatio.toFixed(1)),
-    'Avg Impact %': parseFloat(b.avgImpactScore.toFixed(1)),
+    'Avg Impact (out of 5)': parseFloat(b.avgImpactScore.toFixed(1)),
   }))
 
   return (
@@ -118,7 +119,7 @@ export default function ExecutiveDashboard() {
           <KPICard title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" icon={BadgeCheck} color="green" />
           <KPICard title="Investment per Staff" value={fmt(data.investmentPerStaff)} subtitle={`Across ${data.totalStaffCount.toLocaleString()} total staff`} icon={Users} color="amber" />
           <KPICard title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} icon={Target} color={data.groupCoverageRatio >= 70 ? 'green' : data.groupCoverageRatio >= 40 ? 'amber' : 'red'} alert={data.groupCoverageRatio < 30 && data.totalStaffCount > 0} />
-          <KPICard title="Avg Impact Score" value={pct(data.avgImpactScore)} subtitle="Based on confidence ratings" icon={TrendingUp} color={data.avgImpactScore >= 70 ? 'green' : data.avgImpactScore >= 50 ? 'amber' : 'slate'} />
+          <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={TrendingUp} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
           <KPICard title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={BarChart2} color={data.budgetRisk === 'over-budget' ? 'red' : data.budgetRisk === 'at-risk' ? 'amber' : 'green'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
           <KPICard title="Active Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={BadgeCheck} color="slate" />
         </div>
@@ -184,7 +185,7 @@ export default function ExecutiveDashboard() {
                 { key: 'subscriptionCost', header: 'Subscriptions', align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
                 { key: 'totalInvestment', header: 'Total Investment', align: 'right', render: (r) => fmt(r.totalInvestment as number) },
                 { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },
-                { key: 'avgImpactScore', header: 'Avg Impact', align: 'right', render: (r) => pct(r.avgImpactScore as number) },
+                { key: 'avgImpactScore', header: 'Avg Impact', align: 'right', render: (r) => rating(r.avgImpactScore as number) },
                 {
                   key: 'isOverBudget', header: 'Budget', align: 'center',
                   render: (r) => (

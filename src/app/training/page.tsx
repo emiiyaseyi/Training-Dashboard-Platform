@@ -26,6 +26,7 @@ function fmt(n: number) {
   return `₦${n.toLocaleString()}`
 }
 function pct(n: number) { return `${n.toFixed(1)}%` }
+function rating(n: number) { return `${n.toFixed(1)}/5` }
 
 export default function TrainingDashboard() {
   const [data, setData] = useState<DashData | null>(null)
@@ -85,7 +86,7 @@ export default function TrainingDashboard() {
           <KPICard title="Total Training Cost" value={fmt(data.totalTrainingCost)} subtitle="Period spend" icon={NairaSign} color="blue" />
           <KPICard title="Staff Trained" value={data.uniqueStaffTrained.toLocaleString()} subtitle={`Coverage: ${pct(data.groupCoverageRatio)}`} icon={Users} color="green" />
           <KPICard title="Avg Cost per Staff" value={fmt(avgCostPerStaff)} subtitle="Per trained employee" icon={BarChart2} color="purple" />
-          <KPICard title="Avg Impact Score" value={pct(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'From confidence ratings'} icon={TrendingUp} color={data.avgImpactScore >= 70 ? 'green' : 'amber'} />
+          <KPICard title="Avg Impact Score" value={data.avgImpactScore === 0 ? '—' : rating(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'Avg confidence rating (max 5)'} icon={TrendingUp} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Budget Utilisation" value={data.totalBudget > 0 ? pct((data.totalTrainingCost / data.totalBudget) * 100) : 'Not set'} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={Target} color={data.budgetRisk === 'over-budget' ? 'red' : 'amber'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
@@ -174,7 +175,7 @@ export default function TrainingDashboard() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Business Unit Training Detail</span>
-              <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Impact %': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
+              <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
             </div>
             <DataTable
               columns={[
@@ -184,7 +185,7 @@ export default function TrainingDashboard() {
                 { key: 'budgetUtilisation', header: 'Utilisation', align: 'right', render: (r) => (r.budget as number) > 0 ? pct(r.budgetUtilisation as number) : '—' },
                 { key: 'staffTrained', header: 'Staff Trained', align: 'right' },
                 { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },
-                { key: 'avgImpactScore', header: 'Impact Score', align: 'right', render: (r) => pct(r.avgImpactScore as number) },
+                { key: 'avgImpactScore', header: 'Impact Score', align: 'right', render: (r) => rating(r.avgImpactScore as number) },
               ]}
               data={data.businessUnits as unknown as Record<string, unknown>[]}
             />
