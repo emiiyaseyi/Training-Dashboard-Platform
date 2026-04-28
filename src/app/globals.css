@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Chart containers */
+.plotly-chart { width: 100%; }
+
+/* Smooth transitions */
+.nav-link { transition: background-color 0.15s ease, color 0.15s ease; }
+
+/* Number formatting */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* ── Print / PDF export ─────────────────────────────────────────── */
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    font-size: 11pt;
+  }
+
+  main {
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 15mm 12mm;
+  }
+
+  .bg-white,
+  .bg-slate-50 {
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .plotly-chart,
+  .rounded-xl {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1 { font-size: 16pt !important; }
+  h2 { font-size: 12pt !important; }
+  p, li, td, th { font-size: 10pt !important; }
+}
