@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model BusinessUnit {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  budget     Float    @default(0)
+  staffCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model UploadBatch {
+  id          String   @id @default(cuid())
+  type        String   // "training" | "feedback" | "subscription"
+  filename    String
+  recordCount Int
+  period      String?
+  createdAt   DateTime @default(now())
+
+  trainingRecords     TrainingRecord[]
+  feedbackRecords     FeedbackRecord[]
+  subscriptionRecords SubscriptionRecord[]
+}
+
+model TrainingRecord {
+  id           String   @id @default(cuid())
+  serialNo     String?
+  staffName    String
+  staffId      String   // unique staff identifier (replaces email)
+  training     String
+  businessUnit String
+  month        String
+  year         Int
+  cost         Float
+  batchId      String
+  createdAt    DateTime @default(now())
+
+  batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessUnit])
+  @@index([year])
+  @@index([staffId])
+}
+
+model FeedbackRecord {
+  id                  String   @id @default(cuid())
+  businessUnit        String
+  trainingTitle       String
+  role                String?
+  applicationResponse String?
+  impactAlignment     String?
+  confidenceRating    Float?
+  qualitativeResponse String?
+  batchId             String
+  createdAt           DateTime @default(now())
+
+  batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessUnit])
+}
+
+model SubscriptionRecord {
+  id             String   @id @default(cuid())
+  startTime      String?
+  completionTime String?
+  staffId        String   // unique staff identifier (replaces email)
+  staffName      String
+  businessUnit   String
+  membershipOrg  String
+  amount         Float
+  batchId        String
+  createdAt      DateTime @default(now())
+
+  batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessUnit])
+  @@index([membershipOrg])
+  @@index([staffId])
+}
+
+model HistoricalSnapshot {
+  id        String   @id @default(cuid())
+  period    String
+  type      String
+  data      String
+  createdAt DateTime @default(now())
+
+  @@unique([period, type])
+}
+
+model NarrativeReport {
+  id        String   @id @default(cuid())
+  period    String
+  content   String
+  type      String
+  createdAt DateTime @default(now())
+}
