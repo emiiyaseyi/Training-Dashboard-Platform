@@ -3,7 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  // LOCAL DEV: SQLite (file:./prisma/dev.db in .env.local)
+  // VERCEL:    The build script replaces "sqlite" with "postgresql" automatically
+  //            Set DATABASE_URL in Vercel environment variables.
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
