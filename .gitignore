@@ -5,10 +5,15 @@
 /.next/
 /out/
 
-# prisma
+# prisma — never commit the database (contains real data)
 prisma/dev.db
 prisma/dev.db-journal
 prisma/*.db
+prisma/**/*.db
+prisma/**/*.db-journal
+
+# server log
+dev.log
 
 # env
 .env
