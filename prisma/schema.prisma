@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,7 +18,7 @@ model BusinessUnit {
 
 model UploadBatch {
   id          String   @id @default(cuid())
-  type        String   // "training" | "feedback" | "subscription"
+  type        String
   filename    String
   recordCount Int
   period      String?
@@ -33,7 +33,7 @@ model TrainingRecord {
   id           String   @id @default(cuid())
   serialNo     String?
   staffName    String
-  staffId      String   // unique staff identifier (replaces email)
+  staffId      String
   training     String
   businessUnit String
   month        String
@@ -70,7 +70,7 @@ model SubscriptionRecord {
   id             String   @id @default(cuid())
   startTime      String?
   completionTime String?
-  staffId        String   // unique staff identifier (replaces email)
+  staffId        String
   staffName      String
   businessUnit   String
   membershipOrg  String
