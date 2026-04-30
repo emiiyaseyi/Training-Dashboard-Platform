@@ -368,7 +368,7 @@ export async function computeBUAnalytics(buName: string): Promise<BUDetailAnalyt
   const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
   const validF = feedbackRecords.filter((f) => f.confidenceRating != null)
   const avgImpact = validF.length > 0
-    ? (validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length / 5) * 100
+    ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
     : 0
 
   const bu: BUSummary = {

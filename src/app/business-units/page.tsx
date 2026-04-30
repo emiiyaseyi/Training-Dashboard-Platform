@@ -327,7 +327,7 @@ export default function BusinessUnitsDashboard() {
             </div>
           </div>
         ) : buDetail ? (
-          <BUDeepDivePanel buName={selectedBU} detail={buDetail} onClose={closeBU} />
+          <BUDeepDivePanel buName={selectedBU} detail={buDetail} onClose={closeBU} filter={filter} />
         ) : null
       )}
     </div>

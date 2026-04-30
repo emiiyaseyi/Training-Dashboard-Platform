@@ -15,6 +15,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { ChartCard } from '@/components/ui/ChartCard'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -103,7 +104,7 @@ export default function ExecutiveDashboard() {
         {isEmpty && <AlertBadge variant="info" message="No data uploaded yet. Go to Upload & Data to import your files." />}
 
         {data.dataQuality.issues.length > 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
               <p className="text-sm font-semibold text-amber-800">Data Quality: {data.dataQuality.score}/100</p>
@@ -136,37 +137,21 @@ export default function ExecutiveDashboard() {
         {!isEmpty && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-slate-800">Investment Split</h2>
-                  <SectionExport rows={[{ Training: data.totalTrainingCost, Subscriptions: data.totalSubscriptionCost }]} filename="investment_split" />
-                </div>
+              <ChartCard title="Investment Split" rows={[{ Training: data.totalTrainingCost, Subscriptions: data.totalSubscriptionCost }]} filename="investment_split">
                 <PieChart labels={['Training', 'Subscriptions']} values={[data.totalTrainingCost, data.totalSubscriptionCost]} donut height={220} />
-              </div>
-              <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-slate-800">Monthly Training Spend</h2>
-                  <SectionExport rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="monthly_spend" />
-                </div>
+              </ChartCard>
+              <ChartCard title="Monthly Training Spend" className="lg:col-span-2" rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="monthly_spend">
                 <LineChart labels={data.monthlySpend.map((m) => m.month)} values={data.monthlySpend.map((m) => m.cost)} height={220} />
-              </div>
+              </ChartCard>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-slate-800">Total Investment by Business Unit</h2>
-                  <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_investment" />
-                </div>
+              <ChartCard title="Total Investment by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_investment">
                 <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.totalInvestment)} color="#3b82f6" height={280} horizontal />
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-slate-800">Staff Coverage by Business Unit</h2>
-                  <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
-                </div>
+              </ChartCard>
+              <ChartCard title="Staff Coverage by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage">
                 <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.coverageRatio)} color="#22c55e" height={280} horizontal />
-              </div>
+              </ChartCard>
             </div>
           </>
         )}
