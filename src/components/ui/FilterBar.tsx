@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { CalendarDays, ChevronDown } from 'lucide-react'
-import { MONTHS, type PeriodFilter, type Month, filterLabel } from '@/lib/filter-types'
+import { MONTHS, type PeriodFilter, type Month, filterLabel, resolveFilter } from '@/lib/filter-types'
 
 interface FilterBarProps {
   availableYears: number[]
@@ -15,10 +15,13 @@ export function FilterBar({ availableYears, value, onChange }: FilterBarProps) {
   const [draft, setDraft] = useState<PeriodFilter>(value)
 
   const currentYear = new Date().getFullYear()
+  const currentMonth = MONTHS[new Date().getMonth()]
   const years = availableYears.length > 0 ? availableYears : [currentYear]
+  const defaultYear = years[0] ?? currentYear
 
   function apply() {
-    onChange(draft)
+    // Always resolve defaults before applying so API never gets undefined
+    onChange(resolveFilter({ ...draft, year: draft.year ?? defaultYear }))
     setOpen(false)
   }
 
@@ -49,7 +52,14 @@ export function FilterBar({ availableYears, value, onChange }: FilterBarProps) {
               {(['all', 'ytd', 'year', 'range'] as const).map((m) => (
                 <button
                   key={m}
-                  onClick={() => setDraft((p) => ({ ...p, mode: m }))}
+                  onClick={() => setDraft((p) => ({
+                    ...p,
+                    mode: m,
+                    // Always seed defaults so filterLabel never shows "undefined"
+                    year:      p.year      ?? defaultYear,
+                    fromMonth: p.fromMonth ?? 'January',
+                    toMonth:   p.toMonth   ?? currentMonth,
+                  }))}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     draft.mode === m
                       ? 'bg-blue-600 text-white border-blue-600'

@@ -17,7 +17,7 @@ const variantMap = {
 export function AlertBadge({ variant, message }: AlertBadgeProps) {
   const { icon: Icon, classes, iconClass } = variantMap[variant]
   return (
-    <div className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm ${classes}`}>
+    <div className={`no-print flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm ${classes}`}>
       <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${iconClass}`} />
       <span>{message}</span>
     </div>

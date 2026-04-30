@@ -12,20 +12,39 @@ export interface PeriodFilter {
   toMonth?: Month
 }
 
+function currentYear() { return new Date().getFullYear() }
+function currentMonthName(): Month { return MONTHS[new Date().getMonth()] }
+
+/** Human-readable label — never shows "undefined" */
 export function filterLabel(f: PeriodFilter): string {
-  if (f.mode === 'all') return 'All Time'
-  if (f.mode === 'ytd') return `${f.year} — Year to Date`
-  if (f.mode === 'year') return `Full Year ${f.year}`
-  if (f.mode === 'range') return `${f.fromMonth} – ${f.toMonth} ${f.year}`
+  const y = f.year ?? currentYear()
+  const from = f.fromMonth ?? 'January'
+  const to = f.toMonth ?? currentMonthName()
+  if (f.mode === 'all')   return 'All Time'
+  if (f.mode === 'ytd')   return `${y} — Year to Date`
+  if (f.mode === 'year')  return `Full Year ${y}`
+  if (f.mode === 'range') return `${from} – ${to} ${y}`
   return 'All Time'
 }
 
+/** Produce defaults for any missing fields so the API never receives undefined */
+export function resolveFilter(f: PeriodFilter): PeriodFilter {
+  if (f.mode === 'all') return f
+  return {
+    ...f,
+    year:      f.year      ?? currentYear(),
+    fromMonth: f.fromMonth ?? 'January',
+    toMonth:   f.toMonth   ?? currentMonthName(),
+  }
+}
+
 export function filterToParams(f: PeriodFilter): Record<string, string> {
-  if (f.mode === 'all') return {}
-  const p: Record<string, string> = { filterMode: f.mode }
-  if (f.year) p.year = String(f.year)
-  if (f.fromMonth) p.fromMonth = f.fromMonth
-  if (f.toMonth) p.toMonth = f.toMonth
+  const r = resolveFilter(f)
+  if (r.mode === 'all') return {}
+  const p: Record<string, string> = { filterMode: r.mode }
+  if (r.year)      p.year      = String(r.year)
+  if (r.fromMonth) p.fromMonth = r.fromMonth
+  if (r.toMonth)   p.toMonth   = r.toMonth
   return p
 }
 
@@ -35,23 +54,17 @@ export function filterToQuery(f: PeriodFilter): string {
   return qs ? `?${qs}` : ''
 }
 
-/** Returns which month indices (0-based) are included by the filter */
 export function activeMonthIndices(f: PeriodFilter): number[] | null {
-  if (f.mode === 'all' || f.mode === 'year') return null  // null = all months
-
+  if (f.mode === 'all' || f.mode === 'year') return null
   const now = new Date()
-  const currentMonthIdx = now.getMonth()
-
   if (f.mode === 'ytd') {
-    return Array.from({ length: currentMonthIdx + 1 }, (_, i) => i)
+    return Array.from({ length: now.getMonth() + 1 }, (_, i) => i)
   }
   if (f.mode === 'range' && f.fromMonth && f.toMonth) {
     const from = MONTHS.indexOf(f.fromMonth as Month)
-    const to = MONTHS.indexOf(f.toMonth as Month)
+    const to   = MONTHS.indexOf(f.toMonth   as Month)
     if (from === -1 || to === -1) return null
-    const indices: number[] = []
-    for (let i = from; i <= to; i++) indices.push(i)
-    return indices
+    return Array.from({ length: to - from + 1 }, (_, i) => from + i)
   }
   return null
 }

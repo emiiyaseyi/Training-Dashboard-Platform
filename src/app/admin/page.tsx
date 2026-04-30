@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle } from 'lucide-react'
+import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 
 interface BU {
   id: string
@@ -31,6 +32,8 @@ export default function AdminPage() {
   const [csvImporting, setCsvImporting] = useState(false)
   const [csvResult, setCsvResult] = useState<CSVImportResult | null>(null)
   const csvRef = useRef<HTMLInputElement>(null)
+  const [sig, setSig] = useState<SignatureSettings>(() => loadSignatureSettings())
+  const [sigSaved, setSigSaved] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -392,6 +395,83 @@ export default function AdminPage() {
               {csvResult.errors.map((e, i) => <p key={i} className="text-xs text-red-700 ml-6">• {e}</p>)}
             </div>
           )}
+        </div>
+
+        {/* ── Export BU data ── */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <Download className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800">Export Business Unit Data</p>
+              <p className="text-xs text-slate-500 mt-0.5">Download all configured business units with their budgets and staff counts as a CSV file.</p>
+            </div>
+            <button
+              onClick={async () => {
+                const XLSXmod = await import('xlsx')
+                const XLSX = XLSXmod.default ?? XLSXmod
+                const rows = units.map((u) => ({
+                  'Business Unit': u.name,
+                  'Staff Count': u.staffCount,
+                  'Annual Budget (₦)': u.budget,
+                }))
+                const wb = XLSX.utils.book_new()
+                const ws = XLSX.utils.json_to_sheet(rows)
+                ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 20 }]
+                XLSX.utils.book_append_sheet(wb, ws, 'Business Units')
+                XLSX.writeFile(wb, `Business_Units_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: 'csv' })
+              }}
+              disabled={units.length === 0}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors shrink-0"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* ── Signature Settings ── */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
+          <div className="flex items-center gap-3 mb-1">
+            <PenLine className="w-5 h-5 text-slate-400" />
+            <p className="text-sm font-semibold text-slate-800">PDF Signature Block</p>
+          </div>
+          <p className="text-xs text-slate-500">These names and titles appear at the bottom of every exported Business Unit PDF report.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Title</label>
+              <input type="text" value={sig.primaryTitle} onChange={(e) => setSig((p) => ({ ...p, primaryTitle: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Head, Learning & Development" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
+              <input type="text" value={sig.primaryName} onChange={(e) => setSig((p) => ({ ...p, primaryName: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Title <span className="text-slate-400 font-normal">(optional)</span></label>
+              <input type="text" value={sig.secondaryTitle} onChange={(e) => setSig((p) => ({ ...p, secondaryTitle: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Business Unit Head" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
+              <input type="text" value={sig.secondaryName} onChange={(e) => setSig((p) => ({ ...p, secondaryName: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Organisation Line <span className="text-slate-400 font-normal">(appears at the foot of the signature block)</span></label>
+            <input type="text" value={sig.organisationLine} onChange={(e) => setSig((p) => ({ ...p, organisationLine: e.target.value }))}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Meristem Learning & Development" />
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { saveSignatureSettings(sig); setSigSaved(true); setTimeout(() => setSigSaved(false), 2500) }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Signature Settings
+            </button>
+            {sigSaved && <span className="text-xs text-green-600 font-medium">Saved — will appear on next PDF export.</span>}
+          </div>
         </div>
 
         {/* Info box */}

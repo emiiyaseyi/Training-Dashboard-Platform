@@ -2,18 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-inter: 'Inter', system-ui, sans-serif;
-}
-
+:root { --font-inter: 'Inter', system-ui, sans-serif; }
 * { box-sizing: border-box; }
+body { background-color: #f8fafc; color: #1e293b; }
 
-body {
-  background-color: #f8fafc;
-  color: #1e293b;
-}
-
-/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -23,97 +15,181 @@ body {
 .nav-link { transition: background-color 0.15s ease, color 0.15s ease; }
 .tabular-nums { font-variant-numeric: tabular-nums; }
 
-/* BU panel slide animation */
 @keyframes slideInRight {
   from { transform: translateX(100%); opacity: 0.6; }
   to   { transform: translateX(0);    opacity: 1; }
 }
 .bu-panel-animate { animation: slideInRight 0.22s ease-out; }
 
-/* ── Standard print (dashboard pages, PDF export button) ──────────── */
+/* Print-only elements are hidden on screen */
+.bu-print-header,
+.bu-print-footer { display: none; }
+
+/* ─────────────────────────────────────────────────────────────────
+   STANDARD PRINT  (dashboard PDF export button — not BU panel)
+───────────────────────────────────────────────────────────────── */
 @media print {
-  aside,
-  .no-print { display: none !important; }
-
-  body {
-    background: #ffffff !important;
-    font-size: 11pt;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
+  aside, .no-print { display: none !important; }
+  body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   main { overflow: visible !important; width: 100% !important; }
-
-  @page { size: A4 landscape; margin: 15mm 12mm; }
-
-  .bg-white, .bg-slate-50 { background: #ffffff !important; }
+  @page { size: A4 landscape; margin: 14mm 12mm; }
+  .bg-white, .bg-slate-50 { background: #fff !important; }
   .plotly-chart, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   tr { break-inside: avoid; page-break-inside: avoid; }
-  h1 { font-size: 16pt !important; }
-  h2 { font-size: 12pt !important; }
-  p, li, td, th { font-size: 10pt !important; }
 }
 
-/* ── BU deep-dive panel print (triggered by body.bu-printing class) ── */
+/* ─────────────────────────────────────────────────────────────────
+   BU DEEP-DIVE PRINT  (body.bu-printing class)
+
+   Orientation and scale are applied via data attributes:
+     body[data-print-orientation="portrait|landscape"]
+     body[data-print-scale="normal|large"]
+───────────────────────────────────────────────────────────────── */
+
+/* Pre-print DOM hide (applied before print dialog) */
 body.bu-printing aside,
 body.bu-printing .no-print,
-body.bu-printing main > div > *:not(.bu-panel-host) {
-  display: none !important;
-}
-
-body.bu-printing .bu-panel-backdrop { display: none !important; }
+body.bu-printing .bu-panel-backdrop,
+body.bu-printing main > div > *:not(.bu-panel-host) { display: none !important; }
 
 body.bu-printing #bu-deep-dive-panel {
   position: static !important;
+  display: block !important;         /* block, NOT flex — avoids pagination bugs */
   width: 100% !important;
+  max-width: none !important;
   height: auto !important;
-  max-width: 100% !important;
   box-shadow: none !important;
   overflow: visible !important;
-  display: flex !important;
-  flex-direction: column !important;
 }
 
 body.bu-printing .bu-panel-body {
+  display: block !important;
   overflow: visible !important;
   max-height: none !important;
   height: auto !important;
 }
 
 @media print {
+  /* ── Always when printing BU ── */
   body.bu-printing {
-    background: #ffffff !important;
-    font-size: 10pt;
+    background: #fff !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  body.bu-printing @page { size: A4 portrait; margin: 12mm; }
-
   body.bu-printing aside,
   body.bu-printing .no-print,
-  body.bu-printing main > div > *:not(.bu-panel-host) {
-    display: none !important;
-  }
-
-  body.bu-printing .bu-panel-backdrop { display: none !important; }
+  body.bu-printing .bu-panel-backdrop,
+  body.bu-printing main > div > *:not(.bu-panel-host) { display: none !important; }
 
   body.bu-printing #bu-deep-dive-panel {
     position: static !important;
+    display: block !important;
     width: 100% !important;
+    max-width: none !important;
     height: auto !important;
-    max-width: 100% !important;
     box-shadow: none !important;
     overflow: visible !important;
   }
 
   body.bu-printing .bu-panel-body {
+    display: block !important;
     overflow: visible !important;
     max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
   }
 
-  body.bu-printing section { break-inside: avoid; margin-bottom: 12px; }
-  body.bu-printing h3 { font-size: 10pt !important; }
-  body.bu-printing td, body.bu-printing th { padding: 4px 8px !important; font-size: 9pt !important; }
-  body.bu-printing .plotly-chart { break-inside: avoid; }
+  /* ── Print header: always visible, never breaks away from body ── */
+  body.bu-printing .bu-print-header {
+    display: block !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+    margin-bottom: 10pt;
+  }
+
+  /* ── Executive summary stays with header on page 1 ── */
+  body.bu-printing .bu-print-header + * {
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+  }
+
+  /* ── Signature footer never splits across pages ── */
+  body.bu-printing .bu-print-footer {
+    display: block !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    margin-top: 20pt;
+  }
+
+  /* ── General section breaks ── */
+  body.bu-printing section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 12pt;
+  }
+
+  body.bu-printing .plotly-chart {
+    break-inside: avoid;
+    min-height: 160px;
+  }
+
+  body.bu-printing table { width: 100%; border-collapse: collapse; }
+  body.bu-printing tr     { break-inside: avoid; page-break-inside: avoid; }
+
+  /* ──────────────────────────────────────────────────────────────
+     PAGE SIZE / ORIENTATION
+  ────────────────────────────────────────────────────────────── */
+
+  /* Portrait (default) */
+  body.bu-printing:not([data-print-orientation]),
+  body.bu-printing[data-print-orientation="portrait"] {
+    font-size: 11pt !important;
+  }
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+
+  /* Landscape */
+  body.bu-printing[data-print-orientation="landscape"] {
+    font-size: 11pt !important;
+  }
+  /* NOTE: @page with selector not universally supported — use JS to set dynamically */
+
+  /* ──────────────────────────────────────────────────────────────
+     FONT SCALE — override Tailwind text-* classes explicitly
+     "normal" = compact, "large" = comfortable reading
+  ────────────────────────────────────────────────────────────── */
+
+  /* ── Normal scale ── */
+  body.bu-printing[data-print-scale="normal"] { font-size: 9pt !important; }
+
+  body.bu-printing[data-print-scale="normal"] .text-\[10px\],
+  body.bu-printing[data-print-scale="normal"] .text-xs   { font-size: 8pt  !important; }
+  body.bu-printing[data-print-scale="normal"] .text-sm   { font-size: 9pt  !important; }
+  body.bu-printing[data-print-scale="normal"] .text-base { font-size: 10pt !important; }
+  body.bu-printing[data-print-scale="normal"] .text-lg   { font-size: 11pt !important; }
+  body.bu-printing[data-print-scale="normal"] .text-xl   { font-size: 12pt !important; }
+  body.bu-printing[data-print-scale="normal"] .text-2xl  { font-size: 14pt !important; }
+  body.bu-printing[data-print-scale="normal"] td,
+  body.bu-printing[data-print-scale="normal"] th         { padding: 3px 6px !important; font-size: 8pt !important; }
+  body.bu-printing[data-print-scale="normal"] p          { font-size: 9pt  !important; }
+
+  /* ── Large scale (default when user picks "Large") ── */
+  body.bu-printing[data-print-scale="large"] { font-size: 12pt !important; }
+
+  body.bu-printing[data-print-scale="large"] .text-\[10px\],
+  body.bu-printing[data-print-scale="large"] .text-xs   { font-size: 9pt  !important; }
+  body.bu-printing[data-print-scale="large"] .text-sm   { font-size: 11pt !important; }
+  body.bu-printing[data-print-scale="large"] .text-base { font-size: 12pt !important; }
+  body.bu-printing[data-print-scale="large"] .text-lg   { font-size: 14pt !important; }
+  body.bu-printing[data-print-scale="large"] .text-xl   { font-size: 16pt !important; }
+  body.bu-printing[data-print-scale="large"] .text-2xl  { font-size: 18pt !important; }
+  body.bu-printing[data-print-scale="large"] td,
+  body.bu-printing[data-print-scale="large"] th         { padding: 5px 8px !important; font-size: 11pt !important; }
+  body.bu-printing[data-print-scale="large"] p          { font-size: 12pt !important; }
+  body.bu-printing[data-print-scale="large"] .plotly-chart { min-height: 200px; }
+
+  /* ── KPI card values always readable ── */
+  body.bu-printing .text-xl  { font-size: 14pt !important; }
+  body.bu-printing .text-2xl { font-size: 16pt !important; }
+  body.bu-printing .font-bold { font-weight: 700 !important; }
 }
