@@ -60,7 +60,10 @@ model FeedbackRecord {
   applicationResponse String?
   impactAlignment     String?
   confidenceRating    Float?
+  roleRelevance       Float?   // "How relevant is this training to your role?" (1–5)
+  expectationsMet     Float?   // "To what extent were your expectations met?" (1–5)
   qualitativeResponse String?
+  month               String?
   batchId             String
   createdAt           DateTime @default(now())
 
@@ -71,8 +74,7 @@ model FeedbackRecord {
 
 model SubscriptionRecord {
   id             String   @id @default(cuid())
-  startTime      String?
-  completionTime String?
+  month          String?
   staffId        String
   staffName      String
   businessUnit   String

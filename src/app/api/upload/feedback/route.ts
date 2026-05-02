@@ -46,14 +46,17 @@ export async function POST(req: NextRequest) {
 
     await prisma.feedbackRecord.createMany({
       data: normalizedRows.map((r) => ({
-        businessUnit: r.businessUnit,
-        trainingTitle: r.trainingTitle,
-        role: r.role,
+        businessUnit:        r.businessUnit,
+        trainingTitle:       r.trainingTitle,
+        role:                r.role,
         applicationResponse: r.applicationResponse,
-        impactAlignment: r.impactAlignment,
-        confidenceRating: r.confidenceRating,
+        impactAlignment:     r.impactAlignment,
+        confidenceRating:    r.confidenceRating > 0 ? r.confidenceRating : null,
+        roleRelevance:       r.roleRelevance   > 0 ? r.roleRelevance   : null,
+        expectationsMet:     r.expectationsMet > 0 ? r.expectationsMet : null,
         qualitativeResponse: r.qualitativeResponse,
-        batchId: batch.id,
+        month:               r.month || null,
+        batchId:             batch.id,
       })),
     })
 

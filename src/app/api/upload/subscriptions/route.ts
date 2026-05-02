@@ -46,8 +46,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.subscriptionRecord.createMany({
       data: normalizedRows.map((r) => ({
-        startTime:     r.startTime,
-        completionTime:r.completionTime,
+        month:         r.month || null,
         staffId:       r.staffId.toUpperCase(),
         staffName:     r.staffName,
         businessUnit:  r.businessUnit,

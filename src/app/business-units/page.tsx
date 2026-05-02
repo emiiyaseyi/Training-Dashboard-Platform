@@ -164,16 +164,19 @@ export default function BusinessUnitsDashboard() {
     } finally { setLoading(false) }
   }, [])
 
-  const loadBUDetail = useCallback(async (name: string) => {
+  const loadBUDetail = useCallback(async (name: string, f: PeriodFilter) => {
     setDetailLoading(true)
     setBuDetail(null)
-    try { setBuDetail(await (await fetch(`/api/analytics/bu?name=${encodeURIComponent(name)}`)).json()) }
+    try {
+      const qs = filterToQuery(f).replace('?', '&')
+      setBuDetail(await (await fetch(`/api/analytics/bu?name=${encodeURIComponent(name)}${qs}`)).json())
+    }
     finally { setDetailLoading(false) }
   }, [])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadGroup(filter) }, [filter])
-  useEffect(() => { if (selectedBU) loadBUDetail(selectedBU) }, [selectedBU, loadBUDetail])
+  useEffect(() => { if (selectedBU) loadBUDetail(selectedBU, filter) }, [selectedBU, filter, loadBUDetail])
 
   const openBU = (name: string) => setSelectedBU(name)
   const closeBU = () => { setSelectedBU(null); setBuDetail(null) }

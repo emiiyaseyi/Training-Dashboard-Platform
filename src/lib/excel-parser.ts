@@ -17,12 +17,14 @@ export interface FeedbackRow {
   applicationResponse: string
   impactAlignment: string
   confidenceRating: number
+  roleRelevance: number    // "How relevant is this training to your role?" (1–5)
+  expectationsMet: number  // "To what extent were your expectations met?" (1–5)
   qualitativeResponse: string
+  month: string
 }
 
 export interface SubscriptionRow {
-  startTime: string
-  completionTime: string
+  month: string
   staffId: string
   staffName: string
   businessUnit: string
@@ -143,8 +145,11 @@ export function parseFeedbackExcel(buffer: Buffer): ParseResult<FeedbackRow> {
     role:       findHeader(headers, ['role', 'jobtitle', 'position']),
     app:        findHeader(headers, ['applicationresponse', 'application', 'applied']),
     impact:     findHeader(headers, ['impactalignment', 'impact', 'alignment', 'strategicalignment']),
-    confidence: findHeader(headers, ['confidencerating', 'confidencelevel', 'basedonconfidence', 'confidence', 'ratingscale', 'rating', 'score', 'level']),
-    qualitative:findHeader(headers, ['qualitativeresponse', 'qualitative', 'comments', 'feedback', 'response']),
+    confidence:    findHeader(headers, ['confidencerating', 'confidencelevel', 'basedonconfidence', 'confidence', 'ratingscale', 'rating', 'score', 'level']),
+    roleRelevance: findHeader(headers, ['rolerelevance', 'relevance', 'trainingrelevance', 'relevanttorole', 'howrelevant', 'rolesuitability']),
+    expectsMet:    findHeader(headers, ['expectationsmet', 'expectationmet', 'metexpectations', 'expectations', 'extentmet', 'towhichextent', 'extent']),
+    qualitative:   findHeader(headers, ['qualitativeresponse', 'qualitative', 'comments', 'feedback', 'response']),
+    month:         findHeader(headers, ['month', 'trainingmonth', 'period', 'feedbackmonth']),
   }
 
   if (!col.bu)    errors.push('Could not find a "Business Unit" column.')
@@ -156,8 +161,12 @@ export function parseFeedbackExcel(buffer: Buffer): ParseResult<FeedbackRow> {
     const bu = normalise(r[col.bu!])
     if (!bu) { warnings.push(`Row ${lineNo}: Business Unit empty — skipped.`); return }
 
-    const confidence = toFloat(r[col.confidence ?? ''] ?? 0)
+    const confidence    = toFloat(r[col.confidence    ?? ''] ?? 0)
+    const roleRel       = toFloat(r[col.roleRelevance ?? ''] ?? 0)
+    const expMet        = toFloat(r[col.expectsMet    ?? ''] ?? 0)
     if (confidence > 5) warnings.push(`Row ${lineNo}: Confidence rating ${confidence} > 5.`)
+    if (roleRel > 5)    warnings.push(`Row ${lineNo}: Role relevance ${roleRel} > 5.`)
+    if (expMet > 5)     warnings.push(`Row ${lineNo}: Expectations met ${expMet} > 5.`)
 
     rows.push({
       businessUnit:       bu,
@@ -166,7 +175,10 @@ export function parseFeedbackExcel(buffer: Buffer): ParseResult<FeedbackRow> {
       applicationResponse:normalise(r[col.app ?? ''] ?? ''),
       impactAlignment:    normalise(r[col.impact ?? ''] ?? ''),
       confidenceRating:   Math.min(5, Math.max(0, confidence)),
+      roleRelevance:      Math.min(5, Math.max(0, roleRel)),
+      expectationsMet:    Math.min(5, Math.max(0, expMet)),
       qualitativeResponse:normalise(r[col.qualitative ?? ''] ?? ''),
+      month:              normalise(r[col.month ?? ''] ?? ''),
     })
   })
 
@@ -189,13 +201,12 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
 
   const headers = Object.keys(raw[0])
   const col = {
-    startTime:      findHeader(headers, ['starttime', 'start', 'startdate', 'date']),
-    completionTime: findHeader(headers, ['completiontime', 'completion', 'enddate', 'endtime']),
-    staffId:        findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id', 'email', 'emailaddress']),
-    name:           findHeader(headers, ['name', 'staffname', 'fullname']),
-    bu:             findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
-    org:            findHeader(headers, ['membershiporganization', 'membershiporganisation', 'organization', 'organisation', 'membership', 'body', 'professionalbody']),
-    amount:         findHeader(headers, ['amount', 'cost', 'fee', 'subscriptioncost', 'subscriptionfee']),
+    month:   findHeader(headers, ['month', 'subscriptionmonth', 'period', 'starttime', 'start', 'startdate', 'date']),
+    staffId: findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id', 'email', 'emailaddress']),
+    name:    findHeader(headers, ['name', 'staffname', 'fullname']),
+    bu:      findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
+    org:     findHeader(headers, ['membershiporganization', 'membershiporganisation', 'organization', 'organisation', 'membership', 'body', 'professionalbody']),
+    amount:  findHeader(headers, ['amount', 'cost', 'fee', 'subscriptioncost', 'subscriptionfee']),
   }
 
   if (!col.name)   errors.push('Could not find a "Name" column.')
@@ -216,12 +227,11 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
     if (!staffId) warnings.push(`Row ${lineNo}: No Staff ID for "${name}" — using row index as fallback.`)
 
     rows.push({
-      startTime:      normalise(r[col.startTime ?? ''] ?? ''),
-      completionTime: normalise(r[col.completionTime ?? ''] ?? ''),
-      staffId:        staffId || `UNKNOWN_${i + 1}`,
-      staffName:      name,
-      businessUnit:   normalise(r[col.bu!]),
-      membershipOrg:  normalise(r[col.org!]),
+      month:        normalise(r[col.month ?? ''] ?? ''),
+      staffId:      staffId || `UNKNOWN_${i + 1}`,
+      staffName:    name,
+      businessUnit: normalise(r[col.bu!]),
+      membershipOrg:normalise(r[col.org!]),
       amount,
     })
   })
