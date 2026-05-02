@@ -86,13 +86,13 @@ export default function UploadPage() {
           <FileUpload
             endpoint="/api/upload/feedback"
             label="Training Feedback Data"
-            description="Headers: Business Unit, Training Title, Role, Application response, Impact alignment, Confidence rating, Qualitative responses"
+            description="Headers: Business Unit, Training Title, Role, Month, Application response, Impact alignment, Confidence rating, Role Relevance, Expectations Met, Qualitative responses"
             onSuccess={loadHistory}
           />
           <FileUpload
             endpoint="/api/upload/subscriptions"
             label="Professional Subscriptions"
-            description="Headers: Start time, Completion time, Staff ID, Name, Business Unit, Membership Organization, Amount"
+            description="Headers: Month, Staff ID, Name, Business Unit, Membership Organization, Amount"
             onSuccess={loadHistory}
           />
         </div>
@@ -107,12 +107,12 @@ export default function UploadPage() {
             },
             {
               title: 'Training Feedback — Expected Columns',
-              columns: ['Business Unit', 'Training Title', 'Role', 'Application response', 'Impact alignment', 'Confidence rating (0–5)', 'Qualitative responses'],
+              columns: ['Business Unit', 'Training Title', 'Role', 'Month', 'Application response', 'Impact alignment', 'Confidence rating (0–5)', 'Role Relevance (1–5)', 'Expectations Met (1–5)', 'Qualitative responses'],
               color: 'purple',
             },
             {
               title: 'Subscriptions — Expected Columns',
-              columns: ['Start time', 'Completion time', 'Staff ID', 'Name', 'Business Unit', 'Membership Organization', 'Amount'],
+              columns: ['Month', 'Staff ID', 'Name', 'Business Unit', 'Membership Organization', 'Amount'],
               color: 'green',
             },
           ].map(({ title, columns, color }) => (

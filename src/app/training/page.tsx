@@ -11,6 +11,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -93,7 +94,12 @@ export default function TrainingDashboard() {
           <KPICard title="Projected Spend" value={fmt(data.forecastedSpend)} subtitle="End of year forecast" icon={TrendingUp} color={data.budgetRisk === 'over-budget' ? 'red' : 'blue'} />
           <KPICard title="Training Programmes" value={data.topTrainings.length.toString()} subtitle="Unique programmes" icon={BookOpen} color="purple" />
           <KPICard title="Avg Trainings / Staff" value={trainingFrequency.toFixed(1)} subtitle="Training frequency" icon={BarChart2} color="slate" />
+          {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="Training relevance to current role" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
+          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent expectations were met" icon={TrendingUp} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
         </div>
+
+        {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
+        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} showSubscription={false} />}
 
         {/* Participation */}
         {!isEmpty && (

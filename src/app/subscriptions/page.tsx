@@ -11,6 +11,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import type { GroupAnalytics } from '@/lib/analytics'
@@ -83,6 +84,9 @@ export default function SubscriptionsDashboard() {
         {topOrgShare > 35 && data.topMembershipOrgs.length > 0 && (
           <AlertBadge variant="warning" message={`${data.topMembershipOrgs[0].org} accounts for ${pct(topOrgShare)} of total subscription spend — consider diversifying.`} />
         )}
+
+        {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
+        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} />}
 
         {/* Participation */}
         {!isEmpty && (
