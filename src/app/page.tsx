@@ -15,6 +15,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { ChartCard } from '@/components/ui/ChartCard'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -123,7 +124,12 @@ export default function ExecutiveDashboard() {
           <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={TrendingUp} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
           <KPICard title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={BarChart2} color={data.budgetRisk === 'over-budget' ? 'red' : data.budgetRisk === 'at-risk' ? 'amber' : 'green'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
           <KPICard title="Active Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={BadgeCheck} color="slate" />
+          {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
+          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={TrendingUp} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
         </div>
+
+        {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
+        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} />}
 
         {/* Participation stats */}
         {!isEmpty && (

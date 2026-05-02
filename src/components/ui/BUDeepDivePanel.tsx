@@ -8,6 +8,7 @@ import { LineChart } from '@/components/charts/LineChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { SectionExport } from './SectionExport'
 import { ParticipationCard } from './ParticipationCard'
+import { LearningIntelligenceLayer } from './LearningIntelligenceLayer'
 import { PDFOptionsModal, type PDFPrintOptions } from './PDFOptionsModal'
 import { exportBUToExcel } from '@/lib/bu-excel-export'
 import { loadSignatureSettings } from '@/lib/signature-settings'
@@ -169,6 +170,17 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               <MiniKPI label="Budget Status" value={bu.budget > 0 ? (bu.isOverBudget ? 'Over Budget' : 'On Track') : 'Not Set'} sub={bu.budget > 0 ? `Budget: ${fmt(bu.budget)}` : 'Set in Admin Settings'} accent={bu.isOverBudget ? 'text-red-700' : bu.budget > 0 ? 'text-green-700' : 'text-slate-400'} alert={bu.isOverBudget} />
               <MiniKPI label="Subscription Members" value={bu.subscriptionStaff.toLocaleString()} sub="Staff with active memberships" accent="text-blue-700" />
             </div>
+            {/* New feedback dimensions */}
+            {(detail.avgRoleRelevance > 0 || detail.avgExpectationsMet > 0) && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                {detail.avgRoleRelevance > 0 && (
+                  <MiniKPI label="Role Relevance" value={rating(detail.avgRoleRelevance)} sub="How relevant is training to their role?" accent={detail.avgRoleRelevance >= 4 ? 'text-green-700' : 'text-amber-700'} />
+                )}
+                {detail.avgExpectationsMet > 0 && (
+                  <MiniKPI label="Expectations Met" value={rating(detail.avgExpectationsMet)} sub="To what extent were expectations met?" accent={detail.avgExpectationsMet >= 4 ? 'text-green-700' : 'text-amber-700'} />
+                )}
+              </div>
+            )}
             {bu.totalInvestment > 0 && (
               <div className={`mt-3 rounded-xl border px-4 py-3 ${bu.subscriptionRatio > 50 ? 'border-blue-100 bg-blue-50' : bu.subscriptionRatio < 20 ? 'border-purple-100 bg-purple-50' : 'border-green-100 bg-green-50'}`}>
                 <p className={`text-xs font-semibold ${bu.subscriptionRatio > 50 ? 'text-blue-700' : bu.subscriptionRatio < 20 ? 'text-purple-700' : 'text-green-700'}`}>
@@ -178,6 +190,9 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               </div>
             )}
           </section>
+
+          {/* ═══ Learning Intelligence & Risk Layer ═══ */}
+          {bu.totalInvestment > 0 && <LearningIntelligenceLayer li={detail.intelligence} showSubscription={bu.subscriptionCost > 0} />}
 
           {/* ═══ Participation ═══ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
