@@ -11,6 +11,7 @@ import {
   Settings,
   TrendingUp,
   BookOpen,
+  FileBarChart,
 } from 'lucide-react'
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/training',         label: 'Training Analytics',      icon: GraduationCap },
   { href: '/subscriptions',    label: 'Subscriptions',           icon: BadgeCheck },
   { href: '/business-units',   label: 'Business Units',          icon: Building2 },
+  { href: '/reports',          label: 'Report Generation',       icon: FileBarChart },
   { href: '/upload',           label: 'Upload & Data',           icon: Upload },
   { href: '/admin',            label: 'Admin Settings',          icon: Settings },
 ]
@@ -45,7 +47,7 @@ export function Sidebar() {
         <p className="px-3 pt-2 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
           Analytics
         </p>
-        {navItems.slice(0, 4).map(({ href, label, icon: Icon }) => {
+        {navItems.slice(0, 5).map(({ href, label, icon: Icon }) => {
           const active = pathname === href
           return (
             <Link
@@ -66,7 +68,7 @@ export function Sidebar() {
         <p className="px-3 pt-4 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
           Management
         </p>
-        {navItems.slice(4).map(({ href, label, icon: Icon }) => {
+        {navItems.slice(5).map(({ href, label, icon: Icon }) => {
           const active = pathname === href
           return (
             <Link

@@ -19,6 +19,7 @@ function fmt(n: number) {
 
 interface CSVRow { name: string; staffCount: number; budget: number }
 interface CSVImportResult { imported: number; skipped: number; errors: string[] }
+interface YearConfig { id: string; buName: string; year: number; budget: number; staffCount: number }
 
 export default function AdminPage() {
   const [units, setUnits] = useState<BU[]>([])
@@ -31,9 +32,19 @@ export default function AdminPage() {
   const [editMap, setEditMap] = useState<Record<string, { budget: string; staffCount: string }>>({})
   const [csvImporting, setCsvImporting] = useState(false)
   const [csvResult, setCsvResult] = useState<CSVImportResult | null>(null)
+  const [csvYear, setCsvYear] = useState(new Date().getFullYear())
   const csvRef = useRef<HTMLInputElement>(null)
   const [sig, setSig] = useState<SignatureSettings>(() => loadSignatureSettings())
   const [sigSaved, setSigSaved] = useState(false)
+
+  // Year-based config
+  const currentYear = new Date().getFullYear()
+  const [selectedYear, setSelectedYear] = useState(currentYear)
+  const [yearConfigs, setYearConfigs] = useState<YearConfig[]>([])
+  const [yearEditMap, setYearEditMap] = useState<Record<string, { budget: string; staffCount: string }>>({})
+  const [yearSaving, setYearSaving] = useState<string | null>(null)
+  const [yearSaved, setYearSaved] = useState<string | null>(null)
+  const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i) // 2 past + current + 3 future
 
   const load = async () => {
     setLoading(true)
@@ -51,7 +62,41 @@ export default function AdminPage() {
     }
   }
 
+  const loadYearConfigs = async (year: number) => {
+    try {
+      const res = await fetch(`/api/business-units/yearly?year=${year}`)
+      const data: YearConfig[] = await res.json()
+      setYearConfigs(data)
+      const initial: Record<string, { budget: string; staffCount: string }> = {}
+      // Initialize from existing configs or zero
+      units.forEach((u) => {
+        const cfg = data.find((c) => c.buName === u.name)
+        initial[u.name] = { budget: cfg ? cfg.budget.toString() : '0', staffCount: cfg ? cfg.staffCount.toString() : '0' }
+      })
+      setYearEditMap(initial)
+    } catch {}
+  }
+
+  const saveYearConfig = async (buName: string) => {
+    setYearSaving(buName)
+    try {
+      const vals = yearEditMap[buName] ?? { budget: '0', staffCount: '0' }
+      await fetch('/api/business-units/yearly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buName, year: selectedYear, budget: parseFloat(vals.budget) || 0, staffCount: parseInt(vals.staffCount) || 0 }),
+      })
+      setYearSaved(buName)
+      setTimeout(() => setYearSaved(null), 2000)
+      await loadYearConfigs(selectedYear)
+    } finally {
+      setYearSaving(null)
+    }
+  }
+
   useEffect(() => { load() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (units.length > 0) loadYearConfigs(selectedYear) }, [selectedYear, units.length])
 
   const save = async (unit: BU) => {
     setSaving(unit.id)
@@ -125,12 +170,21 @@ export default function AdminPage() {
         parsed.push({ name, staffCount: isNaN(staffCountRaw) ? 0 : staffCountRaw, budget: isNaN(budgetRaw) ? 0 : budgetRaw })
       })
 
-      let imported = 0
+      // Ensure base BusinessUnit records exist first
       for (const row of parsed) {
         await fetch('/api/business-units', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(row),
+          body: JSON.stringify({ name: row.name, budget: row.budget, staffCount: row.staffCount }),
+        })
+      }
+      // Upsert into year-specific config
+      let imported = 0
+      for (const row of parsed) {
+        await fetch('/api/business-units/yearly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ buName: row.name, year: csvYear, budget: row.budget, staffCount: row.staffCount }),
         })
         imported++
       }
@@ -342,12 +396,25 @@ export default function AdminPage() {
             <div className="flex-1">
               <p className="text-sm font-semibold text-blue-900">Bulk Import via CSV / Excel</p>
               <p className="text-xs text-blue-700 mt-0.5">
-                Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong> — to set multiple BUs at once.
+                Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong>.
+                Select the year this data applies to — values will be saved to the year-specific config.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-blue-800">Year:</label>
+              <select
+                value={csvYear}
+                onChange={(e) => setCsvYear(parseInt(e.target.value))}
+                className="text-sm border border-blue-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={() => csvRef.current?.click()}
               disabled={csvImporting}
@@ -388,11 +455,86 @@ export default function AdminPage() {
                   ? <CheckCircle className="w-4 h-4 text-green-600" />
                   : <XCircle className="w-4 h-4 text-red-500" />}
                 <p className="text-sm font-medium text-slate-800">
-                  {csvResult.imported} business unit{csvResult.imported !== 1 ? 's' : ''} imported
+                  {csvResult.imported} business unit{csvResult.imported !== 1 ? 's' : ''} imported for {csvYear}
                   {csvResult.skipped > 0 && `, ${csvResult.skipped} row${csvResult.skipped !== 1 ? 's' : ''} skipped`}
                 </p>
               </div>
               {csvResult.errors.map((e, i) => <p key={i} className="text-xs text-red-700 ml-6">• {e}</p>)}
+            </div>
+          )}
+        </div>
+
+        {/* ── Year-based Budget & Headcount ── */}
+        <div className="rounded-xl border border-blue-100 bg-white shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Annual Budget & Headcount by Year</p>
+              <p className="text-xs text-slate-500 mt-0.5">Set budget and staff count per year for historical accuracy and multi-year analytics.</p>
+            </div>
+            {/* Year selector */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-slate-600">Year:</label>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {units.length === 0 ? (
+            <p className="text-xs text-slate-400">Upload training or subscription data first — business units are auto-detected.</p>
+          ) : (
+            <div className="space-y-3">
+              {units.map((unit) => {
+                const vals = yearEditMap[unit.name] ?? { budget: '0', staffCount: '0' }
+                const isSaving = yearSaving === unit.name
+                const isSaved  = yearSaved  === unit.name
+                const existing = yearConfigs.find((c) => c.buName === unit.name)
+                const changed = parseFloat(vals.budget) !== (existing?.budget ?? 0) || parseInt(vals.staffCount) !== (existing?.staffCount ?? 0)
+
+                return (
+                  <div key={unit.name} className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                      <Building2 className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-700 w-48 shrink-0 truncate">{unit.name}</p>
+                    <div className="flex-1 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Budget {selectedYear} (₦)</label>
+                        <input
+                          type="number" min="0" value={vals.budget}
+                          onChange={(e) => setYearEditMap((p) => ({ ...p, [unit.name]: { ...vals, budget: e.target.value } }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Headcount {selectedYear}</label>
+                        <input
+                          type="number" min="0" value={vals.staffCount}
+                          onChange={(e) => setYearEditMap((p) => ({ ...p, [unit.name]: { ...vals, staffCount: e.target.value } }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isSaved && <span className="text-xs text-green-600 font-medium">Saved</span>}
+                      <button
+                        onClick={() => saveYearConfig(unit.name)}
+                        disabled={isSaving || !changed}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${changed && !isSaving ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                      >
+                        {isSaving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

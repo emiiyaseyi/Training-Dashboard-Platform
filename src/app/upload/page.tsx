@@ -76,17 +76,17 @@ export default function UploadPage() {
         </div>
 
         {/* Upload cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <FileUpload
             endpoint="/api/upload/training"
             label="Training Cost Data"
-            description="Headers: S/N, Name, Staff ID, Training, Business Units, Month, Cost"
+            description="Headers: S/N, Name, Staff ID, Training, Business Units, Month, Cost, Learning Hours"
             onSuccess={loadHistory}
           />
           <FileUpload
             endpoint="/api/upload/feedback"
             label="Training Feedback Data"
-            description="Headers: Business Unit, Training Title, Role, Month, Application response, Impact alignment, Confidence rating, Role Relevance, Expectations Met, Qualitative responses"
+            description="Headers: Business Unit, Training Title, Role, Month, Application response, Impact alignment, Confidence rating, Role Relevance, Expectations Met, Vendor Rating, Vendor Name, Qualitative responses"
             onSuccess={loadHistory}
           />
           <FileUpload
@@ -95,25 +95,36 @@ export default function UploadPage() {
             description="Headers: Month, Staff ID, Name, Business Unit, Membership Organization, Amount"
             onSuccess={loadHistory}
           />
+          <FileUpload
+            endpoint="/api/upload/kss"
+            label="KSS — Knowledge Sharing Sessions"
+            description="Headers: Staff ID, Name, Business Unit, In-Meeting Duration, Month — tracks internal learning hours"
+            onSuccess={loadHistory}
+          />
         </div>
 
         {/* Expected formats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[
             {
               title: 'Training Cost — Expected Columns',
-              columns: ['S/N', 'Name', 'Staff ID', 'Training', 'Business Units', 'Month', 'Cost'],
+              columns: ['S/N', 'Name', 'Staff ID', 'Training', 'Business Units', 'Month', 'Cost', 'Learning Hours (optional)'],
               color: 'blue',
             },
             {
               title: 'Training Feedback — Expected Columns',
-              columns: ['Business Unit', 'Training Title', 'Role', 'Month', 'Application response', 'Impact alignment', 'Confidence rating (0–5)', 'Role Relevance (1–5)', 'Expectations Met (1–5)', 'Qualitative responses'],
+              columns: ['Business Unit', 'Training Title', 'Role', 'Month', 'Application response', 'Impact alignment', 'Confidence rating (0–5)', 'Role Relevance (1–5)', 'Expectations Met (1–5)', 'Vendor Rating (0–5)', 'Vendor Name (optional)', 'Qualitative responses'],
               color: 'purple',
             },
             {
               title: 'Subscriptions — Expected Columns',
               columns: ['Month', 'Staff ID', 'Name', 'Business Unit', 'Membership Organization', 'Amount'],
               color: 'green',
+            },
+            {
+              title: 'KSS — Expected Columns',
+              columns: ['Staff ID', 'Name', 'Business Unit', 'In-Meeting Duration', 'Month'],
+              color: 'blue',
             },
           ].map(({ title, columns, color }) => (
             <div key={title} className={`rounded-xl border border-${color}-100 bg-${color}-50 p-4`}>
