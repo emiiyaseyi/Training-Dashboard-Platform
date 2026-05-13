@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, AlertCircle, Brain, TrendingUp, Users, Target, BarChart2, BadgeCheck, Zap } from 'lucide-react'
+import { AlertTriangle, AlertCircle, Brain, TrendingUp, Target, BarChart2, BadgeCheck, Zap } from 'lucide-react'
 import type { LearningIntelligence, RedFlag } from '@/lib/analytics'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,6 +68,12 @@ function ICard({
 
 // ── LCI card with progress bar ────────────────────────────────────────────────
 
+const LCI_DESCRIPTIONS: Record<string, string> = {
+  Emerging:   'Learning is in its early stages. Participation is limited and cultural embedding requires deliberate acceleration.',
+  Developing: 'Strong foundations are present with growing breadth and depth. Keep building consistency.',
+  Mature:     'Learning is deeply embedded and consistently delivering strategic value across the organisation.',
+}
+
 function LCICard({ lci, lciLabel }: { lci: number; lciLabel: string }) {
   const color: ColorKey = lciLabel === 'Mature' ? 'green' : lciLabel === 'Developing' ? 'amber' : 'red'
   const tagColor =
@@ -93,6 +99,7 @@ function LCICard({ lci, lciLabel }: { lci: number; lciLabel: string }) {
         <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${lci}%` }} />
         </div>
+        <p className="text-xs text-slate-500 mt-2 leading-relaxed">{LCI_DESCRIPTIONS[lciLabel]}</p>
       </div>
     </div>
   )
@@ -212,12 +219,11 @@ export function LearningIntelligenceLayer({ li, showSubscription = true }: Props
         </span>
       </div>
 
-      {/* Row 1 — Core Intelligence Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Row 1 — Core Intelligence Metrics (3 cards; Investment per Staff is already in exec summary) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <ICard icon={TrendingUp} title="Learning Depth" value={`${li.learningDepth.toFixed(1)}x`} subtitle="Avg trainings per staff" color={depthColor} tag={depthTag} tagColor={depthTagColor} />
         <LCICard lci={li.lci} lciLabel={li.lciLabel} />
         <ICard icon={BadgeCheck} title="Feedback Credibility" value={pct(li.feedbackCredibility)} subtitle="Feedback coverage" color={feedbackColor} tag={feedbackTag} tagColor={feedbackTagColor} />
-        <ICard icon={Users} title="Investment Fairness" value={fmt(li.investmentFairness)} subtitle="Spend per staff" color="amber" />
       </div>
 
       {/* Row 2 — Risk & Distribution Signals */}

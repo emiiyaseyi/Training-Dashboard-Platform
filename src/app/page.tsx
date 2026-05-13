@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Users, TrendingUp, Target, BarChart2,
-  BookOpen, BadgeCheck, AlertTriangle, RefreshCw,
+  BadgeCheck, AlertTriangle, RefreshCw,
+  Clock, Timer, ShieldCheck, Star, Award, UserCheck, GraduationCap, CreditCard, CheckCircle,
 } from 'lucide-react'
 import { KPICard } from '@/components/ui/KPICard'
 import { NairaSign } from '@/components/ui/NairaSign'
@@ -16,6 +17,7 @@ import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
+import { MetricsKey } from '@/components/ui/MetricsKey'
 import { ChartCard } from '@/components/ui/ChartCard'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -117,16 +119,23 @@ export default function ExecutiveDashboard() {
         {/* KPI grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Total Learning Investment" value={fmt(data.totalLearningInvestment)} subtitle={`${pct(data.trainingSharePct)} training · ${pct(data.subscriptionSharePct)} subscriptions`} icon={NairaSign} color="blue" />
-          <KPICard title="Training Spend" value={fmt(data.totalTrainingCost)} subtitle="Formal training programmes" icon={BookOpen} color="purple" />
+          <KPICard title="Training Spend" value={fmt(data.totalTrainingCost)} subtitle="Formal training programmes" icon={GraduationCap} color="purple" />
           <KPICard title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" icon={BadgeCheck} color="green" />
           <KPICard title="Investment per Staff" value={fmt(data.investmentPerStaff)} subtitle={`Across ${data.totalStaffCount.toLocaleString()} total staff`} icon={Users} color="amber" />
-          <KPICard title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} icon={Target} color={data.groupCoverageRatio >= 70 ? 'green' : data.groupCoverageRatio >= 40 ? 'amber' : 'red'} alert={data.groupCoverageRatio < 30 && data.totalStaffCount > 0} />
-          <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={TrendingUp} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
+          <KPICard title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} icon={UserCheck} color={data.groupCoverageRatio >= 70 ? 'green' : data.groupCoverageRatio >= 40 ? 'amber' : 'red'} alert={data.groupCoverageRatio < 30 && data.totalStaffCount > 0} />
+          <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
           <KPICard title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={BarChart2} color={data.budgetRisk === 'over-budget' ? 'red' : data.budgetRisk === 'at-risk' ? 'amber' : 'green'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
-          <KPICard title="Active Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={BadgeCheck} color="slate" />
+          <KPICard title="Active Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={CreditCard} color="slate" />
           {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
-          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={TrendingUp} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+          {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
+          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString()} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
+          {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
+          {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.hoursReport.staffMeeting40h + data.hoursReport.staffBelow40h} staff`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
         </div>
+
+        {/* Metrics Key */}
+        <MetricsKey />
 
         {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
         {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} />}
