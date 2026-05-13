@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
         confidenceRating:    r.confidenceRating > 0 ? r.confidenceRating : null,
         roleRelevance:       r.roleRelevance   > 0 ? r.roleRelevance   : null,
         expectationsMet:     r.expectationsMet > 0 ? r.expectationsMet : null,
+        vendorRating:        r.vendorRating    > 0 ? r.vendorRating    : null,
+        vendorName:          r.vendorName       || null,
         qualitativeResponse: r.qualitativeResponse,
         month:               r.month || null,
         batchId:             batch.id,

@@ -51,6 +51,15 @@ export async function exportBUToExcel(buName: string, detail: BUDetailAnalytics)
           Responses: a.count,
         })),
       },
+      ...(detail.vendorPerformance.length > 0 ? [{
+        name: 'Vendor Performance',
+        rows: detail.vendorPerformance.map((v) => ({
+          Programme: v.training,
+          'Vendor / Facilitator': v.vendorName || '—',
+          'Avg Rating (out of 5)': v.avgRating,
+          Responses: v.responses,
+        })),
+      }] : []),
     ],
     `${buName.replace(/\s+/g, '_')}_BU_Report`,
   )

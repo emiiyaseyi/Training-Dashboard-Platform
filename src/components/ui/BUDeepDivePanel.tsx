@@ -10,6 +10,7 @@ import { SectionExport } from './SectionExport'
 import { ParticipationCard } from './ParticipationCard'
 import { LearningIntelligenceLayer } from './LearningIntelligenceLayer'
 import { PDFOptionsModal, type PDFPrintOptions } from './PDFOptionsModal'
+import { MetricsKey } from './MetricsKey'
 import { exportBUToExcel } from '@/lib/bu-excel-export'
 import { loadSignatureSettings } from '@/lib/signature-settings'
 import { filterLabel, type PeriodFilter } from '@/lib/filter-types'
@@ -170,7 +171,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               <MiniKPI label="Budget Status" value={bu.budget > 0 ? (bu.isOverBudget ? 'Over Budget' : 'On Track') : 'Not Set'} sub={bu.budget > 0 ? `Budget: ${fmt(bu.budget)}` : 'Set in Admin Settings'} accent={bu.isOverBudget ? 'text-red-700' : bu.budget > 0 ? 'text-green-700' : 'text-slate-400'} alert={bu.isOverBudget} />
               <MiniKPI label="Subscription Members" value={bu.subscriptionStaff.toLocaleString()} sub="Staff with active memberships" accent="text-blue-700" />
             </div>
-            {/* New feedback dimensions */}
+            {/* Feedback dimensions */}
             {(detail.avgRoleRelevance > 0 || detail.avgExpectationsMet > 0) && (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 {detail.avgRoleRelevance > 0 && (
@@ -178,6 +179,23 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
                 )}
                 {detail.avgExpectationsMet > 0 && (
                   <MiniKPI label="Expectations Met" value={rating(detail.avgExpectationsMet)} sub="To what extent were expectations met?" accent={detail.avgExpectationsMet >= 4 ? 'text-green-700' : 'text-amber-700'} />
+                )}
+              </div>
+            )}
+            {/* Vendor rating + learning hours + compliance */}
+            {(detail.avgVendorRating > 0 || detail.hoursReport.hasData) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                {detail.avgVendorRating > 0 && (
+                  <MiniKPI label="Vendor Rating" value={rating(detail.avgVendorRating)} sub="Avg facilitator/provider evaluation" accent={detail.avgVendorRating >= 4 ? 'text-green-700' : detail.avgVendorRating >= 3 ? 'text-amber-700' : 'text-red-700'} />
+                )}
+                {detail.hoursReport.hasData && (
+                  <MiniKPI label="Total Learning Hours" value={`${detail.hoursReport.totalHours.toLocaleString()} hrs`} sub="Across all tracked learning activities" accent="text-purple-700" />
+                )}
+                {detail.hoursReport.hasData && (
+                  <MiniKPI label="Avg Hours per Staff" value={`${detail.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} sub="Average per employee with records" accent="text-purple-700" />
+                )}
+                {detail.hoursReport.hasData && (
+                  <MiniKPI label="40-Hour Compliance" value={`${detail.hoursReport.staffMeeting40hPct.toFixed(0)}%`} sub={`${detail.hoursReport.staffMeeting40h} of ${detail.hoursReport.staffMeeting40h + detail.hoursReport.staffBelow40h} staff`} accent={detail.hoursReport.staffMeeting40hPct >= 80 ? 'text-green-700' : detail.hoursReport.staffMeeting40hPct >= 50 ? 'text-amber-700' : 'text-red-700'} alert={detail.hoursReport.staffMeeting40hPct < 50 && detail.hoursReport.hasData} />
                 )}
               </div>
             )}
@@ -190,6 +208,9 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               </div>
             )}
           </section>
+
+          {/* ═══ Metrics Key ═══ */}
+          <MetricsKey />
 
           {/* ═══ Learning Intelligence & Risk Layer ═══ */}
           {bu.totalInvestment > 0 && <LearningIntelligenceLayer li={detail.intelligence} showSubscription={bu.subscriptionCost > 0} />}
@@ -255,7 +276,43 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
             </div>
           </Section>
 
-          {/* ═══ 6. Impact Alignment Areas ═══ */}
+          {/* ═══ 6. Vendor & Facilitator Performance ═══ */}
+          {detail.vendorPerformance.length > 0 && (
+            <Section
+              title="Vendor & Facilitator Performance"
+              rows={detail.vendorPerformance.map((v) => ({ Programme: v.training, 'Vendor / Facilitator': v.vendorName || '—', 'Avg Rating': v.avgRating, Responses: v.responses }))}
+              filename={`${buName}_vendor_performance`}
+              empty="No vendor rating data found."
+            >
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      {['Programme', 'Vendor / Facilitator', 'Avg Rating', 'Responses'].map((h, i) => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {detail.vendorPerformance.map((v, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-700">{v.training}</td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{v.vendorName || <span className="text-slate-300 italic">Not specified</span>}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          <span className={`font-semibold ${v.avgRating >= 4 ? 'text-green-700' : v.avgRating >= 3 ? 'text-amber-700' : 'text-red-700'}`}>
+                            {v.avgRating.toFixed(1)}/5
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-500 text-xs">{v.responses}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          )}
+
+          {/* ═══ 7. Impact Alignment Areas ═══ */}
           <Section title="Impact Alignment Areas" rows={detail.feedbackSummary.impactAreas.map((a) => ({ 'Impact Area': a.area, Responses: a.count }))} filename={`${buName}_impact_areas`} empty="No impact alignment data found.">
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               <table className="w-full text-sm">
@@ -276,6 +333,94 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               </table>
             </div>
           </Section>
+
+          {/* ═══ 7. Staff Training Attendance ═══ */}
+          {detail.staffAttendance.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+                  Staff Training Attendance — {buName}
+                </h3>
+                <SectionExport
+                  rows={detail.staffAttendance.map((s, i) => ({
+                    '#': i + 1,
+                    'Trainings Attended': s.trainingCount,
+                    'Staff Name': s.staffName,
+                    'Staff ID': s.staffId,
+                    'Programmes': s.programmes.join('; '),
+                  }))}
+                  filename={`${buName}_staff_attendance`}
+                  label="CSV"
+                />
+              </div>
+
+              {/* Table: count · staff name · staff ID · programmes */}
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white mb-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      {['#', 'Trainings', 'Staff Name', 'Staff ID', 'Programmes Attended'].map((h, i) => (
+                        <th key={i} className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${i <= 1 ? 'text-center' : 'text-left'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {detail.staffAttendance.map((s, i) => (
+                      <tr key={s.staffId} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-center text-slate-400 text-xs tabular-nums">{i + 1}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold tabular-nums">
+                            {s.trainingCount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{s.staffName}</td>
+                        <td className="px-4 py-3 text-slate-400 text-xs font-mono">{s.staffId}</td>
+                        <td className="px-4 py-3 text-slate-600 text-xs leading-relaxed">
+                          {s.programmes.join(' · ')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Training rosters: per programme, who attended */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Training Rosters</h4>
+                  <SectionExport
+                    rows={detail.trainingRosters.flatMap((r) =>
+                      r.staff.map((s) => ({ 'Training': r.training, 'Staff Name': s.staffName, 'Staff ID': s.staffId }))
+                    )}
+                    filename={`${buName}_training_rosters`}
+                    label="CSV"
+                  />
+                </div>
+
+                {detail.trainingRosters.map((roster) => (
+                  <div key={roster.training} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    {/* Programme header */}
+                    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                      <p className="text-sm font-semibold text-slate-800">{roster.training}</p>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 tabular-nums">
+                        {roster.staff.length} attendee{roster.staff.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    {/* Attendee list */}
+                    <div className="divide-y divide-slate-100">
+                      {roster.staff.map((s, i) => (
+                        <div key={s.staffId} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                          <span className="text-xs text-slate-400 tabular-nums w-6 text-right shrink-0">{i + 1}.</span>
+                          <span className="text-sm text-slate-700 font-medium">{s.staffName}</span>
+                          <span className="text-xs text-slate-400 font-mono ml-auto">{s.staffId}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ═══ Print-only signature footer ═══ */}
           {sig && (

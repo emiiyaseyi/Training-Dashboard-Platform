@@ -5,7 +5,6 @@ generator client {
 datasource db {
   // LOCAL DEV: SQLite (file:./prisma/dev.db in .env.local)
   // VERCEL:    The build script replaces "sqlite" with "postgresql" automatically
-  //            Set DATABASE_URL in Vercel environment variables.
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
@@ -13,15 +12,29 @@ datasource db {
 model BusinessUnit {
   id         String   @id @default(cuid())
   name       String   @unique
-  budget     Float    @default(0)
-  staffCount Int      @default(0)
+  budget     Float    @default(0)   // fallback if no year-specific config
+  staffCount Int      @default(0)   // fallback if no year-specific config
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
+// Year-specific budget and headcount per BU
+model BusinessUnitYearConfig {
+  id         String   @id @default(cuid())
+  buName     String
+  year       Int
+  budget     Float    @default(0)
+  staffCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([buName, year])
+  @@index([year])
+}
+
 model UploadBatch {
   id          String   @id @default(cuid())
-  type        String
+  type        String   // "training" | "feedback" | "subscription" | "kss"
   filename    String
   recordCount Int
   period      String?
@@ -30,6 +43,7 @@ model UploadBatch {
   trainingRecords     TrainingRecord[]
   feedbackRecords     FeedbackRecord[]
   subscriptionRecords SubscriptionRecord[]
+  kssRecords          KSSRecord[]
 }
 
 model TrainingRecord {
@@ -42,6 +56,7 @@ model TrainingRecord {
   month        String
   year         Int
   cost         Float
+  hours        Float?   // Learning Hours (optional — populated when provided)
   batchId      String
   createdAt    DateTime @default(now())
 
@@ -60,8 +75,10 @@ model FeedbackRecord {
   applicationResponse String?
   impactAlignment     String?
   confidenceRating    Float?
-  roleRelevance       Float?   // "How relevant is this training to your role?" (1–5)
-  expectationsMet     Float?   // "To what extent were your expectations met?" (1–5)
+  roleRelevance       Float?
+  expectationsMet     Float?
+  vendorRating        Float?   // Vendor/facilitator rating (0–5)
+  vendorName          String?  // Vendor/facilitator name (free text)
   qualitativeResponse String?
   month               String?
   batchId             String
@@ -90,6 +107,24 @@ model SubscriptionRecord {
   @@index([staffId])
 }
 
+// Knowledge Sharing Sessions (internal training hours)
+model KSSRecord {
+  id              String   @id @default(cuid())
+  staffId         String
+  staffName       String
+  businessUnit    String
+  durationMinutes Float    // In-Meeting Duration in minutes
+  month           String?
+  year            Int?
+  batchId         String
+  createdAt       DateTime @default(now())
+
+  batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessUnit])
+  @@index([staffId])
+}
+
 model HistoricalSnapshot {
   id        String   @id @default(cuid())
   period    String
@@ -106,4 +141,20 @@ model NarrativeReport {
   content   String
   type      String
   createdAt DateTime @default(now())
+}
+
+// Monthly report snapshots — generated per BU per month
+model MonthlyReport {
+  id           String   @id @default(cuid())
+  businessUnit String   // BU name, or "GROUP" for organisation-wide
+  year         Int
+  month        String
+  reportData   String   // JSON snapshot of analytics at time of generation
+  narrative    String   // Plain-text narrative
+  generatedBy  String?
+  generatedAt  DateTime @default(now())
+
+  @@index([businessUnit])
+  @@index([year, month])
+  @@unique([businessUnit, year, month])
 }

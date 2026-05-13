@@ -37,6 +37,38 @@ export interface LearningIntelligence {
   avgExpectationsMet: number
 }
 
+export interface StaffHoursRow {
+  staffId: string
+  staffName: string
+  businessUnit: string
+  formalHours: number    // from Training records
+  kssHours: number       // from KSS records (minutes → hours)
+  totalHours: number
+  trainingCount: number
+  meets40h: boolean
+}
+
+export interface TrainingHoursReport {
+  hasData: boolean
+  totalFormalHours: number
+  totalKSSHours: number
+  totalHours: number
+  avgHoursPerStaff: number
+  staffMeeting40h: number
+  staffMeeting40hPct: number
+  staffBelow40h: number
+  hoursDistribution: { range: string; count: number }[]
+  staffDetail: StaffHoursRow[]
+  costPerHour: number     // total training cost / total hours
+}
+
+export interface VendorPerformance {
+  training: string
+  vendorName: string
+  avgRating: number
+  responses: number
+}
+
 export interface BUSummary {
   name: string
   trainingCost: number
@@ -89,7 +121,22 @@ export interface GroupAnalytics {
   availableYears: number[]
   avgRoleRelevance: number
   avgExpectationsMet: number
+  avgVendorRating: number
+  vendorPerformance: VendorPerformance[]
   learningIntelligence: LearningIntelligence
+  hoursReport: TrainingHoursReport
+}
+
+export interface StaffAttendanceRow {
+  staffId: string
+  staffName: string
+  trainingCount: number
+  programmes: string[]  // unique training names attended
+}
+
+export interface TrainingRoster {
+  training: string
+  staff: { staffId: string; staffName: string }[]
 }
 
 export interface BUDetailAnalytics {
@@ -106,7 +153,12 @@ export interface BUDetailAnalytics {
   subscriptionParticipation: StaffParticipation
   avgRoleRelevance: number
   avgExpectationsMet: number
+  avgVendorRating: number
+  vendorPerformance: VendorPerformance[]
   intelligence: LearningIntelligence
+  hoursReport: TrainingHoursReport
+  staffAttendance: StaffAttendanceRow[]
+  trainingRosters: TrainingRoster[]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -118,6 +170,110 @@ const MONTH_ORDER = [
 
 function monthIndex(m: string): number {
   return MONTH_ORDER.indexOf(m.toLowerCase())
+}
+
+function computeHoursReport(
+  trainingRecords: { staffId: string; staffName: string; businessUnit: string; hours: number | null; cost: number }[],
+  kssRecords: { staffId: string; staffName: string; businessUnit: string; durationMinutes: number }[],
+): TrainingHoursReport {
+  const hasTrainingHours = trainingRecords.some((r) => r.hours && r.hours > 0)
+  const hasKSS = kssRecords.length > 0
+  if (!hasTrainingHours && !hasKSS) {
+    return {
+      hasData: false, totalFormalHours: 0, totalKSSHours: 0, totalHours: 0,
+      avgHoursPerStaff: 0, staffMeeting40h: 0, staffMeeting40hPct: 0, staffBelow40h: 0,
+      hoursDistribution: [], staffDetail: [], costPerHour: 0,
+    }
+  }
+
+  const staffMap = new Map<string, { staffName: string; businessUnit: string; formalH: number; kssH: number; count: number }>()
+
+  for (const r of trainingRecords) {
+    const id = r.staffId.toUpperCase()
+    if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
+    const e = staffMap.get(id)!
+    e.formalH += r.hours ?? 0
+    e.count++
+  }
+  for (const r of kssRecords) {
+    const id = r.staffId.toUpperCase()
+    if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
+    staffMap.get(id)!.kssH += r.durationMinutes / 60
+  }
+
+  const entries = [...staffMap.entries()]
+  const totalFormalHours = entries.reduce((s, [, v]) => s + v.formalH, 0)
+  const totalKSSHours = entries.reduce((s, [, v]) => s + v.kssH, 0)
+  const totalHours = totalFormalHours + totalKSSHours
+  const totalCost = trainingRecords.reduce((s, r) => s + r.cost, 0)
+
+  const staffDetail: StaffHoursRow[] = entries
+    .map(([id, v]) => ({
+      staffId: id, staffName: v.staffName, businessUnit: v.businessUnit,
+      formalHours: Math.round(v.formalH * 10) / 10,
+      kssHours:    Math.round(v.kssH    * 10) / 10,
+      totalHours:  Math.round((v.formalH + v.kssH) * 10) / 10,
+      trainingCount: v.count,
+      meets40h: (v.formalH + v.kssH) >= 40,
+    }))
+    .sort((a, b) => b.totalHours - a.totalHours)
+
+  const staffMeeting40h = staffDetail.filter((s) => s.meets40h).length
+  const avgHoursPerStaff = staffDetail.length > 0 ? totalHours / staffDetail.length : 0
+
+  const bands = [
+    { range: '0–10 hrs', min: 0, max: 10 },
+    { range: '10–20 hrs', min: 10, max: 20 },
+    { range: '20–30 hrs', min: 20, max: 30 },
+    { range: '30–40 hrs', min: 30, max: 40 },
+    { range: '40+ hrs', min: 40, max: Infinity },
+  ]
+  const hoursDistribution = bands.map(({ range, min, max }) => ({
+    range, count: staffDetail.filter((s) => s.totalHours >= min && s.totalHours < max).length,
+  }))
+
+  return {
+    hasData: true,
+    totalFormalHours: Math.round(totalFormalHours * 10) / 10,
+    totalKSSHours:    Math.round(totalKSSHours * 10) / 10,
+    totalHours:       Math.round(totalHours * 10) / 10,
+    avgHoursPerStaff: Math.round(avgHoursPerStaff * 10) / 10,
+    staffMeeting40h,
+    staffMeeting40hPct: staffDetail.length > 0 ? (staffMeeting40h / staffDetail.length) * 100 : 0,
+    staffBelow40h: staffDetail.length - staffMeeting40h,
+    hoursDistribution,
+    staffDetail,
+    costPerHour: totalHours > 0 ? totalCost / totalHours : 0,
+  }
+}
+
+function computeVendorPerformance(
+  feedbackRecords: { trainingTitle: string; vendorRating: number | null; vendorName?: string | null }[],
+): { avgVendorRating: number; vendorPerformance: VendorPerformance[] } {
+  const vendorMap = new Map<string, { sum: number; count: number; names: Map<string, number> }>()
+  for (const f of feedbackRecords) {
+    if (!f.vendorRating || f.vendorRating <= 0) continue
+    const t = f.trainingTitle || 'Unknown'
+    if (!vendorMap.has(t)) vendorMap.set(t, { sum: 0, count: 0, names: new Map() })
+    const e = vendorMap.get(t)!
+    e.sum += f.vendorRating
+    e.count++
+    const vn = (f.vendorName || '').trim()
+    if (vn) e.names.set(vn, (e.names.get(vn) ?? 0) + 1)
+  }
+  const vendorPerformance: VendorPerformance[] = [...vendorMap.entries()]
+    .map(([training, v]) => {
+      const topName = [...v.names.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+      return { training, vendorName: topName, avgRating: Math.round((v.sum / v.count) * 10) / 10, responses: v.count }
+    })
+    .sort((a, b) => b.avgRating - a.avgRating)
+
+  const allValid = feedbackRecords.filter((f) => f.vendorRating && f.vendorRating > 0)
+  const avgVendorRating = allValid.length > 0
+    ? Math.round((allValid.reduce((s, f) => s + (f.vendorRating ?? 0), 0) / allValid.length) * 10) / 10
+    : 0
+
+  return { avgVendorRating, vendorPerformance }
 }
 
 function computeDataQuality(
@@ -339,11 +495,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     feedbackRecords,
     subscriptionRecords,
     businessUnits,
+    allKSS,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
     prisma.subscriptionRecord.findMany(),
     prisma.businessUnit.findMany(),
+    prisma.kSSRecord.findMany(),
   ])
 
   // Collect all available years for the filter UI
@@ -358,6 +516,15 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const months = allowedMonths(filter)
   if (months) {
     trainingRecords = trainingRecords.filter((r) => months.has(r.month as typeof MONTHS[number]))
+  }
+
+  // Apply filter to KSS records
+  let kssRecords = allKSS
+  if (filter.mode !== 'all' && filter.year) {
+    kssRecords = kssRecords.filter((r) => r.year === filter.year)
+  }
+  if (months) {
+    kssRecords = kssRecords.filter((r) => !r.month || months.has(r.month as typeof MONTHS[number]))
   }
 
   // ── Training aggregates ──
@@ -550,6 +717,10 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   }
   const learningIntelligence: LearningIntelligence = { ...liBase, narrative: generateIntelligenceNarrative(liBase) }
 
+  // ── Hours + Vendor ──
+  const hoursReport = computeHoursReport(trainingRecords, kssRecords)
+  const { avgVendorRating, vendorPerformance } = computeVendorPerformance(feedbackRecords)
+
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
 
   return {
@@ -580,7 +751,10 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     availableYears,
     avgRoleRelevance,
     avgExpectationsMet,
+    avgVendorRating,
+    vendorPerformance,
     learningIntelligence,
+    hoursReport,
   }
 }
 
@@ -588,17 +762,16 @@ export async function computeBUAnalytics(
   buName: string,
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
-  // Fetch BU-specific data + all group data needed for benchmarking in one round trip
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.businessUnit.findFirst({ where: { name: { equals: buName } } }),
-    // Group-wide data for benchmark computation
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
     prisma.businessUnit.findMany(),
+    prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
   ])
 
   // Apply period filter to training records (same logic as group analytics)
@@ -627,6 +800,15 @@ export async function computeBUAnalytics(
     subscriptionRecords = subscriptionRecords.filter((r) =>
       !r.month || months.has(r.month as typeof MONTHS[number])
     )
+  }
+
+  // Filter KSS records for this BU
+  let kssRecords = buKSS
+  if (filter.mode !== 'all' && filter.year) {
+    kssRecords = kssRecords.filter((r) => r.year === filter.year)
+  }
+  if (months) {
+    kssRecords = kssRecords.filter((r) => !r.month || months.has(r.month as typeof MONTHS[number]))
   }
 
   const trainingCost = trainingRecords.reduce((s, r) => s + r.cost, 0)
@@ -786,6 +968,42 @@ export async function computeBUAnalytics(
   }
   const buIntelligence: LearningIntelligence = { ...buLIBase, narrative: generateIntelligenceNarrative(buLIBase) }
 
+  // ── Staff attendance list (filtered period) ──────────────────────────────
+  const staffMap = new Map<string, { staffName: string; programmes: Set<string> }>()
+  for (const r of trainingRecords) {
+    const id = r.staffId.toUpperCase()
+    if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, programmes: new Set() })
+    staffMap.get(id)!.programmes.add(r.training || 'Unknown')
+  }
+  const staffAttendance: StaffAttendanceRow[] = [...staffMap.entries()]
+    .map(([staffId, v]) => ({
+      staffId,
+      staffName: v.staffName,
+      trainingCount: v.programmes.size,
+      programmes: [...v.programmes].sort(),
+    }))
+    .sort((a, b) => b.trainingCount - a.trainingCount || a.staffName.localeCompare(b.staffName))
+
+  // ── Training rosters (who attended each programme) ───────────────────────
+  const rosterMap = new Map<string, Map<string, string>>() // training → Map<staffId, staffName>
+  for (const r of trainingRecords) {
+    const t = r.training || 'Unknown'
+    if (!rosterMap.has(t)) rosterMap.set(t, new Map())
+    rosterMap.get(t)!.set(r.staffId.toUpperCase(), r.staffName)
+  }
+  const trainingRosters: TrainingRoster[] = [...rosterMap.entries()]
+    .map(([training, staffMap2]) => ({
+      training,
+      staff: [...staffMap2.entries()]
+        .map(([staffId, staffName]) => ({ staffId, staffName }))
+        .sort((a, b) => a.staffName.localeCompare(b.staffName)),
+    }))
+    .sort((a, b) => b.staff.length - a.staff.length)
+
+  // ── BU-level hours + vendor ──
+  const buHoursReport = computeHoursReport(trainingRecords, kssRecords)
+  const { avgVendorRating: buAvgVendorRating, vendorPerformance: buVendorPerformance } = computeVendorPerformance(feedbackRecords)
+
   return {
     bu,
     monthlyTrainingSpend,
@@ -796,6 +1014,11 @@ export async function computeBUAnalytics(
     subscriptionParticipation,
     avgRoleRelevance: buAvgRoleRelevance,
     avgExpectationsMet: buAvgExpectationsMet,
+    avgVendorRating: buAvgVendorRating,
+    vendorPerformance: buVendorPerformance,
     intelligence: buIntelligence,
+    hoursReport: buHoursReport,
+    staffAttendance,
+    trainingRosters,
   }
 }

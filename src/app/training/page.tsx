@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { BookOpen, Users, TrendingUp, Target, BarChart2, RefreshCw } from 'lucide-react'
+import { BookOpen, Users, TrendingUp, Target, BarChart2, RefreshCw, Clock, Timer, ShieldCheck, Star, Award, Activity, CheckCircle } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { KPICard } from '@/components/ui/KPICard'
 import { DataTable } from '@/components/ui/DataTable'
@@ -12,6 +12,7 @@ import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
+import { MetricsKey } from '@/components/ui/MetricsKey'
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -87,16 +88,24 @@ export default function TrainingDashboard() {
           <KPICard title="Total Training Cost" value={fmt(data.totalTrainingCost)} subtitle="Period spend" icon={NairaSign} color="blue" />
           <KPICard title="Staff Trained" value={data.uniqueStaffTrained.toLocaleString()} subtitle={`Coverage: ${pct(data.groupCoverageRatio)}`} icon={Users} color="green" />
           <KPICard title="Avg Cost per Staff" value={fmt(avgCostPerStaff)} subtitle="Per trained employee" icon={BarChart2} color="purple" />
-          <KPICard title="Avg Impact Score" value={data.avgImpactScore === 0 ? '—' : rating(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'Avg confidence rating (max 5)'} icon={TrendingUp} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
+          <KPICard title="Avg Impact Score" value={data.avgImpactScore === 0 ? '—' : rating(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'Avg confidence rating (max 5)'} icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Budget Utilisation" value={data.totalBudget > 0 ? pct((data.totalTrainingCost / data.totalBudget) * 100) : 'Not set'} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={Target} color={data.budgetRisk === 'over-budget' ? 'red' : 'amber'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
           <KPICard title="Projected Spend" value={fmt(data.forecastedSpend)} subtitle="End of year forecast" icon={TrendingUp} color={data.budgetRisk === 'over-budget' ? 'red' : 'blue'} />
           <KPICard title="Training Programmes" value={data.topTrainings.length.toString()} subtitle="Unique programmes" icon={BookOpen} color="purple" />
-          <KPICard title="Avg Trainings / Staff" value={trainingFrequency.toFixed(1)} subtitle="Training frequency" icon={BarChart2} color="slate" />
+          <KPICard title="Avg Trainings / Staff" value={trainingFrequency.toFixed(1)} subtitle="Training frequency" icon={Activity} color="slate" />
           {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="Training relevance to current role" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
-          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent expectations were met" icon={TrendingUp} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+          {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
+          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString()} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
+          {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
+          {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} staff meeting requirement`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
+          {data.hoursReport.hasData && data.hoursReport.costPerHour > 0 && <KPICard title="Cost per Hour" value={fmt(data.hoursReport.costPerHour)} subtitle="Training cost per learning hour" icon={NairaSign} color="amber" />}
         </div>
+
+        {/* Metrics Key */}
+        <MetricsKey />
 
         {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
         {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} showSubscription={false} />}

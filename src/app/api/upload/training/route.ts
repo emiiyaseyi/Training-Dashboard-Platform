@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
         month:       r.month,
         year,
         cost:        r.cost,
+        hours:       r.hours > 0 ? r.hours : null,
         batchId:     batch.id,
       })),
     })
