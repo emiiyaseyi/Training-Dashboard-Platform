@@ -41,3 +41,13 @@ Notes & troubleshooting:
   - Running the terminal as Administrator can help when filesystem permissions block the rename.
 
 If you'd like, I can attempt the cleanup (delete the `.tmp` files and re-run `prisma generate`) now.
+
+2026-06-23 — Response status checking
+
+- Enhanced error handling in `src/app/admin/page.tsx`:
+  - `load()` now checks `res.ok` before parsing JSON; logs HTTP status and error details if not OK.
+  - `loadYearConfigs()` similarly checks `res.ok` and logs status on failure.
+- Enhanced error handling in `src/app/upload/page.tsx`:
+  - `loadHistory()` now checks `res.ok` before parsing JSON; logs HTTP status on failure.
+- These changes allow diagnosis of why the API returns empty object `{}` by logging the actual HTTP status code and response payload.
+- Verified in browser: both /admin and /upload pages now load without crashes; empty states display correctly when data is unavailable.

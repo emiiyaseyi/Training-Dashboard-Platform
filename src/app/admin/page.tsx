@@ -50,6 +50,12 @@ export default function AdminPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/business-units')
+      if (!res.ok) {
+        console.error(`[business-units] HTTP ${res.status}`, await res.json().catch(() => res.statusText))
+        setUnits([])
+        setEditMap({})
+        return
+      }
       const json = await res.json()
       const data: BU[] = Array.isArray(json) ? json : []
       if (!Array.isArray(json)) console.error('[business-units] unexpected response', json)
@@ -67,6 +73,12 @@ export default function AdminPage() {
   const loadYearConfigs = async (year: number) => {
     try {
       const res = await fetch(`/api/business-units/yearly?year=${year}`)
+      if (!res.ok) {
+        console.error(`[business-units/yearly] HTTP ${res.status}`, await res.json().catch(() => res.statusText))
+        setYearConfigs([])
+        setYearEditMap({})
+        return
+      }
       const json = await res.json()
       const data: YearConfig[] = Array.isArray(json) ? json : []
       if (!Array.isArray(json)) console.error('[business-units/yearly] unexpected response', json)
