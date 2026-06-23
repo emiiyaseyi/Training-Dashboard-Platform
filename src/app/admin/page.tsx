@@ -50,7 +50,9 @@ export default function AdminPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/business-units')
-      const data: BU[] = await res.json()
+      const json = await res.json()
+      const data: BU[] = Array.isArray(json) ? json : []
+      if (!Array.isArray(json)) console.error('[business-units] unexpected response', json)
       setUnits(data)
       const initial: Record<string, { budget: string; staffCount: string }> = {}
       data.forEach((u) => {
@@ -65,7 +67,9 @@ export default function AdminPage() {
   const loadYearConfigs = async (year: number) => {
     try {
       const res = await fetch(`/api/business-units/yearly?year=${year}`)
-      const data: YearConfig[] = await res.json()
+      const json = await res.json()
+      const data: YearConfig[] = Array.isArray(json) ? json : []
+      if (!Array.isArray(json)) console.error('[business-units/yearly] unexpected response', json)
       setYearConfigs(data)
       const initial: Record<string, { budget: string; staffCount: string }> = {}
       // Initialize from existing configs or zero
