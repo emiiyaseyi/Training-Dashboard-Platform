@@ -25,7 +25,16 @@ export default function UploadPage() {
     setLoadingHistory(true)
     try {
       const res = await fetch('/api/upload/history')
-      setHistory(await res.json())
+      const json = await res.json()
+      if (!Array.isArray(json)) {
+        console.error('[upload/history] unexpected response', json)
+        setHistory([])
+      } else {
+        setHistory(json)
+      }
+    } catch (err) {
+      console.error('[upload/history] fetch failed', err)
+      setHistory([])
     } finally {
       setLoadingHistory(false)
     }

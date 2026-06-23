@@ -7,7 +7,7 @@ interface Column<T> {
 
 interface DataTableProps<T extends Record<string, unknown>> {
   columns: Column<T>[]
-  data: T[]
+  data: T[] | unknown
   emptyMessage?: string
   caption?: string
 }
@@ -18,6 +18,7 @@ export function DataTable<T extends Record<string, unknown>>({
   emptyMessage = 'No data available.',
   caption,
 }: DataTableProps<T>) {
+  const rows: T[] = Array.isArray(data) ? data : []
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {caption && (
@@ -42,14 +43,14 @@ export function DataTable<T extends Record<string, unknown>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400 text-sm">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              data.map((row, i) => (
+              rows.map((row, i) => (
                 <tr key={i} className="hover:bg-slate-50 transition-colors">
                   {columns.map((col, colIdx) => (
                     <td
