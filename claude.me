@@ -1,0 +1,43 @@
+Changelog - claude.me
+
+2026-06-23
+
+- Modified `src/components/ui/DataTable.tsx`:
+  - Updated `DataTableProps` type: `data` now accepts `T[] | unknown`.
+  - Added `const rows: T[] = Array.isArray(data) ? data : []` to coerce non-array values to an empty array and avoid `data.map` runtime errors.
+
+- Modified `src/app/upload/page.tsx`:
+  - Updated `loadHistory` to validate the API response:
+    - Parse `res.json()` into `json` and check `Array.isArray(json)`.
+    - Log unexpected responses and fall back to `[]` when response is not an array or fetch fails.
+
+- Updated todo list statuses (internal): marked DataTable and UploadPage inspections complete.
+
+Notes:
+- These changes guard against the client receiving an error object (e.g., `{ error: '...' }`) from the API and prevent `data.map` from throwing.
+- If you want, I can also add a visual error banner in the UI when the API returns an error object so users see the underlying issue.
+
+2026-06-23 — Admin fixes
+
+- Modified `src/app/admin/page.tsx`:
+  - Validated API responses in `load` and `loadYearConfigs`:
+    - Parse `res.json()` into `json` and check `Array.isArray(json)`.
+    - Log unexpected responses and fall back to `[]` to avoid `.forEach` / `.map` runtime errors when the API returns an error object.
+  - This prevents the `units.map is not a function` and `data.forEach is not a function` client errors when the server returns `{ error: '...' }`.
+
+Notes:
+- The server previously returned error objects (500) when Prisma/database was unavailable; these client guards avoid crashes but you may want to surface API errors to users.
+
+2026-06-23 — Local DB + Prisma setup
+
+- Added `.env.local` and `.env` with `DATABASE_URL="file:./prisma/dev.db"` to point Prisma to a local SQLite DB for development.
+- Ran `prisma db push` to create `prisma/dev.db` and applied the schema.
+- Restarted the dev server so Next.js picks up the `.env` variables. After this, `/api/business-units` and `/api/upload/history` return `[]` (empty arrays) instead of error objects.
+
+Notes & troubleshooting:
+- On Windows the `prisma generate`/`prisma db push` step may fail to rename the query engine file due to file locks (EPERM). If you hit that, try:
+  - Close any running dev server and editors that might lock files, then run `npm run db:push` again.
+  - If failures persist, delete `node_modules/.prisma/client/*.tmp*` and retry `npm install` followed by `npm run db:push`.
+  - Running the terminal as Administrator can help when filesystem permissions block the rename.
+
+If you'd like, I can attempt the cleanup (delete the `.tmp` files and re-run `prisma generate`) now.
