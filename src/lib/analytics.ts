@@ -41,11 +41,13 @@ export interface StaffHoursRow {
   staffId: string
   staffName: string
   businessUnit: string
-  formalHours: number    // from Training records
-  kssHours: number       // from KSS records (minutes → hours)
+  formalHours: number
+  kssHours: number
   totalHours: number
   trainingCount: number
   meets40h: boolean
+  trainingItems: { training: string; hours: number; month: string }[]
+  kssItems: { hours: number; month: string }[]
 }
 
 export interface TrainingHoursReport {
@@ -173,8 +175,8 @@ function monthIndex(m: string): number {
 }
 
 function computeHoursReport(
-  trainingRecords: { staffId: string; staffName: string; businessUnit: string; hours: number | null; cost: number }[],
-  kssRecords: { staffId: string; staffName: string; businessUnit: string; durationMinutes: number }[],
+  trainingRecords: { staffId: string; staffName: string; businessUnit: string; hours: number | null; cost: number; training: string; month: string }[],
+  kssRecords: { staffId: string; staffName: string; businessUnit: string; durationMinutes: number; month?: string | null }[],
 ): TrainingHoursReport {
   const hasTrainingHours = trainingRecords.some((r) => r.hours && r.hours > 0)
   const hasKSS = kssRecords.length > 0
@@ -187,18 +189,30 @@ function computeHoursReport(
   }
 
   const staffMap = new Map<string, { staffName: string; businessUnit: string; formalH: number; kssH: number; count: number }>()
+  const trainingItemsMap = new Map<string, { training: string; hours: number; month: string }[]>()
+  const kssItemsMap = new Map<string, { hours: number; month: string }[]>()
 
   for (const r of trainingRecords) {
     const id = r.staffId.toUpperCase()
     if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
     const e = staffMap.get(id)!
-    e.formalH += r.hours ?? 0
+    const h = r.hours ?? 0
+    e.formalH += h
     e.count++
+    if (h > 0) {
+      if (!trainingItemsMap.has(id)) trainingItemsMap.set(id, [])
+      trainingItemsMap.get(id)!.push({ training: r.training || 'Unknown', hours: h, month: r.month })
+    }
   }
   for (const r of kssRecords) {
     const id = r.staffId.toUpperCase()
     if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
-    staffMap.get(id)!.kssH += r.durationMinutes / 60
+    const h = r.durationMinutes / 60
+    staffMap.get(id)!.kssH += h
+    if (h > 0) {
+      if (!kssItemsMap.has(id)) kssItemsMap.set(id, [])
+      kssItemsMap.get(id)!.push({ hours: Math.round(h * 100) / 100, month: r.month || '' })
+    }
   }
 
   const entries = [...staffMap.entries()]
@@ -215,6 +229,8 @@ function computeHoursReport(
       totalHours:  Math.round((v.formalH + v.kssH) * 10) / 10,
       trainingCount: v.count,
       meets40h: (v.formalH + v.kssH) >= 40,
+      trainingItems: trainingItemsMap.get(id) ?? [],
+      kssItems: kssItemsMap.get(id) ?? [],
     }))
     .sort((a, b) => b.totalHours - a.totalHours)
 
