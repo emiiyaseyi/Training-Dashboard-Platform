@@ -42,6 +42,7 @@ export default function ExecutiveDashboard() {
   const [filter, setFilter] = useState<PeriodFilter>({ mode: 'all' })
 
   const kpiRef = useRef<HTMLDivElement>(null)
+  const liRef = useRef<HTMLDivElement>(null)
   const participationRef = useRef<HTMLDivElement>(null)
   const buTableRef = useRef<HTMLDivElement>(null)
 
@@ -149,7 +150,16 @@ export default function ExecutiveDashboard() {
         <MetricsKey />
 
         {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
-        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} />}
+        {!isEmpty && (
+          <div>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={liRef} filename="learning_intelligence" label="Export Intelligence Layer" />
+            </div>
+            <div ref={liRef}>
+              <LearningIntelligenceLayer li={data.learningIntelligence} />
+            </div>
+          </div>
+        )}
 
         {/* Participation stats */}
         {!isEmpty && (

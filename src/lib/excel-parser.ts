@@ -103,7 +103,7 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
     bu:       findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     month:    findHeader(headers, ['month', 'period', 'trainingmonth']),
     cost:     findHeader(headers, ['cost', 'amount', 'fee', 'trainingcost', 'spend']),
-    hours:    findHeader(headers, ['learninghours', 'traininghours', 'hours', 'duration', 'durationhours', 'hoursoflearning', 'learningduration']),
+    hours:    findHeader(headers, ['learninghours', 'hoursoflearning', 'learningduration', 'traininghours', 'durationhours']),
   }
 
   if (!col.name) errors.push('Could not find a "Name" column.')
