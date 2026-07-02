@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import { ChevronDown, ChevronRight, ShieldCheck, Clock } from 'lucide-react'
 import type { StaffHoursRow } from '@/lib/analytics'
 import { SectionExport } from './SectionExport'
@@ -86,9 +86,8 @@ export function StaffHoursTable({ staffDetail }: Props) {
               const isOpen = expanded.has(s.staffId)
               const hasDetail = s.trainingItems.length > 0 || s.kssItems.length > 0
               return (
-                <>
+                <React.Fragment key={s.staffId}>
                   <tr
-                    key={s.staffId}
                     className={`hover:bg-slate-50 transition-colors ${isOpen ? 'bg-blue-50/40' : ''}`}
                   >
                     <td className="px-3 py-2.5 text-center">
@@ -113,7 +112,7 @@ export function StaffHoursTable({ staffDetail }: Props) {
 
                   {/* Expanded detail row */}
                   {isOpen && (
-                    <tr key={`${s.staffId}-detail`} className="bg-blue-50/30">
+                    <tr className="bg-blue-50/30">
                       <td colSpan={8} className="px-8 py-3">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Training items */}
@@ -149,7 +148,7 @@ export function StaffHoursTable({ staffDetail }: Props) {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               )
             })}
           </tbody>
