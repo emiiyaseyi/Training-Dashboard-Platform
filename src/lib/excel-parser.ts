@@ -302,11 +302,13 @@ export function parseKSSExcel(buffer: Buffer): ParseResult<KSSRow> {
     const rawDur = normalise(r[col.duration!])
     let durationMinutes = 0
     if (rawDur.includes(':')) {
+      // HH:MM:SS or HH:MM format
       const parts = rawDur.split(':').map(Number)
       if (parts.length === 3) durationMinutes = parts[0] * 60 + parts[1] + parts[2] / 60
-      else if (parts.length === 2) durationMinutes = parts[0] + parts[1] / 60
+      else if (parts.length === 2) durationMinutes = parts[0] * 60 + parts[1]
     } else {
-      durationMinutes = toFloat(rawDur)
+      // Plain decimal — values are already in hours, convert to minutes
+      durationMinutes = toFloat(rawDur) * 60
     }
 
     if (durationMinutes <= 0) warnings.push(`Row ${lineNo}: Zero/invalid duration for "${name}".`)
