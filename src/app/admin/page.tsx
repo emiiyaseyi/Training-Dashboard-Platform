@@ -592,6 +592,17 @@ export default function AdminPage() {
                         {isSaving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                         Save
                       </button>
+                      <button
+                        onClick={() => deleteBU(unit)}
+                        disabled={deleting === unit.id}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40"
+                        title="Delete this business unit"
+                      >
+                        {deleting === unit.id
+                          ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />}
+                        Delete
+                      </button>
                     </div>
                   </div>
                 )
