@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Building2, RefreshCw, TrendingUp, Users, Target } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { AlertBadge } from '@/components/ui/AlertBadge'
@@ -181,6 +181,12 @@ export default function BusinessUnitsDashboard() {
   const openBU = (name: string) => setSelectedBU(name)
   const closeBU = () => { setSelectedBU(null); setBuDetail(null) }
 
+  const allBUsRef = useRef<HTMLDivElement>(null)
+  const groupComparisonRef = useRef<HTMLDivElement>(null)
+  const investmentChartRef = useRef<HTMLDivElement>(null)
+  const coverageChartRef = useRef<HTMLDivElement>(null)
+  const fullTableRef = useRef<HTMLDivElement>(null)
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -225,26 +231,29 @@ export default function BusinessUnitsDashboard() {
         ) : (
           <>
             {/* ── All BU Cards ── */}
-            <section>
+            <div ref={allBUsRef}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-slate-800">All Business Units</h2>
-                <SectionExport rows={exportRows} filename="all_business_units" label="Export All" />
+                <SectionExport captureRef={allBUsRef} rows={exportRows} filename="all_business_units" label="Export All" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {buList.map((bu) => (
                   <BUCard key={bu.name} bu={bu} onClick={() => openBU(bu.name)} />
                 ))}
               </div>
-            </section>
+            </div>
 
             {/* ── Group comparison charts ── */}
-            <section>
-              <h2 className="text-base font-bold text-slate-800 mb-4">Group Comparison</h2>
+            <div ref={groupComparisonRef}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-slate-800">Group Comparison</h2>
+                <SectionExport captureRef={groupComparisonRef} filename="group_comparison" label="Export" />
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                <div ref={investmentChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-800">Total Learning Investment</h3>
-                    <SectionExport rows={buList.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_total_investment" />
+                    <SectionExport captureRef={investmentChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_total_investment" />
                   </div>
                   <BarChart
                     labels={buList.map((b) => b.name)}
@@ -254,10 +263,10 @@ export default function BusinessUnitsDashboard() {
                     horizontal
                   />
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                <div ref={coverageChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-800">Staff Coverage (%)</h3>
-                    <SectionExport rows={buList.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
+                    <SectionExport captureRef={coverageChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
                   </div>
                   <BarChart
                     labels={buList.map((b) => b.name)}
@@ -268,13 +277,13 @@ export default function BusinessUnitsDashboard() {
                   />
                 </div>
               </div>
-            </section>
+            </div>
 
             {/* ── Full comparison table ── */}
-            <section>
+            <div ref={fullTableRef}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-base font-bold text-slate-800">Full Comparison Table</h2>
-                <SectionExport rows={exportRows} filename="bu_full_comparison" />
+                <SectionExport captureRef={fullTableRef} rows={exportRows} filename="bu_full_comparison" />
               </div>
               <DataTable
                 columns={[
@@ -315,7 +324,7 @@ export default function BusinessUnitsDashboard() {
                 ]}
                 data={buList as unknown as Record<string, unknown>[]}
               />
-            </section>
+            </div>
           </>
         )}
       </div>
