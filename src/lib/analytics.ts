@@ -492,8 +492,8 @@ function computeParticipation(
 export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }): Promise<GroupAnalytics> {
   const [
     allTraining,
-    feedbackRecords,
-    subscriptionRecords,
+    allFeedbackRecords,
+    allSubscriptionRecords,
     businessUnits,
     allKSS,
   ] = await Promise.all([
@@ -525,6 +525,22 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   }
   if (months) {
     kssRecords = kssRecords.filter((r) => !r.month || months.has(r.month as typeof MONTHS[number]))
+  }
+
+  // Apply month filter to subscription records (no year field on SubscriptionRecord)
+  let subscriptionRecords = allSubscriptionRecords
+  if (months) {
+    subscriptionRecords = allSubscriptionRecords.filter(
+      (r) => !r.month || months.has(r.month as typeof MONTHS[number])
+    )
+  }
+
+  // Apply month filter to feedback records
+  let feedbackRecords = allFeedbackRecords
+  if (months) {
+    feedbackRecords = allFeedbackRecords.filter(
+      (r) => !r.month || months.has(r.month as typeof MONTHS[number])
+    )
   }
 
   // ── Training aggregates ──

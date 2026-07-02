@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine } from 'lucide-react'
+import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2 } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [yearEditMap, setYearEditMap] = useState<Record<string, { budget: string; staffCount: string }>>({})
   const [yearSaving, setYearSaving] = useState<string | null>(null)
   const [yearSaved, setYearSaved] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i) // 2 past + current + 3 future
 
   const load = async () => {
@@ -156,6 +157,21 @@ export default function AdminPage() {
     }
   }
 
+  const deleteBU = async (unit: BU) => {
+    if (!confirm(`Delete "${unit.name}"? This cannot be undone.`)) return
+    setDeleting(unit.id)
+    try {
+      await fetch('/api/business-units', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: unit.id }),
+      })
+      await load()
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   const handleCSVImport = async (file: File) => {
     setCsvImporting(true)
     setCsvResult(null)
@@ -206,7 +222,25 @@ export default function AdminPage() {
       }
 
       setCsvResult({ imported, skipped: errors.length, errors })
-      await load()
+      // Refresh base units and year configs together so the Annual table updates immediately
+      const [freshUnitsRes, freshYearRes] = await Promise.all([
+        fetch('/api/business-units'),
+        fetch(`/api/business-units/yearly?year=${csvYear}`),
+      ])
+      const freshUnits: BU[] = await freshUnitsRes.json().catch(() => [])
+      const freshYearConfigs: YearConfig[] = await freshYearRes.json().catch(() => [])
+      setUnits(freshUnits)
+      const editInit: Record<string, { budget: string; staffCount: string }> = {}
+      freshUnits.forEach((u) => { editInit[u.id] = { budget: u.budget.toString(), staffCount: u.staffCount.toString() } })
+      setEditMap(editInit)
+      const yearInit: Record<string, { budget: string; staffCount: string }> = {}
+      freshUnits.forEach((u) => {
+        const cfg = freshYearConfigs.find((c) => c.buName === u.name)
+        yearInit[u.name] = { budget: cfg ? cfg.budget.toString() : '0', staffCount: cfg ? cfg.staffCount.toString() : '0' }
+      })
+      setYearConfigs(freshYearConfigs)
+      setYearEditMap(yearInit)
+      setSelectedYear(csvYear)
     } catch {
       setCsvResult({ imported: 0, skipped: 0, errors: ['Failed to parse file. Please check the format.'] })
     } finally {
@@ -286,7 +320,7 @@ export default function AdminPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       {isSaved && <span className="text-xs text-green-600 font-medium">Saved</span>}
                       <button
                         onClick={() => save(unit)}
@@ -303,6 +337,17 @@ export default function AdminPage() {
                           <Save className="w-3.5 h-3.5" />
                         )}
                         Save
+                      </button>
+                      <button
+                        onClick={() => deleteBU(unit)}
+                        disabled={deleting === unit.id}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40"
+                        title="Delete this business unit"
+                      >
+                        {deleting === unit.id
+                          ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                          : <Trash2 className="w-3.5 h-3.5" />}
+                        Delete
                       </button>
                     </div>
                   </div>
