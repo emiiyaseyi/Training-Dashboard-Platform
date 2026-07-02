@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { BookOpen, Users, TrendingUp, Target, BarChart2, RefreshCw, Clock, Timer, ShieldCheck, Star, Award, Activity, CheckCircle } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { KPICard } from '@/components/ui/KPICard'
@@ -47,6 +47,17 @@ export default function TrainingDashboard() {
 
   useEffect(() => { load(filter) }, [filter, load])
 
+  const kpiRef = useRef<HTMLDivElement>(null)
+  const liRef = useRef<HTMLDivElement>(null)
+  const participationRef = useRef<HTMLDivElement>(null)
+  const monthlySpendRef = useRef<HTMLDivElement>(null)
+  const buSpendRef = useRef<HTMLDivElement>(null)
+  const impactDistRef = useRef<HTMLDivElement>(null)
+  const appRatesRef = useRef<HTMLDivElement>(null)
+  const roiRef = useRef<HTMLDivElement>(null)
+  const topTrainingsRef = useRef<HTMLDivElement>(null)
+  const buTrainingDetailRef = useRef<HTMLDivElement>(null)
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -84,52 +95,71 @@ export default function TrainingDashboard() {
         {isEmpty && <AlertBadge variant="info" message="No training cost data uploaded yet." />}
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Total Training Cost" value={fmt(data.totalTrainingCost)} subtitle="Period spend" icon={NairaSign} color="blue" />
-          <KPICard title="Staff Trained" value={data.uniqueStaffTrained.toLocaleString()} subtitle={`Coverage: ${pct(data.groupCoverageRatio)}`} icon={Users} color="green" />
-          <KPICard title="Avg Cost per Staff" value={fmt(avgCostPerStaff)} subtitle="Per trained employee" icon={BarChart2} color="purple" />
-          <KPICard title="Avg Impact Score" value={data.avgImpactScore === 0 ? '—' : rating(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'Avg confidence rating (max 5)'} icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Budget Utilisation" value={data.totalBudget > 0 ? pct((data.totalTrainingCost / data.totalBudget) * 100) : 'Not set'} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={Target} color={data.budgetRisk === 'over-budget' ? 'red' : 'amber'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
-          <KPICard title="Projected Spend" value={fmt(data.forecastedSpend)} subtitle="End of year forecast" icon={TrendingUp} color={data.budgetRisk === 'over-budget' ? 'red' : 'blue'} />
-          <KPICard title="Training Programmes" value={data.topTrainings.length.toString()} subtitle="Unique programmes" icon={BookOpen} color="purple" />
-          <KPICard title="Avg Trainings / Staff" value={trainingFrequency.toFixed(1)} subtitle="Training frequency" icon={Activity} color="slate" />
-          {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="Training relevance to current role" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
-          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
-          {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
-          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString()} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
-          {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
-          {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} staff meeting requirement`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
-          {data.hoursReport.hasData && data.hoursReport.costPerHour > 0 && <KPICard title="Cost per Hour" value={fmt(data.hoursReport.costPerHour)} subtitle="Training cost per learning hour" icon={NairaSign} color="amber" />}
+        <div ref={kpiRef}>
+          <div className="no-print flex justify-end mb-2">
+            <SectionExport captureRef={kpiRef} filename="training_kpis" label="Export KPIs" />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KPICard title="Total Training Cost" value={fmt(data.totalTrainingCost)} subtitle="Period spend" icon={NairaSign} color="blue" />
+            <KPICard title="Staff Trained" value={data.uniqueStaffTrained.toLocaleString()} subtitle={`Coverage: ${pct(data.groupCoverageRatio)}`} icon={Users} color="green" />
+            <KPICard title="Avg Cost per Staff" value={fmt(avgCostPerStaff)} subtitle="Per trained employee" icon={BarChart2} color="purple" />
+            <KPICard title="Avg Impact Score" value={data.avgImpactScore === 0 ? '—' : rating(data.avgImpactScore)} subtitle={data.avgImpactScore === 0 ? 'Upload feedback data' : 'Avg confidence rating (max 5)'} icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+            <KPICard title="Budget Utilisation" value={data.totalBudget > 0 ? pct((data.totalTrainingCost / data.totalBudget) * 100) : 'Not set'} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={Target} color={data.budgetRisk === 'over-budget' ? 'red' : 'amber'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
+            <KPICard title="Projected Spend" value={fmt(data.forecastedSpend)} subtitle="End of year forecast" icon={TrendingUp} color={data.budgetRisk === 'over-budget' ? 'red' : 'blue'} />
+            <KPICard title="Training Programmes" value={data.topTrainings.length.toString()} subtitle="Unique programmes" icon={BookOpen} color="purple" />
+            <KPICard title="Avg Trainings / Staff" value={trainingFrequency.toFixed(1)} subtitle="Training frequency" icon={Activity} color="slate" />
+            {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="Training relevance to current role" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
+            {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+            {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
+            {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString()} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
+            {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
+            {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} staff meeting requirement`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
+            {data.hoursReport.hasData && data.hoursReport.costPerHour > 0 && <KPICard title="Cost per Hour" value={fmt(data.hoursReport.costPerHour)} subtitle="Training cost per learning hour" icon={NairaSign} color="amber" />}
+          </div>
         </div>
 
         {/* Metrics Key */}
         <MetricsKey />
 
         {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
-        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} showSubscription={false} />}
+        {!isEmpty && (
+          <div>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={liRef} filename="training_learning_intelligence" label="Export Intelligence Layer" />
+            </div>
+            <div ref={liRef}>
+              <LearningIntelligenceLayer li={data.learningIntelligence} showSubscription={false} />
+            </div>
+          </div>
+        )}
 
         {/* Participation */}
         {!isEmpty && (
-          <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
+          <div ref={participationRef}>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={participationRef} filename="training_participation" label="Export Participation" />
+            </div>
+            <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
+          </div>
         )}
 
         {/* Charts */}
         {!isEmpty && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <div ref={monthlySpendRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-semibold text-slate-800">Monthly Training Spend</h2>
-                  <SectionExport rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="training_monthly_spend" />
+                  <SectionExport captureRef={monthlySpendRef} rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="training_monthly_spend" />
                 </div>
                 <LineChart labels={data.monthlySpend.map((m) => m.month)} values={data.monthlySpend.map((m) => m.cost)} height={240} />
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <div ref={buSpendRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-semibold text-slate-800">Training Spend by Business Unit</h2>
-                  <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost }))} filename="training_bu_spend" />
+                  <SectionExport captureRef={buSpendRef} rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost }))} filename="training_bu_spend" />
                 </div>
                 <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.trainingCost)} color="#3b82f6" height={240} horizontal={data.businessUnits.length > 4} />
               </div>
@@ -137,26 +167,26 @@ export default function TrainingDashboard() {
 
             {data.avgImpactScore > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                <div ref={impactDistRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-slate-800">Impact Score Distribution</h2>
-                    <SectionExport rows={data.impactDistribution.map((d) => ({ Range: d.range, Count: d.count }))} filename="impact_distribution" />
+                    <SectionExport captureRef={impactDistRef} rows={data.impactDistribution.map((d) => ({ Range: d.range, Count: d.count }))} filename="impact_distribution" />
                   </div>
                   <BarChart labels={data.impactDistribution.map((d) => d.range)} values={data.impactDistribution.map((d) => d.count)} color="#a855f7" height={220} />
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                <div ref={appRatesRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-slate-800">Application Rates</h2>
-                    <SectionExport rows={data.applicationRates.map((a) => ({ Category: a.category, Count: a.count }))} filename="application_rates" />
+                    <SectionExport captureRef={appRatesRef} rows={data.applicationRates.map((a) => ({ Category: a.category, Count: a.count }))} filename="application_rates" />
                   </div>
                   {data.applicationRates.length > 0
                     ? <PieChart labels={data.applicationRates.map((a) => a.category)} values={data.applicationRates.map((a) => a.count)} donut height={220} />
                     : <p className="text-sm text-slate-400 text-center py-8">No feedback data</p>}
                 </div>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                <div ref={roiRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-slate-800">Cost vs Impact (BU)</h2>
-                    <SectionExport rows={scatterPoints.map((p) => ({ 'Business Unit': p.label, 'Training Cost (₦)': p.x, 'Impact Score %': p.y }))} filename="roi_scatter" />
+                    <SectionExport captureRef={roiRef} rows={scatterPoints.map((p) => ({ 'Business Unit': p.label, 'Training Cost (₦)': p.x, 'Impact Score %': p.y }))} filename="roi_scatter" />
                   </div>
                   {scatterPoints.length > 0
                     ? <ScatterChart points={scatterPoints} height={220} />
@@ -169,10 +199,10 @@ export default function TrainingDashboard() {
 
         {/* Tables */}
         {data.topTrainings.length > 0 && (
-          <div>
+          <div ref={topTrainingsRef}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Top Training Programmes by Spend</span>
-              <SectionExport rows={data.topTrainings.map((t) => ({ Programme: t.training, Participants: t.count, 'Total Cost (₦)': t.totalCost, 'Avg Cost (₦)': Math.round(t.totalCost / t.count) }))} filename="top_trainings" />
+              <SectionExport captureRef={topTrainingsRef} rows={data.topTrainings.map((t) => ({ Programme: t.training, Participants: t.count, 'Total Cost (₦)': t.totalCost, 'Avg Cost (₦)': Math.round(t.totalCost / t.count) }))} filename="top_trainings" />
             </div>
             <DataTable
               columns={[
@@ -187,10 +217,10 @@ export default function TrainingDashboard() {
         )}
 
         {data.businessUnits.length > 0 && (
-          <div>
+          <div ref={buTrainingDetailRef}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Business Unit Training Detail</span>
-              <SectionExport rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
+              <SectionExport captureRef={buTrainingDetailRef} rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
             </div>
             <DataTable
               columns={[
