@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Users, TrendingUp, Target, BarChart2,
   BadgeCheck, AlertTriangle, RefreshCw,
@@ -40,6 +40,10 @@ export default function ExecutiveDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<PeriodFilter>({ mode: 'all' })
+
+  const kpiRef = useRef<HTMLDivElement>(null)
+  const participationRef = useRef<HTMLDivElement>(null)
+  const buTableRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async (f: PeriodFilter) => {
     setLoading(true)
@@ -117,7 +121,11 @@ export default function ExecutiveDashboard() {
         )}
 
         {/* KPI grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <div className="no-print flex justify-end mb-2">
+            <SectionExport captureRef={kpiRef} filename="kpi_summary" label="Export KPIs" />
+          </div>
+          <div ref={kpiRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Total Learning Investment" value={fmt(data.totalLearningInvestment)} subtitle={`${pct(data.trainingSharePct)} training · ${pct(data.subscriptionSharePct)} subscriptions`} icon={NairaSign} color="blue" />
           <KPICard title="Training Spend" value={fmt(data.totalTrainingCost)} subtitle="Formal training programmes" icon={GraduationCap} color="purple" />
           <KPICard title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" icon={BadgeCheck} color="green" />
@@ -129,9 +137,12 @@ export default function ExecutiveDashboard() {
           {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
           {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
           {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
-          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString()} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
+          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
+          {data.hoursReport.hasData && data.hoursReport.totalFormalHours > 0 && <KPICard title="Training Hours" value={`${data.hoursReport.totalFormalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From formal training programmes" icon={GraduationCap} color="blue" />}
+          {data.hoursReport.hasData && data.hoursReport.totalKSSHours > 0 && <KPICard title="KSS Hours" value={`${data.hoursReport.totalKSSHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From knowledge sharing sessions" icon={Users} color="green" />}
           {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
           {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.hoursReport.staffMeeting40h + data.hoursReport.staffBelow40h} staff`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
+          </div>
         </div>
 
         {/* Metrics Key */}
@@ -142,9 +153,14 @@ export default function ExecutiveDashboard() {
 
         {/* Participation stats */}
         {!isEmpty && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
-            <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+          <div>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={participationRef} filename="participation_summary" label="Export Participation" />
+            </div>
+            <div ref={participationRef} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
+              <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+            </div>
           </div>
         )}
 
@@ -173,10 +189,10 @@ export default function ExecutiveDashboard() {
 
         {/* BU Summary table */}
         {data.businessUnits.length > 0 && (
-          <div>
+          <div ref={buTableRef}>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-slate-800">Business Unit Summary</h2>
-              <SectionExport rows={buTableRows} filename="bu_summary" />
+              <SectionExport captureRef={buTableRef} rows={buTableRows} filename="bu_summary" label="Export" />
             </div>
             <DataTable
               columns={[

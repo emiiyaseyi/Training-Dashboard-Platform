@@ -49,3 +49,18 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to update business unit.' }, { status: 500 })
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { id } = body as { id: string }
+
+    if (!id) return NextResponse.json({ error: 'ID is required.' }, { status: 400 })
+
+    await prisma.businessUnit.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('[business-units DELETE]', err)
+    return NextResponse.json({ error: 'Failed to delete business unit.' }, { status: 500 })
+  }
+}
