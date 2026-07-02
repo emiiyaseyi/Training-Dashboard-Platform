@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { BadgeCheck, Users, Building2, RefreshCw, TrendingUp } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { KPICard } from '@/components/ui/KPICard'
@@ -39,6 +39,15 @@ export default function SubscriptionsDashboard() {
 
   useEffect(() => { load(filter) }, [filter, load])
 
+  const kpiRef = useRef<HTMLDivElement>(null)
+  const liRef = useRef<HTMLDivElement>(null)
+  const participationRef = useRef<HTMLDivElement>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
+  const buSpendChartRef = useRef<HTMLDivElement>(null)
+  const membershipDistRef = useRef<HTMLDivElement>(null)
+  const topOrgsRef = useRef<HTMLDivElement>(null)
+  const buSubDetailRef = useRef<HTMLDivElement>(null)
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -74,11 +83,16 @@ export default function SubscriptionsDashboard() {
       <div className="p-8 space-y-8">
         {isEmpty && <AlertBadge variant="info" message="No subscription data uploaded yet." />}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Total Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="All professional memberships" icon={NairaSign} color="green" />
-          <KPICard title="Staff with Subscriptions" value={data.uniqueSubscriptionStaff.toLocaleString()} subtitle="Unique members" icon={Users} color="blue" />
-          <KPICard title="Total Subscriptions" value={totalSubscriptions.toLocaleString()} subtitle="Individual memberships" icon={BadgeCheck} color="purple" />
-          <KPICard title="Avg Cost per Member" value={fmt(avgCostPerStaff)} subtitle="Per subscribed staff" icon={TrendingUp} color="amber" />
+        <div ref={kpiRef}>
+          <div className="no-print flex justify-end mb-2">
+            <SectionExport captureRef={kpiRef} filename="subscriptions_kpis" label="Export KPIs" />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KPICard title="Total Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="All professional memberships" icon={NairaSign} color="green" />
+            <KPICard title="Staff with Subscriptions" value={data.uniqueSubscriptionStaff.toLocaleString()} subtitle="Unique members" icon={Users} color="blue" />
+            <KPICard title="Total Subscriptions" value={totalSubscriptions.toLocaleString()} subtitle="Individual memberships" icon={BadgeCheck} color="purple" />
+            <KPICard title="Avg Cost per Member" value={fmt(avgCostPerStaff)} subtitle="Per subscribed staff" icon={TrendingUp} color="amber" />
+          </div>
         </div>
 
         {topOrgShare > 35 && data.topMembershipOrgs.length > 0 && (
@@ -86,52 +100,71 @@ export default function SubscriptionsDashboard() {
         )}
 
         {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
-        {!isEmpty && <LearningIntelligenceLayer li={data.learningIntelligence} />}
+        {!isEmpty && (
+          <div>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={liRef} filename="subscriptions_learning_intelligence" label="Export Intelligence Layer" />
+            </div>
+            <div ref={liRef}>
+              <LearningIntelligenceLayer li={data.learningIntelligence} />
+            </div>
+          </div>
+        )}
 
         {/* Participation */}
         {!isEmpty && (
-          <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+          <div ref={participationRef}>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={participationRef} filename="subscriptions_participation" label="Export Participation" />
+            </div>
+            <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+          </div>
         )}
 
         {/* Profile insights */}
         {!isEmpty && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {highSubRatioBUs.length > 0 && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                <p className="text-xs font-semibold text-blue-700 mb-1">Accreditation-focused</p>
-                <p className="text-xs text-blue-600">{highSubRatioBUs.map((b) => b.name).join(', ')} — subscription spend exceeds 50% of total learning investment.</p>
-              </div>
-            )}
-            {highTrainRatioBUs.length > 0 && (
-              <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
-                <p className="text-xs font-semibold text-purple-700 mb-1">Skill-acquisition focused</p>
-                <p className="text-xs text-purple-600">{highTrainRatioBUs.map((b) => b.name).join(', ')} — training dominates learning spend.</p>
-              </div>
-            )}
-            {data.totalLearningInvestment > 0 && (
-              <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-                <p className="text-xs font-semibold text-green-700 mb-1">Subscription as % of total</p>
-                <p className="text-2xl font-bold text-green-700">{pct(data.subscriptionSharePct)}</p>
-                <p className="text-xs text-green-600 mt-1">of total learning investment</p>
-              </div>
-            )}
+          <div ref={profileRef}>
+            <div className="no-print flex justify-end mb-2">
+              <SectionExport captureRef={profileRef} filename="subscriptions_profile_insights" label="Export Profile Insights" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {highSubRatioBUs.length > 0 && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-xs font-semibold text-blue-700 mb-1">Accreditation-focused</p>
+                  <p className="text-xs text-blue-600">{highSubRatioBUs.map((b) => b.name).join(', ')} — subscription spend exceeds 50% of total learning investment.</p>
+                </div>
+              )}
+              {highTrainRatioBUs.length > 0 && (
+                <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
+                  <p className="text-xs font-semibold text-purple-700 mb-1">Skill-acquisition focused</p>
+                  <p className="text-xs text-purple-600">{highTrainRatioBUs.map((b) => b.name).join(', ')} — training dominates learning spend.</p>
+                </div>
+              )}
+              {data.totalLearningInvestment > 0 && (
+                <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+                  <p className="text-xs font-semibold text-green-700 mb-1">Subscription as % of total</p>
+                  <p className="text-2xl font-bold text-green-700">{pct(data.subscriptionSharePct)}</p>
+                  <p className="text-xs text-green-600 mt-1">of total learning investment</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* Charts */}
         {!isEmpty && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div ref={buSpendChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-slate-800">Spend by Business Unit</h2>
-                <SectionExport rows={buSubData.map((b) => ({ 'Business Unit': b.name, 'Subscription Spend (₦)': b.subscriptionCost }))} filename="subscription_bu_spend" />
+                <SectionExport captureRef={buSpendChartRef} rows={buSubData.map((b) => ({ 'Business Unit': b.name, 'Subscription Spend (₦)': b.subscriptionCost }))} filename="subscription_bu_spend" />
               </div>
               <BarChart labels={buSubData.map((b) => b.name)} values={buSubData.map((b) => b.subscriptionCost)} color="#22c55e" height={260} horizontal={buSubData.length > 4} />
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div ref={membershipDistRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-slate-800">Distribution by Membership Organisation</h2>
-                <SectionExport rows={data.topMembershipOrgs.map((o) => ({ Organisation: o.org, Members: o.count, 'Total Spend (₦)': o.totalAmount }))} filename="membership_orgs" />
+                <SectionExport captureRef={membershipDistRef} rows={data.topMembershipOrgs.map((o) => ({ Organisation: o.org, Members: o.count, 'Total Spend (₦)': o.totalAmount }))} filename="membership_orgs" />
               </div>
               {data.topMembershipOrgs.length > 0
                 ? <PieChart labels={data.topMembershipOrgs.map((o) => o.org)} values={data.topMembershipOrgs.map((o) => o.totalAmount)} donut height={260} />
@@ -142,10 +175,10 @@ export default function SubscriptionsDashboard() {
 
         {/* Tables */}
         {data.topMembershipOrgs.length > 0 && (
-          <div>
+          <div ref={topOrgsRef}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Top Membership Organisations by Spend</span>
-              <SectionExport rows={data.topMembershipOrgs.map((o) => ({ Organisation: o.org, Members: o.count, 'Total Spend (₦)': o.totalAmount, 'Avg Cost (₦)': Math.round(o.totalAmount / o.count), '% of Spend': data.totalSubscriptionCost > 0 ? pct((o.totalAmount / data.totalSubscriptionCost) * 100) : '—' }))} filename="top_membership_orgs" />
+              <SectionExport captureRef={topOrgsRef} rows={data.topMembershipOrgs.map((o) => ({ Organisation: o.org, Members: o.count, 'Total Spend (₦)': o.totalAmount, 'Avg Cost (₦)': Math.round(o.totalAmount / o.count), '% of Spend': data.totalSubscriptionCost > 0 ? pct((o.totalAmount / data.totalSubscriptionCost) * 100) : '—' }))} filename="top_membership_orgs" />
             </div>
             <DataTable
               columns={[
@@ -161,10 +194,10 @@ export default function SubscriptionsDashboard() {
         )}
 
         {buSubData.length > 0 && (
-          <div>
+          <div ref={buSubDetailRef}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Business Unit Subscription Detail</span>
-              <SectionExport rows={data.businessUnits.filter((b) => b.totalInvestment > 0).map((b) => ({ 'Business Unit': b.name, 'Sub Spend (₦)': b.subscriptionCost, 'Training Spend (₦)': b.trainingCost, 'Total Investment (₦)': b.totalInvestment, 'Sub Ratio %': b.subscriptionRatio.toFixed(1), 'Members': b.subscriptionStaff }))} filename="bu_subscription_detail" />
+              <SectionExport captureRef={buSubDetailRef} rows={data.businessUnits.filter((b) => b.totalInvestment > 0).map((b) => ({ 'Business Unit': b.name, 'Sub Spend (₦)': b.subscriptionCost, 'Training Spend (₦)': b.trainingCost, 'Total Investment (₦)': b.totalInvestment, 'Sub Ratio %': b.subscriptionRatio.toFixed(1), 'Members': b.subscriptionStaff }))} filename="bu_subscription_detail" />
             </div>
             <DataTable
               columns={[
