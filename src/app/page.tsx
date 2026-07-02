@@ -16,6 +16,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { StaffHoursTable } from '@/components/ui/StaffHoursTable'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { MetricsKey } from '@/components/ui/MetricsKey'
 import { ChartCard } from '@/components/ui/ChartCard'
@@ -195,6 +196,11 @@ export default function ExecutiveDashboard() {
               </ChartCard>
             </div>
           </>
+        )}
+
+        {/* Staff Hours & 40H Compliance table */}
+        {data.hoursReport.hasData && data.hoursReport.staffDetail.length > 0 && (
+          <StaffHoursTable staffDetail={data.hoursReport.staffDetail} />
         )}
 
         {/* BU Summary table */}
