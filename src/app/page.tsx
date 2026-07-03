@@ -135,9 +135,9 @@ export default function ExecutiveDashboard() {
           <KPICard title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} icon={UserCheck} color={data.groupCoverageRatio >= 70 ? 'green' : data.groupCoverageRatio >= 40 ? 'amber' : 'red'} alert={data.groupCoverageRatio < 30 && data.totalStaffCount > 0} />
           <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
           <KPICard title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={BarChart2} color={data.budgetRisk === 'over-budget' ? 'red' : data.budgetRisk === 'at-risk' ? 'amber' : 'green'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
-          <KPICard title="Active Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={CreditCard} color="slate" />
-          {data.avgRoleRelevance > 0 && <KPICard title="Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
-          {data.avgExpectationsMet > 0 && <KPICard title="Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
+          <KPICard title="Number of Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={CreditCard} color="slate" />
+          {data.avgRoleRelevance > 0 && <KPICard title="Trainings Vs Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
+          {data.avgExpectationsMet > 0 && <KPICard title="Trainings Vs Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
           {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
           {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
           {data.hoursReport.hasData && data.hoursReport.totalFormalHours > 0 && <KPICard title="Training Hours" value={`${data.hoursReport.totalFormalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From formal training programmes" icon={GraduationCap} color="blue" />}
@@ -170,7 +170,7 @@ export default function ExecutiveDashboard() {
             </div>
             <div ref={participationRef} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
-              <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+              <ParticipationCard title="Subscription Coverage" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} variant="subscription" />
             </div>
           </div>
         )}
@@ -180,7 +180,7 @@ export default function ExecutiveDashboard() {
           <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <ChartCard title="Investment Split" rows={[{ Training: data.totalTrainingCost, Subscriptions: data.totalSubscriptionCost }]} filename="investment_split">
-                <PieChart labels={['Training', 'Subscriptions']} values={[data.totalTrainingCost, data.totalSubscriptionCost]} donut height={220} />
+                <PieChart labels={['Training', 'Subscriptions']} values={[data.totalTrainingCost, data.totalSubscriptionCost]} donut height={220} showAmounts />
               </ChartCard>
               <ChartCard title="Monthly Training Spend" className="lg:col-span-2" rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="monthly_spend">
                 <LineChart labels={data.monthlySpend.map((m) => m.month)} values={data.monthlySpend.map((m) => m.cost)} height={220} />
@@ -191,8 +191,8 @@ export default function ExecutiveDashboard() {
               <ChartCard title="Total Investment by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_investment">
                 <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.totalInvestment)} color="#3b82f6" height={280} horizontal />
               </ChartCard>
-              <ChartCard title="Staff Coverage by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage">
-                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.coverageRatio)} color="#22c55e" height={280} horizontal />
+              <ChartCard title="Staff Coverage by Business Unit (%)" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage">
+                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.coverageRatio)} color="#22c55e" height={280} horizontal showLabels labelSuffix="%" />
               </ChartCard>
             </div>
           </>

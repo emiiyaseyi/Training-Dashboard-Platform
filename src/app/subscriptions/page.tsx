@@ -117,7 +117,7 @@ export default function SubscriptionsDashboard() {
             <div className="no-print flex justify-end mb-2">
               <SectionExport captureRef={participationRef} filename="subscriptions_participation" label="Export Participation" />
             </div>
-            <ParticipationCard title="Subscription Participation" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} />
+            <ParticipationCard title="Subscription Coverage" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} variant="subscription" />
           </div>
         )}
 

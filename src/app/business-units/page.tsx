@@ -265,7 +265,7 @@ export default function BusinessUnitsDashboard() {
                 </div>
                 <div ref={coverageChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-slate-800">Staff Coverage (%)</h3>
+                    <h3 className="text-sm font-semibold text-slate-800 whitespace-nowrap">Staff Coverage (%)</h3>
                     <SectionExport captureRef={coverageChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
                   </div>
                   <BarChart
@@ -274,6 +274,8 @@ export default function BusinessUnitsDashboard() {
                     color="#22c55e"
                     height={Math.max(200, buList.length * 40)}
                     horizontal
+                    showLabels
+                    labelSuffix="%"
                   />
                 </div>
               </div>
