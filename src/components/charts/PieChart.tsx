@@ -13,13 +13,28 @@ interface PieChartProps {
   values: number[]
   height?: number
   donut?: boolean
+  showAmounts?: boolean
 }
 
-export function PieChart({ labels, values, height = 300, donut = false }: PieChartProps) {
+function fmtAmount(v: number): string {
+  if (v >= 1_000_000) return `₦${(v / 1_000_000).toFixed(2)}M`
+  if (v >= 1_000) return `₦${(v / 1_000).toFixed(1)}K`
+  return `₦${v.toLocaleString()}`
+}
+
+export function PieChart({ labels, values, height = 300, donut = false, showAmounts = false }: PieChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!ref.current || labels.length === 0) return
+
+    const total = values.reduce((a, b) => a + b, 0)
+    const sliceText = showAmounts
+      ? values.map((v) => {
+          const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0'
+          return `${pct}%<br><b>${fmtAmount(v)}</b>`
+        })
+      : undefined
 
     const data: PlotData[] = [
       {
@@ -28,9 +43,10 @@ export function PieChart({ labels, values, height = 300, donut = false }: PieCha
         values,
         hole: donut ? 0.5 : 0,
         marker: { colors: PALETTE },
-        textinfo: 'percent',
+        textinfo: showAmounts ? 'text' : 'percent',
+        ...(sliceText && { text: sliceText }),
         hovertemplate: '%{label}: %{value:,.0f}<br>%{percent}<extra></extra>',
-      },
+      } as PlotData,
     ]
 
     const layout: Partial<Layout> = {

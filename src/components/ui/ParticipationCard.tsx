@@ -5,6 +5,7 @@ interface ParticipationCardProps {
   title: string
   participation: StaffParticipation
   totalStaff?: number
+  variant?: 'training' | 'subscription'
 }
 
 function Bar({ pct, color }: { pct: number; color: string }) {
@@ -15,7 +16,8 @@ function Bar({ pct, color }: { pct: number; color: string }) {
   )
 }
 
-export function ParticipationCard({ title, participation, totalStaff }: ParticipationCardProps) {
+export function ParticipationCard({ title, participation, totalStaff, variant = 'training' }: ParticipationCardProps) {
+  const isSub = variant === 'subscription'
   const exportRows = participation.staffList.map((s) => ({
     'Staff ID': s.staffId,
     'Staff Name': s.staffName,
@@ -31,10 +33,14 @@ export function ParticipationCard({ title, participation, totalStaff }: Particip
       </div>
 
       <div className="space-y-4">
-        {/* One training */}
+        {/* One */}
         <div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">Completed exactly <strong>1</strong></span>
+            <span className="text-slate-600">
+              {isSub
+                ? <>Hold exactly <strong>1</strong> subscription</>
+                : <>Completed exactly <strong>1</strong></>}
+            </span>
             <span className="font-semibold text-slate-800 tabular-nums">
               {participation.oneTraining.toLocaleString()}
               <span className="text-slate-400 font-normal ml-1">
@@ -48,7 +54,11 @@ export function ParticipationCard({ title, participation, totalStaff }: Particip
         {/* Two or more */}
         <div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">Completed <strong>2 or more</strong></span>
+            <span className="text-slate-600">
+              {isSub
+                ? <>Hold <strong>2 or more</strong> subscriptions</>
+                : <>Completed <strong>2 or more</strong></>}
+            </span>
             <span className="font-semibold text-slate-800 tabular-nums">
               {participation.twoPlus.toLocaleString()}
               <span className="text-slate-400 font-normal ml-1">

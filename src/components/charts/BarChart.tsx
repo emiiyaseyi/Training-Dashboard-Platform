@@ -9,6 +9,8 @@ interface BarChartProps {
   color?: string
   height?: number
   horizontal?: boolean
+  showLabels?: boolean
+  labelSuffix?: string
 }
 
 export function BarChart({
@@ -17,6 +19,8 @@ export function BarChart({
   color = '#3b82f6',
   height = 300,
   horizontal = false,
+  showLabels = false,
+  labelSuffix = '',
 }: BarChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -26,7 +30,11 @@ export function BarChart({
     const maxLabelLen = horizontal ? Math.max(...labels.map((l) => l.length), 0) : 0
     const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 6.5, 120), 300) : 50
 
-    const data: PlotData[] = [
+    const labelText = showLabels
+      ? values.map((v) => `${Number.isInteger(v) ? v : v.toFixed(1)}${labelSuffix}`)
+      : undefined
+
+    const data = [
       {
         type: 'bar',
         x: horizontal ? values : labels,
@@ -36,8 +44,15 @@ export function BarChart({
         hovertemplate: horizontal
           ? '%{x:,.0f}<extra></extra>'
           : '%{y:,.0f}<extra></extra>',
+        ...(labelText && {
+          text: labelText,
+          textposition: 'auto',
+          insidetextfont: { color: 'white', size: 10 },
+          outsidetextfont: { color: '#475569', size: 10 },
+          constraintext: 'none',
+        }),
       },
-    ]
+    ] as unknown as PlotData[]
 
     const layout: Partial<Layout> = {
       height,
