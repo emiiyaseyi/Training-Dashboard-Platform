@@ -14,6 +14,7 @@ import { SectionExport } from '@/components/ui/SectionExport'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
+import { SubscriptionBreakdown } from '@/components/ui/SubscriptionBreakdown'
 import type { GroupAnalytics } from '@/lib/analytics'
 import { type PeriodFilter, filterToQuery } from '@/lib/filter-types'
 
@@ -171,6 +172,11 @@ export default function SubscriptionsDashboard() {
                 : <p className="text-sm text-slate-400 text-center py-8">No data</p>}
             </div>
           </div>
+        )}
+
+        {/* Subscription Breakdown by Programme */}
+        {!isEmpty && data.topMembershipOrgs.length > 0 && (
+          <SubscriptionBreakdown orgs={data.topMembershipOrgs} title="Subscription Breakdown by Programme" />
         )}
 
         {/* Tables */}

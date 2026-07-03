@@ -11,6 +11,7 @@ import { ParticipationCard } from './ParticipationCard'
 import { LearningIntelligenceLayer } from './LearningIntelligenceLayer'
 import { PDFOptionsModal, type PDFPrintOptions } from './PDFOptionsModal'
 import { MetricsKey } from './MetricsKey'
+import { SubscriptionBreakdown } from './SubscriptionBreakdown'
 import { exportBUToExcel } from '@/lib/bu-excel-export'
 import { loadSignatureSettings } from '@/lib/signature-settings'
 import { filterLabel, type PeriodFilter } from '@/lib/filter-types'
@@ -218,7 +219,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
           {/* ═══ Participation ═══ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <ParticipationCard title="Training Participation" participation={detail.trainingParticipation} totalStaff={bu.totalStaff} />
-            <ParticipationCard title="Subscription Participation" participation={detail.subscriptionParticipation} totalStaff={bu.totalStaff} />
+            <ParticipationCard title="Subscription Coverage" participation={detail.subscriptionParticipation} totalStaff={bu.totalStaff} variant="subscription" />
           </div>
 
           <hr className="border-slate-200" />
@@ -250,6 +251,11 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               <BarChart labels={detail.subscriptionBreakdown.map((s) => s.org)} values={detail.subscriptionBreakdown.map((s) => s.totalAmount)} color="#22c55e" height={Math.max(160, detail.subscriptionBreakdown.length * 38)} horizontal={detail.subscriptionBreakdown.length > 2} />
             </div>
           </Section>
+
+          {/* ═══ 4b. Subscription Breakdown by Programme ═══ */}
+          {detail.subscriptionBreakdown.length > 0 && (
+            <SubscriptionBreakdown orgs={detail.subscriptionBreakdown} title="Subscription Breakdown by Programme" />
+          )}
 
           {/* ═══ 5. Training Programmes (table) ═══ */}
           <Section title={`Training Programmes — ${buName}`} rows={detail.topTrainings.map((t) => ({ Programme: t.training, Participants: t.count, 'Total Cost (₦)': t.totalCost, 'Avg Cost per Participant (₦)': Math.round(t.totalCost / t.count) }))} filename={`${buName}_programmes`} empty="No training records found.">

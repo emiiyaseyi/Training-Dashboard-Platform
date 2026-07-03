@@ -11,6 +11,7 @@ interface BarChartProps {
   horizontal?: boolean
   showLabels?: boolean
   labelSuffix?: string
+  labelFormatter?: (v: number) => string
 }
 
 export function BarChart({
@@ -21,6 +22,7 @@ export function BarChart({
   horizontal = false,
   showLabels = false,
   labelSuffix = '',
+  labelFormatter,
 }: BarChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -31,7 +33,11 @@ export function BarChart({
     const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 6.5, 120), 300) : 50
 
     const labelText = showLabels
-      ? values.map((v) => `${Number.isInteger(v) ? v : v.toFixed(1)}${labelSuffix}`)
+      ? values.map((v) =>
+          labelFormatter
+            ? labelFormatter(v)
+            : `${Number.isInteger(v) ? v : v.toFixed(1)}${labelSuffix}`
+        )
       : undefined
 
     const data = [

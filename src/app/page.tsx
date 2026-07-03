@@ -17,6 +17,7 @@ import { PDFExportButton } from '@/components/ui/PDFExportButton'
 import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { StaffHoursTable } from '@/components/ui/StaffHoursTable'
+import { SubscriptionBreakdown } from '@/components/ui/SubscriptionBreakdown'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { MetricsKey } from '@/components/ui/MetricsKey'
 import { ChartCard } from '@/components/ui/ChartCard'
@@ -175,6 +176,11 @@ export default function ExecutiveDashboard() {
           </div>
         )}
 
+        {/* Subscription Breakdown */}
+        {!isEmpty && data.topMembershipOrgs.length > 0 && (
+          <SubscriptionBreakdown orgs={data.topMembershipOrgs} title="Subscription Breakdown by Programme" />
+        )}
+
         {/* Charts */}
         {!isEmpty && (
           <>
@@ -189,7 +195,7 @@ export default function ExecutiveDashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ChartCard title="Total Investment by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_investment">
-                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.totalInvestment)} color="#3b82f6" height={280} horizontal />
+                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.totalInvestment)} color="#3b82f6" height={280} horizontal showLabels labelFormatter={(v) => v >= 1_000_000 ? `₦${(v/1_000_000).toFixed(1)}M` : v >= 1_000 ? `₦${(v/1_000).toFixed(0)}K` : `₦${v.toLocaleString()}`} />
               </ChartCard>
               <ChartCard title="Staff Coverage by Business Unit (%)" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage">
                 <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.coverageRatio)} color="#22c55e" height={280} horizontal showLabels labelSuffix="%" />

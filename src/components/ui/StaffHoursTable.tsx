@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { ChevronDown, ChevronRight, ShieldCheck, Clock } from 'lucide-react'
+import { ChevronDown, ChevronRight, ShieldCheck, Clock, Filter } from 'lucide-react'
 import type { StaffHoursRow } from '@/lib/analytics'
 import { SectionExport } from './SectionExport'
 
@@ -21,9 +21,13 @@ function Badge({ meets }: { meets: boolean }) {
 export function StaffHoursTable({ staffDetail }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showAll, setShowAll] = useState(false)
+  const [selectedBU, setSelectedBU] = useState<string>('all')
   const tableRef = useRef<HTMLDivElement>(null)
 
   if (!staffDetail || staffDetail.length === 0) return null
+
+  const uniqueBUs = [...new Set(staffDetail.map((s) => s.businessUnit))].filter(Boolean).sort()
+  const filtered = selectedBU === 'all' ? staffDetail : staffDetail.filter((s) => s.businessUnit === selectedBU)
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -32,11 +36,11 @@ export function StaffHoursTable({ staffDetail }: Props) {
       return next
     })
 
-  const meeting40 = staffDetail.filter((s) => s.meets40h)
-  const below40   = staffDetail.filter((s) => !s.meets40h)
-  const displayed = showAll ? staffDetail : staffDetail.slice(0, 50)
+  const meeting40 = filtered.filter((s) => s.meets40h)
+  const below40   = filtered.filter((s) => !s.meets40h)
+  const displayed = showAll ? filtered : filtered.slice(0, 50)
 
-  const exportRows = staffDetail.map((s) => ({
+  const exportRows = filtered.map((s) => ({
     'Staff ID': s.staffId,
     'Staff Name': s.staffName,
     'Business Unit': s.businessUnit,
@@ -51,7 +55,7 @@ export function StaffHoursTable({ staffDetail }: Props) {
     <div ref={tableRef}>
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-800">Staff Learning Hours & 40H Compliance</h2>
@@ -62,6 +66,23 @@ export function StaffHoursTable({ staffDetail }: Props) {
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
             {below40.length} below 40h
           </span>
+
+          {/* BU Filter */}
+          {uniqueBUs.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={selectedBU}
+                onChange={(e) => { setSelectedBU(e.target.value); setShowAll(false) }}
+                className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400"
+              >
+                <option value="all">All Business Units</option>
+                {uniqueBUs.map((bu) => (
+                  <option key={bu} value={bu}>{bu}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <SectionExport captureRef={tableRef} rows={exportRows} filename="staff_hours_compliance" label="Export" />
       </div>
@@ -87,9 +108,7 @@ export function StaffHoursTable({ staffDetail }: Props) {
               const hasDetail = s.trainingItems.length > 0 || s.kssItems.length > 0
               return (
                 <React.Fragment key={s.staffId}>
-                  <tr
-                    className={`hover:bg-slate-50 transition-colors ${isOpen ? 'bg-blue-50/40' : ''}`}
-                  >
+                  <tr className={`hover:bg-slate-50 transition-colors ${isOpen ? 'bg-blue-50/40' : ''}`}>
                     <td className="px-3 py-2.5 text-center">
                       {hasDetail ? (
                         <button onClick={() => toggle(s.staffId)} className="text-slate-400 hover:text-slate-700">
@@ -110,12 +129,10 @@ export function StaffHoursTable({ staffDetail }: Props) {
                     </td>
                   </tr>
 
-                  {/* Expanded detail row */}
                   {isOpen && (
                     <tr className="bg-blue-50/30">
                       <td colSpan={8} className="px-8 py-3">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {/* Training items */}
                           {s.trainingItems.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-slate-600 mb-2">Formal Training</p>
@@ -129,8 +146,6 @@ export function StaffHoursTable({ staffDetail }: Props) {
                               </div>
                             </div>
                           )}
-
-                          {/* KSS items */}
                           {s.kssItems.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-slate-600 mb-2">Knowledge Sharing Sessions (KSS)</p>
@@ -154,13 +169,13 @@ export function StaffHoursTable({ staffDetail }: Props) {
           </tbody>
         </table>
 
-        {staffDetail.length > 50 && (
+        {filtered.length > 50 && (
           <div className="px-4 py-3 border-t border-slate-100 text-center">
             <button
               onClick={() => setShowAll((v) => !v)}
               className="text-xs text-blue-600 hover:text-blue-800 font-medium"
             >
-              {showAll ? 'Show fewer' : `Show all ${staffDetail.length} staff`}
+              {showAll ? 'Show fewer' : `Show all ${filtered.length} staff`}
             </button>
           </div>
         )}

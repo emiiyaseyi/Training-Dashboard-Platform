@@ -45,13 +45,14 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
         marker: { colors: PALETTE },
         textinfo: showAmounts ? 'text' : 'percent',
         ...(sliceText && { text: sliceText }),
+        ...(showAmounts && { textposition: 'outside' }),
         hovertemplate: '%{label}: %{value:,.0f}<br>%{percent}<extra></extra>',
       } as PlotData,
     ]
 
     const layout: Partial<Layout> = {
       height,
-      margin: { t: 8, r: 8, b: 8, l: 8 },
+      margin: showAmounts ? { t: 40, r: 100, b: 50, l: 100 } : { t: 8, r: 8, b: 8, l: 8 },
       paper_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
       legend: { orientation: 'h', y: -0.15, font: { size: 10 } },
