@@ -71,8 +71,10 @@ export function ParticipationCard({ title, participation, totalStaff, variant = 
 
         {totalStaff != null && totalStaff > 0 && (
           <p className="text-xs text-slate-400 pt-1 border-t border-slate-100">
-            Percentages based on {(participation.oneTraining + participation.twoPlus).toLocaleString()} trained staff
-            out of {totalStaff.toLocaleString()} total headcount
+            {isSub
+              ? <>Percentages based on {(participation.oneTraining + participation.twoPlus).toLocaleString()} staff holding subscriptions out of {totalStaff.toLocaleString()} total headcount</>
+              : <>Percentages based on {(participation.oneTraining + participation.twoPlus).toLocaleString()} trained staff out of {totalStaff.toLocaleString()} total headcount</>
+            }
           </p>
         )}
       </div>
