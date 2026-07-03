@@ -261,6 +261,8 @@ export default function BusinessUnitsDashboard() {
                     color="#3b82f6"
                     height={Math.max(200, buList.length * 40)}
                     horizontal
+                    showLabels
+                    labelFormatter={(v) => v >= 1_000_000 ? `₦${(v/1_000_000).toFixed(1)}M` : v >= 1_000 ? `₦${(v/1_000).toFixed(0)}K` : `₦${v.toLocaleString()}`}
                   />
                 </div>
                 <div ref={coverageChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
