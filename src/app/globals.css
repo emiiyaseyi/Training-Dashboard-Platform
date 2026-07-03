@@ -36,6 +36,16 @@ body { background-color: #f8fafc; color: #1e293b; }
   .bg-white, .bg-slate-50 { background: #fff !important; }
   .plotly-chart, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   tr { break-inside: avoid; page-break-inside: avoid; }
+
+  /* ── Standard PDF font size (set via data-export-font-size on body) ── */
+  body[data-export-font-size="small"]  { font-size: 82% !important; }
+  body[data-export-font-size="large"]  { font-size: 128% !important; }
+  body[data-export-font-size="small"]  .text-xs   { font-size: 7.5pt !important; }
+  body[data-export-font-size="small"]  .text-sm   { font-size: 8.5pt !important; }
+  body[data-export-font-size="small"]  .text-base { font-size: 9.5pt !important; }
+  body[data-export-font-size="large"]  .text-xs   { font-size: 9.5pt !important; }
+  body[data-export-font-size="large"]  .text-sm   { font-size: 11pt  !important; }
+  body[data-export-font-size="large"]  .text-base { font-size: 13pt  !important; }
 }
 
 /* ─────────────────────────────────────────────────────────────────
