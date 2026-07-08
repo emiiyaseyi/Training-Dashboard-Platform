@@ -7,18 +7,19 @@ import { SectionExport } from './SectionExport'
 
 interface Props {
   staffDetail: StaffHoursRow[]
+  hoursThreshold?: number
 }
 
-function Badge({ meets }: { meets: boolean }) {
+function Badge({ meets, threshold }: { meets: boolean; threshold: number }) {
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${meets ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
       <ShieldCheck className="w-3 h-3" />
-      {meets ? '40h Met' : 'Below 40h'}
+      {meets ? `${threshold}h Met` : `Below ${threshold}h`}
     </span>
   )
 }
 
-export function StaffHoursTable({ staffDetail }: Props) {
+export function StaffHoursTable({ staffDetail, hoursThreshold = 40 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showAll, setShowAll] = useState(false)
   const [selectedBU, setSelectedBU] = useState<string>('all')
@@ -58,13 +59,13 @@ export function StaffHoursTable({ staffDetail }: Props) {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-800">Staff Learning Hours & 40H Compliance</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Staff Learning Hours & {hoursThreshold}H Compliance</h2>
           </div>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
             {meeting40.length} met target
           </span>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-            {below40.length} below 40h
+            {below40.length} below {hoursThreshold}h
           </span>
 
           {/* BU Filter */}
@@ -125,7 +126,7 @@ export function StaffHoursTable({ staffDetail }: Props) {
                       {s.totalHours.toLocaleString()} hrs
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      <Badge meets={s.meets40h} />
+                      <Badge meets={s.meets40h} threshold={hoursThreshold} />
                     </td>
                   </tr>
 

@@ -52,6 +52,7 @@ export interface StaffHoursRow {
 
 export interface TrainingHoursReport {
   hasData: boolean
+  hoursThreshold: number  // compliance target (40h for full year, scaled for partial periods)
   totalFormalHours: number
   totalKSSHours: number
   totalHours: number
@@ -174,15 +175,27 @@ function monthIndex(m: string): number {
   return MONTH_ORDER.indexOf(m.toLowerCase())
 }
 
+function filterMonthCount(filter: PeriodFilter): number {
+  if (filter.mode === 'all' || filter.mode === 'year') return 12
+  if (filter.mode === 'ytd') return new Date().getMonth() + 1
+  if (filter.mode === 'range' && filter.fromMonth && filter.toMonth) {
+    const from = MONTHS.indexOf(filter.fromMonth as typeof MONTHS[number])
+    const to   = MONTHS.indexOf(filter.toMonth   as typeof MONTHS[number])
+    if (from !== -1 && to !== -1) return Math.max(1, to - from + 1)
+  }
+  return 12
+}
+
 function computeHoursReport(
   trainingRecords: { staffId: string; staffName: string; businessUnit: string; hours: number | null; cost: number; training: string; month: string }[],
   kssRecords: { staffId: string; staffName: string; businessUnit: string; durationMinutes: number; month?: string | null }[],
+  threshold = 40,
 ): TrainingHoursReport {
   const hasTrainingHours = trainingRecords.some((r) => r.hours && r.hours > 0)
   const hasKSS = kssRecords.length > 0
   if (!hasTrainingHours && !hasKSS) {
     return {
-      hasData: false, totalFormalHours: 0, totalKSSHours: 0, totalHours: 0,
+      hasData: false, hoursThreshold: threshold, totalFormalHours: 0, totalKSSHours: 0, totalHours: 0,
       avgHoursPerStaff: 0, staffMeeting40h: 0, staffMeeting40hPct: 0, staffBelow40h: 0,
       hoursDistribution: [], staffDetail: [], costPerHour: 0,
     }
@@ -228,7 +241,7 @@ function computeHoursReport(
       kssHours:    Math.round(v.kssH    * 10) / 10,
       totalHours:  Math.round((v.formalH + v.kssH) * 10) / 10,
       trainingCount: v.count,
-      meets40h: (v.formalH + v.kssH) >= 40,
+      meets40h: (v.formalH + v.kssH) >= threshold,
       trainingItems: trainingItemsMap.get(id) ?? [],
       kssItems: kssItemsMap.get(id) ?? [],
     }))
@@ -237,12 +250,13 @@ function computeHoursReport(
   const staffMeeting40h = staffDetail.filter((s) => s.meets40h).length
   const avgHoursPerStaff = staffDetail.length > 0 ? totalHours / staffDetail.length : 0
 
+  const q = threshold / 4
   const bands = [
-    { range: '0–10 hrs', min: 0, max: 10 },
-    { range: '10–20 hrs', min: 10, max: 20 },
-    { range: '20–30 hrs', min: 20, max: 30 },
-    { range: '30–40 hrs', min: 30, max: 40 },
-    { range: '40+ hrs', min: 40, max: Infinity },
+    { range: `0–${q} hrs`,        min: 0,     max: q },
+    { range: `${q}–${q*2} hrs`,   min: q,     max: q * 2 },
+    { range: `${q*2}–${q*3} hrs`, min: q * 2, max: q * 3 },
+    { range: `${q*3}–${threshold} hrs`, min: q * 3, max: threshold },
+    { range: `${threshold}+ hrs`, min: threshold, max: Infinity },
   ]
   const hoursDistribution = bands.map(({ range, min, max }) => ({
     range, count: staffDetail.filter((s) => s.totalHours >= min && s.totalHours < max).length,
@@ -250,6 +264,7 @@ function computeHoursReport(
 
   return {
     hasData: true,
+    hoursThreshold: threshold,
     totalFormalHours: Math.round(totalFormalHours * 10) / 10,
     totalKSSHours:    Math.round(totalKSSHours * 10) / 10,
     totalHours:       Math.round(totalHours * 10) / 10,
@@ -750,7 +765,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const learningIntelligence: LearningIntelligence = { ...liBase, narrative: generateIntelligenceNarrative(liBase) }
 
   // ── Hours + Vendor ──
-  const hoursReport = computeHoursReport(trainingRecords, kssRecords)
+  const hoursThreshold = Math.max(1, Math.round((filterMonthCount(filter) / 12) * 40))
+  const hoursReport = computeHoursReport(trainingRecords, kssRecords, hoursThreshold)
   const { avgVendorRating, vendorPerformance } = computeVendorPerformance(feedbackRecords)
 
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
@@ -1033,7 +1049,8 @@ export async function computeBUAnalytics(
     .sort((a, b) => b.staff.length - a.staff.length)
 
   // ── BU-level hours + vendor ──
-  const buHoursReport = computeHoursReport(trainingRecords, kssRecords)
+  const buHoursThreshold = Math.max(1, Math.round((filterMonthCount(filter) / 12) * 40))
+  const buHoursReport = computeHoursReport(trainingRecords, kssRecords, buHoursThreshold)
   const { avgVendorRating: buAvgVendorRating, vendorPerformance: buVendorPerformance } = computeVendorPerformance(feedbackRecords)
 
   return {
