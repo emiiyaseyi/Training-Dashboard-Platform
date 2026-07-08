@@ -196,7 +196,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
                   <MiniKPI label="Avg Hours per Staff" value={`${detail.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} sub="Average per employee with records" accent="text-purple-700" />
                 )}
                 {detail.hoursReport.hasData && (
-                  <MiniKPI label="40-Hour Compliance" value={`${detail.hoursReport.staffMeeting40hPct.toFixed(0)}%`} sub={`${detail.hoursReport.staffMeeting40h} of ${detail.hoursReport.staffMeeting40h + detail.hoursReport.staffBelow40h} staff`} accent={detail.hoursReport.staffMeeting40hPct >= 80 ? 'text-green-700' : detail.hoursReport.staffMeeting40hPct >= 50 ? 'text-amber-700' : 'text-red-700'} alert={detail.hoursReport.staffMeeting40hPct < 50 && detail.hoursReport.hasData} />
+                  <MiniKPI label={`${detail.hoursReport.hoursThreshold}-Hour Compliance`} value={`${detail.hoursReport.staffMeeting40hPct.toFixed(0)}%`} sub={`${detail.hoursReport.staffMeeting40h} of ${detail.hoursReport.staffMeeting40h + detail.hoursReport.staffBelow40h} staff`} accent={detail.hoursReport.staffMeeting40hPct >= 80 ? 'text-green-700' : detail.hoursReport.staffMeeting40hPct >= 50 ? 'text-amber-700' : 'text-red-700'} alert={detail.hoursReport.staffMeeting40hPct < 50 && detail.hoursReport.hasData} />
                 )}
               </div>
             )}

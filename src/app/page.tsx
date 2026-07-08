@@ -144,7 +144,7 @@ export default function ExecutiveDashboard() {
           {data.hoursReport.hasData && data.hoursReport.totalFormalHours > 0 && <KPICard title="Training Hours" value={`${data.hoursReport.totalFormalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From formal training programmes" icon={GraduationCap} color="blue" />}
           {data.hoursReport.hasData && data.hoursReport.totalKSSHours > 0 && <KPICard title="KSS Hours" value={`${data.hoursReport.totalKSSHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From knowledge sharing sessions" icon={Users} color="green" />}
           {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
-          {data.hoursReport.hasData && <KPICard title="40-Hour Compliance" value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.hoursReport.staffMeeting40h + data.hoursReport.staffBelow40h} staff`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
+          {data.hoursReport.hasData && <KPICard title={`${data.hoursReport.hoursThreshold}-Hour Compliance`} value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.hoursReport.staffMeeting40h + data.hoursReport.staffBelow40h} staff`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
           </div>
         </div>
 
@@ -206,7 +206,7 @@ export default function ExecutiveDashboard() {
 
         {/* Staff Hours & 40H Compliance table */}
         {data.hoursReport.hasData && data.hoursReport.staffDetail.length > 0 && (
-          <StaffHoursTable staffDetail={data.hoursReport.staffDetail} />
+          <StaffHoursTable staffDetail={data.hoursReport.staffDetail} hoursThreshold={data.hoursReport.hoursThreshold} />
         )}
 
         {/* BU Summary table */}
