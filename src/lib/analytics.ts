@@ -190,6 +190,7 @@ function computeHoursReport(
   trainingRecords: { staffId: string; staffName: string; businessUnit: string; hours: number | null; cost: number; training: string; month: string }[],
   kssRecords: { staffId: string; staffName: string; businessUnit: string; durationMinutes: number; month?: string | null }[],
   threshold = 40,
+  totalHeadcount = 0,
 ): TrainingHoursReport {
   const hasTrainingHours = trainingRecords.some((r) => r.hours && r.hours > 0)
   const hasKSS = kssRecords.length > 0
@@ -248,6 +249,7 @@ function computeHoursReport(
     .sort((a, b) => b.totalHours - a.totalHours)
 
   const staffMeeting40h = staffDetail.filter((s) => s.meets40h).length
+  const denominator = totalHeadcount > 0 ? totalHeadcount : staffDetail.length
   const avgHoursPerStaff = staffDetail.length > 0 ? totalHours / staffDetail.length : 0
 
   const q = threshold / 4
@@ -270,8 +272,8 @@ function computeHoursReport(
     totalHours:       Math.round(totalHours * 10) / 10,
     avgHoursPerStaff: Math.round(avgHoursPerStaff * 10) / 10,
     staffMeeting40h,
-    staffMeeting40hPct: staffDetail.length > 0 ? (staffMeeting40h / staffDetail.length) * 100 : 0,
-    staffBelow40h: staffDetail.length - staffMeeting40h,
+    staffMeeting40hPct: denominator > 0 ? (staffMeeting40h / denominator) * 100 : 0,
+    staffBelow40h: denominator - staffMeeting40h,
     hoursDistribution,
     staffDetail,
     costPerHour: totalHours > 0 ? totalCost / totalHours : 0,
@@ -766,7 +768,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
 
   // ── Hours + Vendor ──
   const hoursThreshold = Math.max(1, Math.round((filterMonthCount(filter) / 12) * 40))
-  const hoursReport = computeHoursReport(trainingRecords, kssRecords, hoursThreshold)
+  const hoursReport = computeHoursReport(trainingRecords, kssRecords, hoursThreshold, totalStaffCount)
   const { avgVendorRating, vendorPerformance } = computeVendorPerformance(feedbackRecords)
 
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
@@ -1050,7 +1052,7 @@ export async function computeBUAnalytics(
 
   // ── BU-level hours + vendor ──
   const buHoursThreshold = Math.max(1, Math.round((filterMonthCount(filter) / 12) * 40))
-  const buHoursReport = computeHoursReport(trainingRecords, kssRecords, buHoursThreshold)
+  const buHoursReport = computeHoursReport(trainingRecords, kssRecords, buHoursThreshold, bu.totalStaff)
   const { avgVendorRating: buAvgVendorRating, vendorPerformance: buVendorPerformance } = computeVendorPerformance(feedbackRecords)
 
   return {
