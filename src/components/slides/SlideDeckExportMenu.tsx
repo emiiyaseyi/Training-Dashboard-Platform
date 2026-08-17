@@ -18,10 +18,14 @@ interface SlideDeckExportMenuProps {
 export function SlideDeckExportMenu({ data, periodLabel }: SlideDeckExportMenuProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<'pptx' | 'pdf' | 'jpg' | null>(null)
+  // Offscreen slides (needed for PDF/JPG capture) are expensive to mount — each one carries its
+  // own Plotly chart instances. Only build them once the user actually opens the export menu,
+  // instead of on every page load, so pages that never touch export stay fast.
+  const [everOpened, setEverOpened] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const slideRefs = useMemo(() => Array.from({ length: 7 }, () => createRef<HTMLDivElement>()), [])
-  const slides = buildSlideNodes(data, periodLabel)
+  const slides = everOpened ? buildSlideNodes(data, periodLabel) : []
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -50,7 +54,7 @@ export function SlideDeckExportMenu({ data, periodLabel }: SlideDeckExportMenuPr
   return (
     <div className="relative no-print" ref={menuRef}>
       <button
-        onClick={() => setOpen((p) => !p)}
+        onClick={() => { setOpen((p) => !p); setEverOpened(true) }}
         disabled={busy !== null}
         className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-50"
       >

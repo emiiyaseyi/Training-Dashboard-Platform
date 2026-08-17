@@ -194,6 +194,8 @@ export default function BusinessUnitsDashboard() {
     </div>
   )
 
+  const buListByCoverage = [...buList].sort((a, b) => b.coverageRatio - a.coverageRatio)
+
   const exportRows = buList.map((b) => ({
     'Business Unit': b.name,
     'Total Investment (₦)': b.totalInvestment,
@@ -270,13 +272,13 @@ export default function BusinessUnitsDashboard() {
                 <div ref={coverageChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-800 whitespace-nowrap">Staff Coverage (%)</h3>
-                    <SectionExport captureRef={coverageChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
+                    <SectionExport captureRef={coverageChartRef} rows={buListByCoverage.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage" />
                   </div>
                   <BarChart
-                    labels={buList.map((b) => b.name)}
-                    values={buList.map((b) => b.coverageRatio)}
+                    labels={buListByCoverage.map((b) => b.name)}
+                    values={buListByCoverage.map((b) => b.coverageRatio)}
                     color="#1F9D6C"
-                    height={Math.max(200, buList.length * 40)}
+                    height={Math.max(200, buListByCoverage.length * 40)}
                     horizontal
                     showLabels
                     labelSuffix="%"
