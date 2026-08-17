@@ -3,7 +3,8 @@ import { HorizontalBarList } from '@/components/charts/HorizontalBarList'
 import type { GroupAnalytics } from '@/lib/analytics'
 
 export function Slide4BUCharts({ data, pageNumber, periodLabel }: { data: GroupAnalytics; pageNumber: number; periodLabel: string }) {
-  const bus = data.businessUnits
+  const bus = data.businessUnits // already sorted by totalInvestment desc
+  const busByCoverage = [...data.businessUnits].sort((a, b) => b.coverageRatio - a.coverageRatio)
   return (
     <SlideShell title="Investment & Coverage by Business Unit" subtitle="Total learning spend (₦) and % of staff trained, per entity" pageNumber={pageNumber} periodLabel={periodLabel}>
       <div className="grid grid-cols-2 gap-4 h-full">
@@ -24,8 +25,8 @@ export function Slide4BUCharts({ data, pageNumber, periodLabel }: { data: GroupA
           <h3 className="text-sm font-semibold text-navy-600 mb-4 shrink-0">Staff Coverage by Business Unit (%)</h3>
           <div className="flex-1 flex flex-col justify-center">
             <HorizontalBarList
-              labels={bus.map((b) => b.name)}
-              values={bus.map((b) => Math.round(b.coverageRatio * 10) / 10)}
+              labels={busByCoverage.map((b) => b.name)}
+              values={busByCoverage.map((b) => Math.round(b.coverageRatio * 10) / 10)}
               color="#1F9D6C"
               labelSuffix="%"
               maxValue={100}

@@ -6,6 +6,7 @@ interface HorizontalBarListProps {
   labelFormatter?: (v: number) => string
   maxValue?: number // fixed scale (e.g. 100 for percentages) — defaults to auto based on data
   labelColWidth?: number // px
+  valueColWidth?: number // px
   barHeight?: number // px
   rowGap?: number // px
 }
@@ -14,6 +15,10 @@ interface HorizontalBarListProps {
 // flush-left category labels. Plotly's annotation coordinate system for custom label placement
 // proved unreliable (labels ended up overlapping bars); percentage-based CSS positioning is
 // simple and predictable, so this is deliberately not built on Plotly.
+//
+// Three fixed columns (label / track / value) rather than overlaying the value past the bar's
+// end — that overlay approach clipped the text whenever a bar reached 100%, since there was no
+// reserved space for it to spill into.
 export function HorizontalBarList({
   labels,
   values,
@@ -22,6 +27,7 @@ export function HorizontalBarList({
   labelFormatter,
   maxValue,
   labelColWidth = 200,
+  valueColWidth = 56,
   barHeight = 20,
   rowGap = 12,
 }: HorizontalBarListProps) {
@@ -43,12 +49,9 @@ export function HorizontalBarList({
               </div>
               <div className="relative flex-1" style={{ height: barHeight }}>
                 <div className="absolute inset-y-0 left-0 rounded" style={{ width: `${pct}%`, backgroundColor: color, minWidth: values[i] > 0 ? 2 : 0 }} />
-                <span
-                  className="absolute inset-y-0 flex items-center text-xs font-semibold whitespace-nowrap"
-                  style={{ left: `calc(${pct}% + 8px)`, color }}
-                >
-                  {fmtValue(values[i])}
-                </span>
+              </div>
+              <div className="text-xs font-semibold shrink-0 whitespace-nowrap" style={{ width: valueColWidth, color }}>
+                {fmtValue(values[i])}
               </div>
             </div>
           )
@@ -72,6 +75,7 @@ export function HorizontalBarList({
             </span>
           ))}
         </div>
+        <div className="shrink-0" style={{ width: valueColWidth }} />
       </div>
     </div>
   )

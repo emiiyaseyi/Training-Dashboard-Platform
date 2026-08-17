@@ -212,7 +212,8 @@ function buildSlide4(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   const panelW = (PAGE_W - MARGIN * 2 - 0.2) / 2
   const panelTop = CONTENT_TOP
   const panelH = FOOTER_Y - 0.25 - panelTop
-  const bus = data.businessUnits
+  const bus = data.businessUnits // already sorted by totalInvestment desc
+  const busByCoverage = [...data.businessUnits].sort((a, b) => b.coverageRatio - a.coverageRatio)
 
   slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
   slide.addText('Total Investment by Business Unit (₦M)', { x: MARGIN + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 12, bold: true, color: C.navy })
@@ -231,8 +232,8 @@ function buildSlide4(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   slide.addText('Staff Coverage by Business Unit (%)', { x: rightX + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 12, bold: true, color: C.navy })
   slide.addChart(pptx.ChartType.bar, [{
     name: 'Coverage %',
-    labels: bus.map((b) => b.name),
-    values: bus.map((b) => Math.round(b.coverageRatio * 10) / 10),
+    labels: busByCoverage.map((b) => b.name),
+    values: busByCoverage.map((b) => Math.round(b.coverageRatio * 10) / 10),
   }], {
     x: rightX + 0.2, y: panelTop + 0.5, w: panelW - 0.4, h: panelH - 0.7,
     barDir: 'bar', chartColors: [C.green], showLegend: false, catAxisLabelFontSize: 8, valAxisLabelFontSize: 8,
