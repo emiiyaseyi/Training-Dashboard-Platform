@@ -734,7 +734,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       ...trainingRecords.map((r) => r.businessUnit),
       ...subscriptionRecords.map((r) => r.businessUnit),
     ]),
-  ]
+  ].filter((name) => name.trim().length > 0)
 
   const businessUnitSummaries: BUSummary[] = buNames.map((buName) => {
     const tRecs = trainingRecords.filter((r) => r.businessUnit === buName)
