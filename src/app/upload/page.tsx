@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { FileSpreadsheet, Trash2, RefreshCw } from 'lucide-react'
 import { FileUpload } from '@/components/upload/FileUpload'
+import { DataQualityIssues } from '@/components/upload/DataQualityIssues'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
@@ -78,6 +79,9 @@ export default function UploadPage() {
       />
 
       <div className="p-8 space-y-8">
+        {/* Data quality — staff count vs configured headcount */}
+        <DataQualityIssues />
+
         {/* Guide */}
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
           <h2 className="text-sm font-semibold text-blue-900 mb-3">How to use this page</h2>
