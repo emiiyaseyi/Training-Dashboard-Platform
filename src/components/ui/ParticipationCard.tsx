@@ -26,9 +26,9 @@ export function ParticipationCard({ title, participation, totalStaff, variant = 
   }))
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+    <div className="rounded-xl border border-navy-200 bg-navy-100 shadow-sm p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+        <h2 className="text-sm font-semibold text-navy-600">{title}</h2>
         <SectionExport rows={exportRows} filename={`participation_${title.replace(/\s+/g, '_')}`} label="Export" />
       </div>
 
@@ -48,7 +48,7 @@ export function ParticipationCard({ title, participation, totalStaff, variant = 
               </span>
             </span>
           </div>
-          <Bar pct={participation.oneTrainingPct} color="bg-blue-400" />
+          <Bar pct={participation.oneTrainingPct} color="bg-navy-600" />
         </div>
 
         {/* Two or more */}
@@ -66,7 +66,7 @@ export function ParticipationCard({ title, participation, totalStaff, variant = 
               </span>
             </span>
           </div>
-          <Bar pct={participation.twoPlusPct} color="bg-green-400" />
+          <Bar pct={participation.twoPlusPct} color="bg-report-green" />
         </div>
 
         {totalStaff != null && totalStaff > 0 && (

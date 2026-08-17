@@ -72,9 +72,16 @@ export interface VendorPerformance {
   responses: number
 }
 
+export interface CapabilityCoverage {
+  capability: string
+  staffTrained: number
+  coverageRatio: number
+}
+
 export interface BUSummary {
   name: string
-  trainingCost: number
+  trainingCost: number       // Formal Training only (Internal + External)
+  otherInvestmentCost: number // Strategic Learning Initiatives (Summit, Leadership Cafe, Workshop, etc.)
   subscriptionCost: number
   totalInvestment: number
   staffTrained: number
@@ -97,7 +104,8 @@ export interface StaffParticipation {
 }
 
 export interface GroupAnalytics {
-  totalTrainingCost: number
+  totalTrainingCost: number       // Formal Training only (Internal + External)
+  totalOtherTrainingCost: number  // Strategic Learning Initiatives (Summit, Leadership Cafe, Workshop, etc.)
   totalSubscriptionCost: number
   totalLearningInvestment: number
   uniqueStaffTrained: number
@@ -107,8 +115,11 @@ export interface GroupAnalytics {
   groupCoverageRatio: number
   avgImpactScore: number
   trainingSharePct: number
+  otherSharePct: number
   subscriptionSharePct: number
   investmentPerStaff: number
+  capabilityCoverage: CapabilityCoverage[]
+  otherTrainingTypeNames: string[]
   businessUnits: BUSummary[]
   monthlySpend: { month: string; cost: number }[]
   topTrainings: { training: string; count: number; totalCost: number }[]
@@ -520,6 +531,41 @@ function computeParticipation(
   }
 }
 
+// ─── Training Type / Differentiating Capability helpers ──────────────────────
+
+type TrainingTypeLite = { name: string; classification: string }
+
+function buildTypeClassMap(types: TrainingTypeLite[]): Map<string, 'formal' | 'other'> {
+  const map = new Map<string, 'formal' | 'other'>()
+  types.forEach((t) => map.set(t.name.toLowerCase(), t.classification === 'other' ? 'other' : 'formal'))
+  return map
+}
+
+// Legacy rows (no trainingType) and unrecognised free-text values default to "formal" (Internal Training)
+function classifyTraining(trainingType: string | null | undefined, typeMap: Map<string, 'formal' | 'other'>): 'formal' | 'other' {
+  if (!trainingType) return 'formal'
+  return typeMap.get(trainingType.toLowerCase()) ?? 'formal'
+}
+
+function computeCapabilityCoverage(
+  records: { staffId: string; capability: string | null }[],
+  capabilities: { name: string }[],
+  totalStaffCount: number,
+): CapabilityCoverage[] {
+  return capabilities.map(({ name }) => {
+    const staffTrained = new Set(
+      records
+        .filter((r) => (r.capability ?? '').toLowerCase() === name.toLowerCase())
+        .map((r) => r.staffId.toUpperCase())
+    ).size
+    return {
+      capability: name,
+      staffTrained,
+      coverageRatio: totalStaffCount > 0 ? (staffTrained / totalStaffCount) * 100 : 0,
+    }
+  })
+}
+
 // ─── Core analytics function ──────────────────────────────────────────────────
 
 export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }): Promise<GroupAnalytics> {
@@ -529,13 +575,18 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     allSubscriptionRecords,
     businessUnits,
     allKSS,
+    trainingTypes,
+    capabilities,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
     prisma.subscriptionRecord.findMany(),
     prisma.businessUnit.findMany(),
     prisma.kSSRecord.findMany(),
+    prisma.trainingType.findMany(),
+    prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
   ])
+  const typeMap = buildTypeClassMap(trainingTypes)
 
   // Collect all available years for the filter UI
   const availableYears = [...new Set(allTraining.map((r) => r.year))].sort((a, b) => b - a)
@@ -576,8 +627,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     )
   }
 
-  // ── Training aggregates ──
-  const totalTrainingCost = trainingRecords.reduce((s, r) => s + r.cost, 0)
+  // ── Training aggregates ── (split Formal Training vs Strategic Learning Initiatives)
+  const formalTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'formal')
+  const otherTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
+  const totalTrainingCost = formalTrainingRecords.reduce((s, r) => s + r.cost, 0)
+  const totalOtherTrainingCost = otherTrainingRecords.reduce((s, r) => s + r.cost, 0)
   const uniqueTrainedIds = new Set(trainingRecords.map((r) => r.staffId.toUpperCase()))
   const uniqueStaffTrained = uniqueTrainedIds.size
 
@@ -589,7 +643,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   // ── Combined ──
   const allUniqueIds = new Set([...uniqueTrainedIds, ...uniqueSubIds])
   const totalUniqueStaff = allUniqueIds.size
-  const totalLearningInvestment = totalTrainingCost + totalSubscriptionCost
+  const totalLearningInvestment = totalTrainingCost + totalOtherTrainingCost + totalSubscriptionCost
   const totalStaffCount = businessUnits.reduce((s, b) => s + b.staffCount, 0)
   const groupCoverageRatio = totalStaffCount > 0 ? (uniqueStaffTrained / totalStaffCount) * 100 : 0
 
@@ -601,12 +655,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       : 0
 
   const trainingSharePct = totalLearningInvestment > 0 ? (totalTrainingCost / totalLearningInvestment) * 100 : 0
+  const otherSharePct = totalLearningInvestment > 0 ? (totalOtherTrainingCost / totalLearningInvestment) * 100 : 0
   const subscriptionSharePct = totalLearningInvestment > 0 ? (totalSubscriptionCost / totalLearningInvestment) * 100 : 0
   const investmentPerStaff = totalStaffCount > 0 ? totalLearningInvestment / totalStaffCount : 0
 
-  // ── Monthly spend ──
+  // ── Monthly spend (Formal Training trend) ──
   const monthMap: Record<string, number> = {}
-  trainingRecords.forEach((r) => {
+  formalTrainingRecords.forEach((r) => {
     const key = r.month || 'Unknown'
     monthMap[key] = (monthMap[key] ?? 0) + r.cost
   })
@@ -661,11 +716,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   })
   const applicationRates = Object.entries(appMap).map(([category, count]) => ({ category, count }))
 
-  // ── Forecasting ──
+  // ── Forecasting (projects total learning investment — training + strategic initiatives + subscriptions) ──
   const completedMonths = monthlySpend.length > 0 ? monthlySpend.length : 1
-  const avgMonthlySpend = totalTrainingCost / completedMonths
+  const avgMonthlySpend = totalLearningInvestment / completedMonths
   const remainingMonths = Math.max(0, 12 - completedMonths)
-  const forecastedSpend = totalTrainingCost + avgMonthlySpend * remainingMonths
+  const forecastedSpend = totalLearningInvestment + avgMonthlySpend * remainingMonths
   const totalBudget = businessUnits.reduce((s, b) => s + b.budget, 0)
   // Only calculate budget risk when at least one BU has a budget configured
   const budgetRisk: 'on-track' | 'at-risk' | 'over-budget' =
@@ -683,13 +738,16 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
 
   const businessUnitSummaries: BUSummary[] = buNames.map((buName) => {
     const tRecs = trainingRecords.filter((r) => r.businessUnit === buName)
+    const formalTRecs = tRecs.filter((r) => classifyTraining(r.trainingType, typeMap) === 'formal')
+    const otherTRecs = tRecs.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
     const sRecs = subscriptionRecords.filter((r) => r.businessUnit === buName)
     const fRecs = feedbackRecords.filter((r) => r.businessUnit === buName)
     const buConfig = businessUnits.find((b) => b.name.toLowerCase() === buName.toLowerCase())
 
-    const trainingCost = tRecs.reduce((s, r) => s + r.cost, 0)
+    const trainingCost = formalTRecs.reduce((s, r) => s + r.cost, 0)
+    const otherInvestmentCost = otherTRecs.reduce((s, r) => s + r.cost, 0)
     const subscriptionCost = sRecs.reduce((s, r) => s + r.amount, 0)
-    const totalInvestment = trainingCost + subscriptionCost
+    const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
     const staffTrained = new Set(tRecs.map((r) => r.staffId.toUpperCase())).size
     const subscriptionStaff = new Set(sRecs.map((r) => r.staffId.toUpperCase())).size
     const totalStaff = buConfig?.staffCount ?? 0
@@ -701,11 +759,12 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
         ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
         : 0
     const subscriptionRatio = totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0
-    const budgetUtilisation = budget > 0 ? (trainingCost / budget) * 100 : 0
+    const budgetUtilisation = budget > 0 ? (totalInvestment / budget) * 100 : 0
 
     return {
       name: buName,
       trainingCost,
+      otherInvestmentCost,
       subscriptionCost,
       totalInvestment,
       staffTrained,
@@ -716,7 +775,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       avgImpactScore: avgImpact,
       subscriptionRatio,
       budgetUtilisation,
-      isOverBudget: budget > 0 && trainingCost > budget,
+      isOverBudget: budget > 0 && totalInvestment > budget,
     }
   })
 
@@ -773,8 +832,15 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
 
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
 
+  const capabilityCoverage = computeCapabilityCoverage(trainingRecords, capabilities, totalStaffCount)
+  const otherTrainingTypeNames = trainingTypes
+    .filter((t) => t.classification === 'other')
+    .sort((a, b) => a.order - b.order)
+    .map((t) => t.name)
+
   return {
     totalTrainingCost,
+    totalOtherTrainingCost,
     totalSubscriptionCost,
     totalLearningInvestment,
     uniqueStaffTrained,
@@ -784,8 +850,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     groupCoverageRatio,
     avgImpactScore,
     trainingSharePct,
+    otherSharePct,
     subscriptionSharePct,
     investmentPerStaff,
+    capabilityCoverage,
+    otherTrainingTypeNames,
     businessUnits: sortedBUs,
     monthlySpend,
     topTrainings,
@@ -813,7 +882,7 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -822,7 +891,9 @@ export async function computeBUAnalytics(
     prisma.feedbackRecord.findMany(),
     prisma.businessUnit.findMany(),
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
+    prisma.trainingType.findMany(),
   ])
+  const typeMap = buildTypeClassMap(trainingTypes)
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -861,9 +932,12 @@ export async function computeBUAnalytics(
     kssRecords = kssRecords.filter((r) => !r.month || months.has(r.month as typeof MONTHS[number]))
   }
 
-  const trainingCost = trainingRecords.reduce((s, r) => s + r.cost, 0)
+  const formalTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'formal')
+  const otherTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
+  const trainingCost = formalTrainingRecords.reduce((s, r) => s + r.cost, 0)
+  const otherInvestmentCost = otherTrainingRecords.reduce((s, r) => s + r.cost, 0)
   const subscriptionCost = subscriptionRecords.reduce((s, r) => s + r.amount, 0)
-  const totalInvestment = trainingCost + subscriptionCost
+  const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
   const staffTrained = new Set(trainingRecords.map((r) => r.staffId.toUpperCase())).size
   const subscriptionStaff = new Set(subscriptionRecords.map((r) => r.staffId.toUpperCase())).size
   const totalStaff = buConfig?.staffCount ?? 0
@@ -877,6 +951,7 @@ export async function computeBUAnalytics(
   const bu: BUSummary = {
     name: buName,
     trainingCost,
+    otherInvestmentCost,
     subscriptionCost,
     totalInvestment,
     staffTrained,
@@ -886,13 +961,13 @@ export async function computeBUAnalytics(
     coverageRatio,
     avgImpactScore: avgImpact,
     subscriptionRatio: totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0,
-    budgetUtilisation: budget > 0 ? (trainingCost / budget) * 100 : 0,
-    isOverBudget: budget > 0 && trainingCost > budget,
+    budgetUtilisation: budget > 0 ? (totalInvestment / budget) * 100 : 0,
+    isOverBudget: budget > 0 && totalInvestment > budget,
   }
 
-  // monthly spend
+  // monthly spend (Formal Training trend)
   const monthMap: Record<string, number> = {}
-  trainingRecords.forEach((r) => {
+  formalTrainingRecords.forEach((r) => {
     const key = r.month || 'Unknown'
     monthMap[key] = (monthMap[key] ?? 0) + r.cost
   })
@@ -967,7 +1042,7 @@ export async function computeBUAnalytics(
   const buParticipationInequality = participationInequalityPct(trainingRecords)
   const buRedFlags = buildRedFlags({
     businessUnits: [bu],
-    budgetRisk: budget > 0 && trainingCost > budget ? 'over-budget' : budget > 0 && trainingCost > budget * 0.85 ? 'at-risk' : 'on-track',
+    budgetRisk: budget > 0 && totalInvestment > budget ? 'over-budget' : budget > 0 && totalInvestment > budget * 0.85 ? 'at-risk' : 'on-track',
     avgImpactScore: avgImpact,
     feedbackCredibility: buFeedbackCoverage,
   })
@@ -985,7 +1060,7 @@ export async function computeBUAnalytics(
     const ai    = vF.length > 0 ? vF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / vF.length : 0
     return {
       name,
-      trainingCost: tc, subscriptionCost: 0, totalInvestment: tc,
+      trainingCost: tc, otherInvestmentCost: 0, subscriptionCost: 0, totalInvestment: tc,
       staffTrained: st, subscriptionStaff: 0,
       totalStaff: ts, budget: cfg?.budget ?? 0,
       coverageRatio: ts > 0 ? (st / ts) * 100 : 0,
@@ -1005,7 +1080,7 @@ export async function computeBUAnalytics(
     lciLabel: lciLabel(buLCI),
     feedbackCredibility: buFeedbackCoverage,
     feedbackCredibilityLabel: feedbackCredibilityLabel(buFeedbackCoverage),
-    investmentFairness: totalStaff > 0 ? (trainingCost + subscriptionCost) / totalStaff : 0,
+    investmentFairness: totalStaff > 0 ? totalInvestment / totalStaff : 0,
     participationInequality: buParticipationInequality,
     subscriptionActivationRate: buSubActivation,
     subscriptionCostPerMember: buSubCostPerMember,

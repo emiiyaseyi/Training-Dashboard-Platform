@@ -234,7 +234,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
           {/* ═══ 2. Top Training Programmes ═══ */}
           <Section title="Top Training Programmes" rows={detail.topTrainings.map((t) => ({ Programme: t.training, Participants: t.count, 'Total Cost (₦)': t.totalCost }))} filename={`${buName}_top_trainings`} empty="No training programme data found.">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <BarChart labels={detail.topTrainings.map((t) => t.training)} values={detail.topTrainings.map((t) => t.totalCost)} color="#a855f7" height={Math.max(180, detail.topTrainings.length * 38)} horizontal />
+              <BarChart labels={detail.topTrainings.map((t) => t.training)} values={detail.topTrainings.map((t) => t.totalCost)} color="#C9A24B" height={Math.max(180, detail.topTrainings.length * 38)} horizontal />
             </div>
           </Section>
 
@@ -248,7 +248,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
           {/* ═══ 4. Membership Organisations ═══ */}
           <Section title="Membership Organisations" rows={detail.subscriptionBreakdown.map((s) => ({ Organisation: s.org, Members: s.count, 'Amount (₦)': s.totalAmount }))} filename={`${buName}_membership_orgs`} empty="No subscription data found.">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <BarChart labels={detail.subscriptionBreakdown.map((s) => s.org)} values={detail.subscriptionBreakdown.map((s) => s.totalAmount)} color="#22c55e" height={Math.max(160, detail.subscriptionBreakdown.length * 38)} horizontal={detail.subscriptionBreakdown.length > 2} />
+              <BarChart labels={detail.subscriptionBreakdown.map((s) => s.org)} values={detail.subscriptionBreakdown.map((s) => s.totalAmount)} color="#1F9D6C" height={Math.max(160, detail.subscriptionBreakdown.length * 38)} horizontal={detail.subscriptionBreakdown.length > 2} />
             </div>
           </Section>
 

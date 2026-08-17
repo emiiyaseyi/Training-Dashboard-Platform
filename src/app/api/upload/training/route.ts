@@ -40,6 +40,22 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Warn on Training Type / Capability values that don't match the configured taxonomies
+    const [knownTypes, knownCapabilities] = await Promise.all([
+      prisma.trainingType.findMany({ select: { name: true } }),
+      prisma.differentiatingCapability.findMany({ select: { name: true } }),
+    ])
+    const knownTypeNames = new Set(knownTypes.map((t) => t.name.toLowerCase()))
+    const knownCapabilityNames = new Set(knownCapabilities.map((c) => c.name.toLowerCase()))
+    normalizedRows.forEach((r, i) => {
+      if (r.trainingType && !knownTypeNames.has(r.trainingType.toLowerCase())) {
+        warnings.push(`Row ${i + 2}: Training Type "${r.trainingType}" not recognised — check Admin → Training Types.`)
+      }
+      if (r.capability && !knownCapabilityNames.has(r.capability.toLowerCase())) {
+        warnings.push(`Row ${i + 2}: Differentiating Capability "${r.capability}" not recognised — check Admin → Capabilities.`)
+      }
+    })
+
     // Create upload batch
     const batch = await prisma.uploadBatch.create({
       data: {
@@ -62,6 +78,8 @@ export async function POST(req: NextRequest) {
         year,
         cost:        r.cost,
         hours:       r.hours > 0 ? r.hours : null,
+        trainingType:r.trainingType || null,
+        capability:  r.capability || null,
         batchId:     batch.id,
       })),
     })

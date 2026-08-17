@@ -122,7 +122,7 @@ export default function UploadPage() {
           {[
             {
               title: 'Training Cost — Expected Columns',
-              columns: ['S/N', 'Name', 'Staff ID', 'Training', 'Business Units', 'Month', 'Cost', 'Learning Hours (optional)'],
+              columns: ['S/N', 'Name', 'Staff ID', 'Training', 'Business Units', 'Month', 'Cost', 'Learning Hours (optional)', 'Training Type (see Admin → Training Types)', 'Differentiating Capability (see Admin → Capabilities)'],
               color: 'blue',
             },
             {

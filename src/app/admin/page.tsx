@@ -5,6 +5,7 @@ import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCirc
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
+import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 
 interface BU {
   id: string
@@ -41,9 +42,6 @@ export default function AdminPage() {
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [yearConfigs, setYearConfigs] = useState<YearConfig[]>([])
-  const [yearEditMap, setYearEditMap] = useState<Record<string, { budget: string; staffCount: string }>>({})
-  const [yearSaving, setYearSaving] = useState<string | null>(null)
-  const [yearSaved, setYearSaved] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i) // 2 past + current + 3 future
 
@@ -77,38 +75,13 @@ export default function AdminPage() {
       if (!res.ok) {
         console.error(`[business-units/yearly] HTTP ${res.status}`, await res.json().catch(() => res.statusText))
         setYearConfigs([])
-        setYearEditMap({})
         return
       }
       const json = await res.json()
       const data: YearConfig[] = Array.isArray(json) ? json : []
       if (!Array.isArray(json)) console.error('[business-units/yearly] unexpected response', json)
       setYearConfigs(data)
-      const initial: Record<string, { budget: string; staffCount: string }> = {}
-      // Initialize from existing configs or zero
-      units.forEach((u) => {
-        const cfg = data.find((c) => c.buName === u.name)
-        initial[u.name] = { budget: cfg ? cfg.budget.toString() : '0', staffCount: cfg ? cfg.staffCount.toString() : '0' }
-      })
-      setYearEditMap(initial)
     } catch {}
-  }
-
-  const saveYearConfig = async (buName: string) => {
-    setYearSaving(buName)
-    try {
-      const vals = yearEditMap[buName] ?? { budget: '0', staffCount: '0' }
-      await fetch('/api/business-units/yearly', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buName, year: selectedYear, budget: parseFloat(vals.budget) || 0, staffCount: parseInt(vals.staffCount) || 0 }),
-      })
-      setYearSaved(buName)
-      setTimeout(() => setYearSaved(null), 2000)
-      await loadYearConfigs(selectedYear)
-    } finally {
-      setYearSaving(null)
-    }
   }
 
   useEffect(() => { load() }, [])
@@ -222,7 +195,7 @@ export default function AdminPage() {
       }
 
       setCsvResult({ imported, skipped: errors.length, errors })
-      // Refresh base units and year configs together so the Annual table updates immediately
+      // Refresh base units and year configs together
       const [freshUnitsRes, freshYearRes] = await Promise.all([
         fetch('/api/business-units'),
         fetch(`/api/business-units/yearly?year=${csvYear}`),
@@ -233,13 +206,7 @@ export default function AdminPage() {
       const editInit: Record<string, { budget: string; staffCount: string }> = {}
       freshUnits.forEach((u) => { editInit[u.id] = { budget: u.budget.toString(), staffCount: u.staffCount.toString() } })
       setEditMap(editInit)
-      const yearInit: Record<string, { budget: string; staffCount: string }> = {}
-      freshUnits.forEach((u) => {
-        const cfg = freshYearConfigs.find((c) => c.buName === u.name)
-        yearInit[u.name] = { budget: cfg ? cfg.budget.toString() : '0', staffCount: cfg ? cfg.staffCount.toString() : '0' }
-      })
       setYearConfigs(freshYearConfigs)
-      setYearEditMap(yearInit)
       setSelectedYear(csvYear)
     } catch {
       setCsvResult({ imported: 0, skipped: 0, errors: ['Failed to parse file. Please check the format.'] })
@@ -291,6 +258,25 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Annual Budget & Headcount by Year</p>
+                <p className="text-xs text-slate-500 mt-0.5">Set budget and staff count per year for historical accuracy and multi-year analytics.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600">Year:</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {units.length === 0 && (
               <AlertBadge
                 variant="info"
@@ -525,92 +511,6 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* ── Year-based Budget & Headcount ── */}
-        <div className="rounded-xl border border-blue-100 bg-white shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Annual Budget & Headcount by Year</p>
-              <p className="text-xs text-slate-500 mt-0.5">Set budget and staff count per year for historical accuracy and multi-year analytics.</p>
-            </div>
-            {/* Year selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-slate-600">Year:</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {availableYears.map((y) => (
-                  <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {units.length === 0 ? (
-            <p className="text-xs text-slate-400">Upload training or subscription data first — business units are auto-detected.</p>
-          ) : (
-            <div className="space-y-3">
-              {units.map((unit) => {
-                const vals = yearEditMap[unit.name] ?? { budget: '0', staffCount: '0' }
-                const isSaving = yearSaving === unit.name
-                const isSaved  = yearSaved  === unit.name
-                const existing = yearConfigs.find((c) => c.buName === unit.name)
-                const changed = parseFloat(vals.budget) !== (existing?.budget ?? 0) || parseInt(vals.staffCount) !== (existing?.staffCount ?? 0)
-
-                return (
-                  <div key={unit.name} className="flex items-center gap-4 p-4 rounded-xl border border-slate-200 bg-slate-50">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4 text-blue-500" />
-                    </div>
-                    <p className="text-sm font-semibold text-slate-700 w-48 shrink-0 truncate">{unit.name}</p>
-                    <div className="flex-1 grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-500 mb-1">Budget {selectedYear} (₦)</label>
-                        <input
-                          type="number" min="0" value={vals.budget}
-                          onChange={(e) => setYearEditMap((p) => ({ ...p, [unit.name]: { ...vals, budget: e.target.value } }))}
-                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-500 mb-1">Headcount {selectedYear}</label>
-                        <input
-                          type="number" min="0" value={vals.staffCount}
-                          onChange={(e) => setYearEditMap((p) => ({ ...p, [unit.name]: { ...vals, staffCount: e.target.value } }))}
-                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isSaved && <span className="text-xs text-green-600 font-medium">Saved</span>}
-                      <button
-                        onClick={() => saveYearConfig(unit.name)}
-                        disabled={isSaving || !changed}
-                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${changed && !isSaving ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-                      >
-                        {isSaving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        Save
-                      </button>
-                      <button
-                        onClick={() => deleteBU(unit)}
-                        disabled={deleting === unit.id}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40"
-                        title="Delete this business unit"
-                      >
-                        {deleting === unit.id
-                          ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                          : <Trash2 className="w-3.5 h-3.5" />}
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
         {/* ── Export BU data ── */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
           <div className="flex items-start gap-3">
@@ -686,6 +586,23 @@ export default function AdminPage() {
             </button>
             {sigSaved && <span className="text-xs text-green-600 font-medium">Saved — will appear on next PDF export.</span>}
           </div>
+        </div>
+
+        {/* Training Type & Differentiating Capability taxonomies */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TaxonomyPanel
+            title="Training Types"
+            description="Classifies training spend as Formal Training (Internal/External) or a Strategic Learning Initiative (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learning Initiatives cards, and populates the Training Type column on the upload template."
+            endpoint="/api/training-types"
+            withClassification
+            namePlaceholder="e.g. Summit"
+          />
+          <TaxonomyPanel
+            title="Differentiating Capabilities"
+            description="The set of capabilities tracked for coverage reporting. Tag training records against these via the Capability column on upload — coverage is the % of total staff trained per capability."
+            endpoint="/api/capabilities"
+            namePlaceholder="e.g. Risk Management"
+          />
         </div>
 
         {/* Info box */}

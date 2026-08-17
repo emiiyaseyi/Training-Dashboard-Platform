@@ -24,6 +24,7 @@ function rating(n: number) { return n === 0 ? '—' : `${n.toFixed(1)}/5` }
 interface BUSummaryRow {
   name: string
   trainingCost: number
+  otherInvestmentCost: number
   subscriptionCost: number
   totalInvestment: number
   staffTrained: number
@@ -44,8 +45,8 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
     bu.subscriptionRatio < 20 ? 'Skill-acquisition' : 'Balanced'
 
   const profileColor =
-    bu.subscriptionRatio > 50 ? 'bg-blue-100 text-blue-700' :
-    bu.subscriptionRatio < 20 ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+    bu.subscriptionRatio > 50 ? 'bg-navy-100 text-navy-700' :
+    bu.subscriptionRatio < 20 ? 'bg-gold-100 text-gold-700' : 'bg-green-100 text-green-700'
 
   const coverageColor =
     bu.coverageRatio >= 70 ? 'text-green-700' :
@@ -53,14 +54,14 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+      className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-gold-300 transition-all cursor-pointer group"
       onClick={onClick}
     >
       {/* Card header */}
       <div className="px-5 pt-5 pb-4 border-b border-slate-100 flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center shrink-0 transition-colors mt-0.5">
-            <Building2 className="w-4.5 h-4.5 text-blue-500" />
+          <div className="w-9 h-9 rounded-lg bg-navy-200 group-hover:bg-navy-300 flex items-center justify-center shrink-0 transition-colors mt-0.5">
+            <Building2 className="w-4.5 h-4.5 text-navy-600" />
           </div>
           <div>
             <p className="text-sm font-bold text-slate-800 leading-snug">{bu.name}</p>
@@ -71,14 +72,14 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
         </div>
         <div className="text-right shrink-0">
           <p className="text-xs text-slate-400">Total Investment</p>
-          <p className="text-base font-bold text-blue-700 tabular-nums">{fmt(bu.totalInvestment)}</p>
+          <p className="text-base font-bold text-navy-600 tabular-nums">{fmt(bu.totalInvestment)}</p>
         </div>
       </div>
 
       {/* Spend breakdown */}
       <div className="px-5 py-4 grid grid-cols-2 gap-4 border-b border-slate-100">
         <div>
-          <p className="text-xs text-slate-400 mb-0.5">Training Spend</p>
+          <p className="text-xs text-slate-400 mb-0.5">Formal Training</p>
           <p className="text-sm font-semibold text-slate-700 tabular-nums">{fmt(bu.trainingCost)}</p>
           {bu.budget > 0 && (
             <p className={`text-xs mt-0.5 ${bu.isOverBudget ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
@@ -136,8 +137,8 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
       </div>
 
       {/* Footer CTA */}
-      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl group-hover:bg-blue-50 transition-colors">
-        <p className="text-xs text-blue-600 font-semibold group-hover:text-blue-700">
+      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl group-hover:bg-navy-50 transition-colors">
+        <p className="text-xs text-navy-600 font-semibold group-hover:text-navy-700">
           Open full report →
         </p>
       </div>
@@ -196,7 +197,8 @@ export default function BusinessUnitsDashboard() {
   const exportRows = buList.map((b) => ({
     'Business Unit': b.name,
     'Total Investment (₦)': b.totalInvestment,
-    'Training Spend (₦)': b.trainingCost,
+    'Formal Training (₦)': b.trainingCost,
+    'Strategic Initiatives (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
     'Staff Trained': b.staffTrained,
     'Total Staff': b.totalStaff,
@@ -258,7 +260,7 @@ export default function BusinessUnitsDashboard() {
                   <BarChart
                     labels={buList.map((b) => b.name)}
                     values={buList.map((b) => b.totalInvestment)}
-                    color="#3b82f6"
+                    color="#1E2761"
                     height={Math.max(200, buList.length * 40)}
                     horizontal
                     showLabels
@@ -273,7 +275,7 @@ export default function BusinessUnitsDashboard() {
                   <BarChart
                     labels={buList.map((b) => b.name)}
                     values={buList.map((b) => b.coverageRatio)}
-                    color="#22c55e"
+                    color="#1F9D6C"
                     height={Math.max(200, buList.length * 40)}
                     horizontal
                     showLabels
@@ -300,7 +302,8 @@ export default function BusinessUnitsDashboard() {
                     ),
                   },
                   { key: 'totalInvestment',   header: 'Total Investment',  align: 'right', render: (r) => fmt(r.totalInvestment as number) },
-                  { key: 'trainingCost',       header: 'Training',          align: 'right', render: (r) => fmt(r.trainingCost as number) },
+                  { key: 'trainingCost',       header: 'Formal Training',   align: 'right', render: (r) => fmt(r.trainingCost as number) },
+                  { key: 'otherInvestmentCost', header: 'Strategic Initiatives', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
                   { key: 'subscriptionCost',   header: 'Subscriptions',     align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
                   { key: 'staffTrained',       header: 'Trained',           align: 'right' },
                   {

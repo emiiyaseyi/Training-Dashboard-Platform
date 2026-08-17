@@ -161,7 +161,7 @@ export default function TrainingDashboard() {
                   <h2 className="text-sm font-semibold text-slate-800">Training Spend by Business Unit</h2>
                   <SectionExport captureRef={buSpendRef} rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost }))} filename="training_bu_spend" />
                 </div>
-                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.trainingCost)} color="#3b82f6" height={240} horizontal={data.businessUnits.length > 4} />
+                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.trainingCost)} color="#1E2761" height={240} horizontal={data.businessUnits.length > 4} />
               </div>
             </div>
 
@@ -172,7 +172,7 @@ export default function TrainingDashboard() {
                     <h2 className="text-sm font-semibold text-slate-800">Impact Score Distribution</h2>
                     <SectionExport captureRef={impactDistRef} rows={data.impactDistribution.map((d) => ({ Range: d.range, Count: d.count }))} filename="impact_distribution" />
                   </div>
-                  <BarChart labels={data.impactDistribution.map((d) => d.range)} values={data.impactDistribution.map((d) => d.count)} color="#a855f7" height={220} />
+                  <BarChart labels={data.impactDistribution.map((d) => d.range)} values={data.impactDistribution.map((d) => d.count)} color="#C9A24B" height={220} />
                 </div>
                 <div ref={appRatesRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">

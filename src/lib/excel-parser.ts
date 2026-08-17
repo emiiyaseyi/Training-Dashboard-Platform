@@ -9,6 +9,8 @@ export interface TrainingRow {
   month: string
   cost: number
   hours: number   // Learning Hours (optional — 0 if not provided)
+  trainingType: string  // e.g. Internal Training, External Training, Summit, Leadership Cafe, Workshop
+  capability: string    // Differentiating Capability tag
 }
 
 export interface KSSRow {
@@ -104,6 +106,8 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
     month:    findHeader(headers, ['month', 'period', 'trainingmonth']),
     cost:     findHeader(headers, ['cost', 'amount', 'fee', 'trainingcost', 'spend']),
     hours:    findHeader(headers, ['learninghours', 'hoursoflearning', 'learningduration', 'traininghours', 'durationhours']),
+    trainingType: findHeader(headers, ['trainingtype', 'type', 'category']),
+    capability:   findHeader(headers, ['capability', 'differentiatingcapability', 'competency']),
   }
 
   if (!col.name) errors.push('Could not find a "Name" column.')
@@ -134,6 +138,8 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
       month:        normalise(r[col.month ?? ''] ?? ''),
       cost,
       hours:        Math.max(0, hours),
+      trainingType: normalise(r[col.trainingType ?? ''] ?? ''),
+      capability:   normalise(r[col.capability ?? ''] ?? ''),
     })
   })
 

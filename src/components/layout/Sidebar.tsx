@@ -12,6 +12,7 @@ import {
   TrendingUp,
   BookOpen,
   FileBarChart,
+  Layers,
 } from 'lucide-react'
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/training',         label: 'Training Analytics',      icon: GraduationCap },
   { href: '/subscriptions',    label: 'Subscriptions',           icon: BadgeCheck },
   { href: '/business-units',   label: 'Business Units',          icon: Building2 },
+  { href: '/capabilities',     label: 'Capability Coverage',     icon: Layers },
   { href: '/reports',          label: 'Report Generation',       icon: FileBarChart },
   { href: '/upload',           label: 'Upload & Data',           icon: Upload },
   { href: '/admin',            label: 'Admin Settings',          icon: Settings },
@@ -28,12 +30,12 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 shrink-0 bg-slate-950 text-slate-300 flex flex-col h-screen">
+    <aside className="w-64 shrink-0 bg-navy-700 text-slate-300 flex flex-col h-screen">
       {/* Brand */}
-      <div className="px-6 py-5 border-b border-slate-800">
+      <div className="px-6 py-5 border-b border-navy-500/40">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center shrink-0">
-            <BookOpen className="w-4 h-4 text-white" />
+          <div className="w-8 h-8 rounded-lg bg-gold-400 flex items-center justify-center shrink-0">
+            <BookOpen className="w-4 h-4 text-navy-800" />
           </div>
           <div>
             <p className="text-white font-semibold text-sm leading-tight">Learning Intel</p>
@@ -55,8 +57,8 @@ export function Sidebar() {
               href={href}
               className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
                 active
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  ? 'bg-gold-400 text-navy-800'
+                  : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -76,8 +78,8 @@ export function Sidebar() {
               href={href}
               className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
                 active
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  ? 'bg-gold-400 text-navy-800'
+                  : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -88,7 +90,7 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-slate-800">
+      <div className="px-6 py-4 border-t border-navy-500/40">
         <div className="flex items-center gap-2 text-slate-500 text-xs">
           <TrendingUp className="w-3.5 h-3.5" />
           <span>Learning Intelligence Platform</span>
