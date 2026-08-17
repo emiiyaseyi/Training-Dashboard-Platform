@@ -71,10 +71,11 @@ export function BarChart({
           : '%{y:,.0f}<extra></extra>',
         ...(labelText && {
           text: labelText,
-          textposition: 'auto',
+          textposition: horizontal ? 'outside' : 'auto',
           insidetextfont: { color: 'white', size: 10 },
           outsidetextfont: { color: '#475569', size: 10 },
           constraintext: 'none',
+          cliponaxis: false,
         }),
       },
     ] as unknown as PlotData[]
@@ -86,7 +87,7 @@ export function BarChart({
 
     const layout: Partial<Layout> = {
       height,
-      margin: { t: 12, r: 20, b: horizontal ? 40 : 56, l: leftMargin },
+      margin: { t: 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
@@ -102,7 +103,11 @@ export function BarChart({
         showgrid: horizontal,
         gridcolor: '#f1f5f9',
         zeroline: false,
-        automargin: true,
+        // automargin measures native tick labels to size the margin — since horizontal charts
+        // hide those labels and use our own left-aligned annotations instead, automargin has
+        // nothing to measure and collapses the margin to ~0, so it must stay off there and rely
+        // entirely on the explicit margin.l (leftMargin) computed above.
+        automargin: !horizontal,
         showticklabels: !horizontal,
         ...(!horizontal ? percentAxis : {}),
       },
