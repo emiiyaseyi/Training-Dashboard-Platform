@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { PlotData, Layout } from 'plotly.js-dist-min'
+import { REPORT_COLORS } from '@/lib/report-theme'
 
 interface BarChartProps {
   labels: string[]
@@ -17,7 +18,7 @@ interface BarChartProps {
 export function BarChart({
   labels,
   values,
-  color = '#3b82f6',
+  color = REPORT_COLORS.navy,
   height = 300,
   horizontal = false,
   showLabels = false,
@@ -30,7 +31,7 @@ export function BarChart({
     if (!ref.current || labels.length === 0) return
 
     const maxLabelLen = horizontal ? Math.max(...labels.map((l) => l.length), 0) : 0
-    const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 6.5, 120), 300) : 50
+    const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 7, 140), 420) : 50
 
     const labelText = showLabels
       ? values.map((v) =>
@@ -60,6 +61,11 @@ export function BarChart({
       },
     ] as unknown as PlotData[]
 
+    // Percentage charts always use a fixed 0-100 scale — Plotly's autorange produces a
+    // nonsensical tiny/negative range (e.g. -1 to 1) when every value is 0.
+    const isPercent = labelSuffix === '%'
+    const percentAxis = isPercent ? { range: [0, 100] as [number, number], autorange: false } : {}
+
     const layout: Partial<Layout> = {
       height,
       margin: { t: 12, r: 20, b: horizontal ? 40 : 56, l: leftMargin },
@@ -71,6 +77,7 @@ export function BarChart({
         showgrid: !horizontal,
         gridcolor: '#f1f5f9',
         zeroline: false,
+        ...(horizontal ? percentAxis : {}),
       },
       yaxis: {
         tickfont: { size: 10 },
@@ -78,6 +85,7 @@ export function BarChart({
         gridcolor: '#f1f5f9',
         zeroline: false,
         automargin: true,
+        ...(!horizontal ? percentAxis : {}),
       },
       bargap: 0.35,
     }

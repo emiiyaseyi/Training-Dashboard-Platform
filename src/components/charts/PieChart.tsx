@@ -2,11 +2,9 @@
 
 import { useEffect, useRef } from 'react'
 import type { PlotData, Layout } from 'plotly.js-dist-min'
+import { REPORT_PALETTE } from '@/lib/report-theme'
 
-const PALETTE = [
-  '#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#ef4444',
-  '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1',
-]
+const PALETTE = REPORT_PALETTE
 
 interface PieChartProps {
   labels: string[]
@@ -14,6 +12,7 @@ interface PieChartProps {
   height?: number
   donut?: boolean
   showAmounts?: boolean
+  showLegend?: boolean
 }
 
 function fmtAmount(v: number): string {
@@ -22,7 +21,7 @@ function fmtAmount(v: number): string {
   return `₦${v.toLocaleString()}`
 }
 
-export function PieChart({ labels, values, height = 300, donut = false, showAmounts = false }: PieChartProps) {
+export function PieChart({ labels, values, height = 300, donut = false, showAmounts = false, showLegend = true }: PieChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,10 +41,12 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
         labels,
         values,
         hole: donut ? 0.5 : 0,
-        marker: { colors: PALETTE },
+        marker: { colors: PALETTE, line: { color: '#ffffff', width: 2 } },
         textinfo: showAmounts ? 'text' : 'percent',
+        // Inside labels avoid the overlap that outside labels produce when a slice is near 0%
+        textposition: showAmounts ? 'outside' : 'inside',
+        insidetextfont: { color: '#ffffff', size: 13 },
         ...(sliceText && { text: sliceText }),
-        ...(showAmounts && { textposition: 'outside' }),
         hovertemplate: '%{label}: %{value:,.0f}<br>%{percent}<extra></extra>',
       } as PlotData,
     ]
@@ -56,7 +57,7 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
       paper_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
       legend: { orientation: 'h', y: -0.15, font: { size: 10 } },
-      showlegend: true,
+      showlegend: showLegend,
     }
 
     const el = ref.current
@@ -72,7 +73,7 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(labels), JSON.stringify(values), height, donut])
+  }, [JSON.stringify(labels), JSON.stringify(values), height, donut, showLegend])
 
   return (
     <div ref={ref} style={{ width: '100%', minHeight: height }} className="plotly-chart" />

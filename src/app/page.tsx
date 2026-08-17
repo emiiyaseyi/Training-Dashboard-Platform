@@ -1,52 +1,35 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import {
-  Users, TrendingUp, Target, BarChart2,
-  BadgeCheck, AlertTriangle, RefreshCw,
-  Clock, Timer, ShieldCheck, Star, Award, UserCheck, GraduationCap, CreditCard, CheckCircle,
-} from 'lucide-react'
-import { KPICard } from '@/components/ui/KPICard'
-import { NairaSign } from '@/components/ui/NairaSign'
+import { useEffect, useState, useCallback, useRef, useMemo, createRef } from 'react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { NarrativeInsight } from '@/components/ui/NarrativeInsight'
 import { DataTable } from '@/components/ui/DataTable'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { FilterBar } from '@/components/ui/FilterBar'
-import { PDFExportButton } from '@/components/ui/PDFExportButton'
-import { ParticipationCard } from '@/components/ui/ParticipationCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { StaffHoursTable } from '@/components/ui/StaffHoursTable'
 import { SubscriptionBreakdown } from '@/components/ui/SubscriptionBreakdown'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { MetricsKey } from '@/components/ui/MetricsKey'
-import { ChartCard } from '@/components/ui/ChartCard'
-import { BarChart } from '@/components/charts/BarChart'
-import { PieChart } from '@/components/charts/PieChart'
-import { LineChart } from '@/components/charts/LineChart'
+import { SlideViewer } from '@/components/ui/SlideViewer'
+import { buildSlideNodes } from '@/components/slides'
+import { SlideDeckExportMenu } from '@/components/slides/SlideDeckExportMenu'
 import type { GroupAnalytics } from '@/lib/analytics'
-import { type PeriodFilter, filterToQuery } from '@/lib/filter-types'
+import { type PeriodFilter, filterToQuery, filterLabel } from '@/lib/filter-types'
+import { fmt, pct, rating } from '@/lib/slide-format'
 
 type DashData = GroupAnalytics & { narrative: string[] }
-
-function fmt(n: number) {
-  if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `₦${(n / 1_000).toFixed(1)}K`
-  return `₦${n.toLocaleString()}`
-}
-function pct(n: number) { return `${n.toFixed(1)}%` }
-function rating(n: number) { return `${n.toFixed(1)}/5` }
 
 export default function ExecutiveDashboard() {
   const [data, setData] = useState<DashData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<PeriodFilter>({ mode: 'all' })
+  const [slideIndex, setSlideIndex] = useState(0)
 
-  const kpiRef = useRef<HTMLDivElement>(null)
-  const liRef = useRef<HTMLDivElement>(null)
-  const participationRef = useRef<HTMLDivElement>(null)
   const buTableRef = useRef<HTMLDivElement>(null)
+  const slideRefs = useMemo(() => Array.from({ length: 7 }, () => createRef<HTMLDivElement>()), [])
 
   const load = useCallback(async (f: PeriodFilter) => {
     setLoading(true)
@@ -83,16 +66,20 @@ export default function ExecutiveDashboard() {
 
   if (!data) return null
   const isEmpty = data.totalLearningInvestment === 0
+  const periodLabel = filterLabel(filter)
 
   const buTableRows = data.businessUnits.map((b) => ({
     'Business Unit': b.name,
-    'Training Spend (₦)': b.trainingCost,
+    'Formal Training Spend (₦)': b.trainingCost,
+    'Strategic Initiatives (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
     'Total Investment (₦)': b.totalInvestment,
     'Staff Trained': b.staffTrained,
     'Coverage %': parseFloat(b.coverageRatio.toFixed(1)),
     'Avg Impact (out of 5)': parseFloat(b.avgImpactScore.toFixed(1)),
   }))
+
+  const slides = buildSlideNodes(data, periodLabel)
 
   return (
     <div className="flex flex-col">
@@ -102,7 +89,7 @@ export default function ExecutiveDashboard() {
         actions={
           <div className="flex items-center gap-2">
             <FilterBar availableYears={data.availableYears} value={filter} onChange={handleFilter} />
-            <PDFExportButton reportTitle="Executive Overview — Learning Intelligence Dashboard" />
+            <SlideDeckExportMenu data={data} periodLabel={periodLabel} />
             <button onClick={() => load(filter)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
@@ -110,136 +97,68 @@ export default function ExecutiveDashboard() {
         }
       />
 
-      <div className="p-8 space-y-8">
-        {isEmpty && <AlertBadge variant="info" message="No data uploaded yet. Go to Upload & Data to import your files." />}
+      {isEmpty && <div className="px-8 pt-6"><AlertBadge variant="info" message="No data uploaded yet. Go to Upload & Data to import your files." /></div>}
 
-        {data.dataQuality.issues.length > 0 && (
-          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              <p className="text-sm font-semibold text-amber-800">Data Quality: {data.dataQuality.score}/100</p>
-            </div>
-            {data.dataQuality.issues.map((issue, i) => <p key={i} className="text-xs text-amber-700 ml-6">• {issue}</p>)}
+      {data.dataQuality.issues.length > 0 && (
+        <div className="mx-8 mt-6 no-print rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <p className="text-sm font-semibold text-amber-800">Data Quality: {data.dataQuality.score}/100</p>
           </div>
-        )}
-
-        {/* KPI grid */}
-        <div>
-          <div className="no-print flex justify-end mb-2">
-            <SectionExport captureRef={kpiRef} filename="kpi_summary" label="Export KPIs" />
-          </div>
-          <div ref={kpiRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Total Learning Investment" value={fmt(data.totalLearningInvestment)} subtitle={`${pct(data.trainingSharePct)} training · ${pct(data.subscriptionSharePct)} subscriptions`} icon={NairaSign} color="blue" />
-          <KPICard title="Training Spend" value={fmt(data.totalTrainingCost)} subtitle="Formal training programmes" icon={GraduationCap} color="purple" />
-          <KPICard title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" icon={BadgeCheck} color="green" />
-          <KPICard title="Investment per Staff" value={fmt(data.investmentPerStaff)} subtitle={`Across ${data.totalStaffCount.toLocaleString()} total staff`} icon={Users} color="amber" />
-          <KPICard title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} icon={UserCheck} color={data.groupCoverageRatio >= 70 ? 'green' : data.groupCoverageRatio >= 40 ? 'amber' : 'red'} alert={data.groupCoverageRatio < 30 && data.totalStaffCount > 0} />
-          <KPICard title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" icon={Star} color={data.avgImpactScore >= 4.0 ? 'green' : data.avgImpactScore >= 3.0 ? 'amber' : 'slate'} />
-          <KPICard title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} icon={BarChart2} color={data.budgetRisk === 'over-budget' ? 'red' : data.budgetRisk === 'at-risk' ? 'amber' : 'green'} alert={data.budgetRisk === 'over-budget' && data.totalBudget > 0} />
-          <KPICard title="Number of Subscriptions" value={data.topMembershipOrgs.reduce((s, o) => s + o.count, 0).toString()} subtitle={`${data.uniqueSubscriptionStaff} staff covered`} icon={CreditCard} color="slate" />
-          {data.avgRoleRelevance > 0 && <KPICard title="Trainings Vs Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" icon={Target} color={data.avgRoleRelevance >= 4 ? 'green' : 'amber'} />}
-          {data.avgExpectationsMet > 0 && <KPICard title="Trainings Vs Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" icon={CheckCircle} color={data.avgExpectationsMet >= 4 ? 'green' : 'amber'} />}
-          {data.avgVendorRating > 0 && <KPICard title="Vendor Rating" value={rating(data.avgVendorRating)} subtitle="Avg facilitator/provider evaluation" icon={Award} color={data.avgVendorRating >= 4 ? 'green' : data.avgVendorRating >= 3 ? 'amber' : 'red'} />}
-          {data.hoursReport.hasData && <KPICard title="Total Learning Hours" value={`${data.hoursReport.totalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="Across all tracked learning activities" icon={Clock} color="purple" />}
-          {data.hoursReport.hasData && data.hoursReport.totalFormalHours > 0 && <KPICard title="Training Hours" value={`${data.hoursReport.totalFormalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From formal training programmes" icon={GraduationCap} color="blue" />}
-          {data.hoursReport.hasData && data.hoursReport.totalKSSHours > 0 && <KPICard title="KSS Hours" value={`${data.hoursReport.totalKSSHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`} subtitle="From knowledge sharing sessions" icon={Users} color="green" />}
-          {data.hoursReport.hasData && <KPICard title="Avg Hours per Staff" value={`${data.hoursReport.avgHoursPerStaff.toFixed(1)} hrs`} subtitle="Average per employee with learning records" icon={Timer} color="purple" />}
-          {data.hoursReport.hasData && <KPICard title={`${data.hoursReport.hoursThreshold}-Hour Compliance`} value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.totalStaffCount} staff`} icon={ShieldCheck} color={data.hoursReport.staffMeeting40hPct >= 80 ? 'green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'amber' : 'red'} />}
-          </div>
+          {data.dataQuality.issues.map((issue, i) => <p key={i} className="text-xs text-amber-700 ml-6">• {issue}</p>)}
         </div>
+      )}
 
-        {/* Metrics Key */}
-        <MetricsKey />
+      {/* The 7-slide report deck — matches the L&D Investment Report structure */}
+      <SlideViewer slides={slides} slideRefs={slideRefs} index={slideIndex} onIndexChange={setSlideIndex} />
 
-        {/* Learning Intelligence & Risk Layer — immediately after KPI summary */}
-        {!isEmpty && (
-          <div>
-            <div className="no-print flex justify-end mb-2">
-              <SectionExport captureRef={liRef} filename="learning_intelligence" label="Export Intelligence Layer" />
+      {/* Supplementary detail — not part of the fixed slide deck */}
+      {!isEmpty && (
+        <div className="p-8 pt-0 space-y-8">
+          <MetricsKey />
+
+          <LearningIntelligenceLayer li={data.learningIntelligence} />
+
+          {data.topMembershipOrgs.length > 0 && (
+            <SubscriptionBreakdown orgs={data.topMembershipOrgs} title="Subscription Breakdown by Programme" />
+          )}
+
+          {data.hoursReport.hasData && data.hoursReport.staffDetail.length > 0 && (
+            <StaffHoursTable staffDetail={data.hoursReport.staffDetail} hoursThreshold={data.hoursReport.hoursThreshold} />
+          )}
+
+          {data.businessUnits.length > 0 && (
+            <div ref={buTableRef}>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-slate-800">Business Unit Summary</h2>
+                <SectionExport captureRef={buTableRef} rows={buTableRows} filename="bu_summary" label="Export" />
+              </div>
+              <DataTable
+                columns={[
+                  { key: 'name', header: 'Business Unit' },
+                  { key: 'trainingCost', header: 'Formal Training', align: 'right', render: (r) => fmt(r.trainingCost as number) },
+                  { key: 'otherInvestmentCost', header: 'Strategic Initiatives', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
+                  { key: 'subscriptionCost', header: 'Subscriptions', align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
+                  { key: 'totalInvestment', header: 'Total Investment', align: 'right', render: (r) => fmt(r.totalInvestment as number) },
+                  { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },
+                  { key: 'avgImpactScore', header: 'Avg Impact', align: 'right', render: (r) => rating(r.avgImpactScore as number) },
+                  {
+                    key: 'isOverBudget', header: 'Budget', align: 'center',
+                    render: (r) => (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.isOverBudget ? 'bg-red-100 text-red-700' : (r.budget as number) === 0 ? 'bg-slate-100 text-slate-500' : 'bg-green-100 text-green-700'}`}>
+                        {r.isOverBudget ? 'Over' : (r.budget as number) === 0 ? 'Not set' : 'On track'}
+                      </span>
+                    ),
+                  },
+                ]}
+                data={data.businessUnits as unknown as Record<string, unknown>[]}
+              />
             </div>
-            <div ref={liRef}>
-              <LearningIntelligenceLayer li={data.learningIntelligence} />
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Participation stats */}
-        {!isEmpty && (
-          <div>
-            <div className="no-print flex justify-end mb-2">
-              <SectionExport captureRef={participationRef} filename="participation_summary" label="Export Participation" />
-            </div>
-            <div ref={participationRef} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ParticipationCard title="Training Participation" participation={data.trainingParticipation} totalStaff={data.totalStaffCount} />
-              <ParticipationCard title="Subscription Coverage" participation={data.subscriptionParticipation} totalStaff={data.totalStaffCount} variant="subscription" />
-            </div>
-          </div>
-        )}
-
-        {/* Subscription Breakdown */}
-        {!isEmpty && data.topMembershipOrgs.length > 0 && (
-          <SubscriptionBreakdown orgs={data.topMembershipOrgs} title="Subscription Breakdown by Programme" />
-        )}
-
-        {/* Charts */}
-        {!isEmpty && (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <ChartCard title="Investment Split" rows={[{ Training: data.totalTrainingCost, Subscriptions: data.totalSubscriptionCost }]} filename="investment_split">
-                <PieChart labels={['Training', 'Subscriptions']} values={[data.totalTrainingCost, data.totalSubscriptionCost]} donut height={220} showAmounts />
-              </ChartCard>
-              <ChartCard title="Monthly Training Spend" className="lg:col-span-2" rows={data.monthlySpend.map((m) => ({ Month: m.month, 'Cost (₦)': m.cost }))} filename="monthly_spend">
-                <LineChart labels={data.monthlySpend.map((m) => m.month)} values={data.monthlySpend.map((m) => m.cost)} height={220} />
-              </ChartCard>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ChartCard title="Total Investment by Business Unit" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_investment">
-                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.totalInvestment)} color="#3b82f6" height={280} horizontal showLabels labelFormatter={(v) => v >= 1_000_000 ? `₦${(v/1_000_000).toFixed(1)}M` : v >= 1_000 ? `₦${(v/1_000).toFixed(0)}K` : `₦${v.toLocaleString()}`} />
-              </ChartCard>
-              <ChartCard title="Staff Coverage by Business Unit (%)" rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Coverage %': b.coverageRatio.toFixed(1) }))} filename="bu_coverage">
-                <BarChart labels={data.businessUnits.map((b) => b.name)} values={data.businessUnits.map((b) => b.coverageRatio)} color="#22c55e" height={280} horizontal showLabels labelSuffix="%" />
-              </ChartCard>
-            </div>
-          </>
-        )}
-
-        {/* Staff Hours & 40H Compliance table */}
-        {data.hoursReport.hasData && data.hoursReport.staffDetail.length > 0 && (
-          <StaffHoursTable staffDetail={data.hoursReport.staffDetail} hoursThreshold={data.hoursReport.hoursThreshold} />
-        )}
-
-        {/* BU Summary table */}
-        {data.businessUnits.length > 0 && (
-          <div ref={buTableRef}>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-slate-800">Business Unit Summary</h2>
-              <SectionExport captureRef={buTableRef} rows={buTableRows} filename="bu_summary" label="Export" />
-            </div>
-            <DataTable
-              columns={[
-                { key: 'name', header: 'Business Unit' },
-                { key: 'trainingCost', header: 'Training Spend', align: 'right', render: (r) => fmt(r.trainingCost as number) },
-                { key: 'subscriptionCost', header: 'Subscriptions', align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
-                { key: 'totalInvestment', header: 'Total Investment', align: 'right', render: (r) => fmt(r.totalInvestment as number) },
-                { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },
-                { key: 'avgImpactScore', header: 'Avg Impact', align: 'right', render: (r) => rating(r.avgImpactScore as number) },
-                {
-                  key: 'isOverBudget', header: 'Budget', align: 'center',
-                  render: (r) => (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.isOverBudget ? 'bg-red-100 text-red-700' : (r.budget as number) === 0 ? 'bg-slate-100 text-slate-500' : 'bg-green-100 text-green-700'}`}>
-                      {r.isOverBudget ? 'Over' : (r.budget as number) === 0 ? 'Not set' : 'On track'}
-                    </span>
-                  ),
-                },
-              ]}
-              data={data.businessUnits as unknown as Record<string, unknown>[]}
-            />
-          </div>
-        )}
-
-        {data.narrative.length > 0 && <NarrativeInsight insights={data.narrative} />}
-      </div>
+          {data.narrative.length > 0 && <NarrativeInsight insights={data.narrative} />}
+        </div>
+      )}
     </div>
   )
 }

@@ -44,7 +44,7 @@ export function FilterBar({ availableYears, value, onChange }: FilterBarProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-50 p-4 space-y-4">
+        <div className="absolute top-full right-0 mt-1 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-[100] p-4 space-y-4">
           {/* Mode selector */}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Period</p>

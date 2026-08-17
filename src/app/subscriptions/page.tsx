@@ -160,7 +160,7 @@ export default function SubscriptionsDashboard() {
                 <h2 className="text-sm font-semibold text-slate-800">Spend by Business Unit</h2>
                 <SectionExport captureRef={buSpendChartRef} rows={buSubData.map((b) => ({ 'Business Unit': b.name, 'Subscription Spend (₦)': b.subscriptionCost }))} filename="subscription_bu_spend" />
               </div>
-              <BarChart labels={buSubData.map((b) => b.name)} values={buSubData.map((b) => b.subscriptionCost)} color="#22c55e" height={260} horizontal={buSubData.length > 4} />
+              <BarChart labels={buSubData.map((b) => b.name)} values={buSubData.map((b) => b.subscriptionCost)} color="#1F9D6C" height={260} horizontal={buSubData.length > 4} />
             </div>
             <div ref={membershipDistRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">

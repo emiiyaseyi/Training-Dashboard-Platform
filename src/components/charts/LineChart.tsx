@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { PlotData, Layout } from 'plotly.js-dist-min'
+import { REPORT_COLORS } from '@/lib/report-theme'
 
 interface LineChartProps {
   labels: string[]
@@ -11,7 +12,7 @@ interface LineChartProps {
   filled?: boolean
 }
 
-export function LineChart({ labels, values, color = '#3b82f6', height = 280, filled = true }: LineChartProps) {
+export function LineChart({ labels, values, color = REPORT_COLORS.navy, height = 280, filled = true }: LineChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

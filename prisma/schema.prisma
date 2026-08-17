@@ -18,6 +18,26 @@ model BusinessUnit {
   updatedAt  DateTime @updatedAt
 }
 
+// Training Type taxonomy — classifies training spend as "formal" (Internal/External Training)
+// or "other" (Summit, Leadership Cafe, Workshop, etc. — the "Strategic Learning Initiatives" bucket)
+model TrainingType {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  classification String   // "formal" | "other"
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Differentiating Capability taxonomy — tags training records for coverage reporting
+model DifferentiatingCapability {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Year-specific budget and headcount per BU
 model BusinessUnitYearConfig {
   id         String   @id @default(cuid())
@@ -57,6 +77,8 @@ model TrainingRecord {
   year         Int
   cost         Float
   hours        Float?   // Learning Hours (optional — populated when provided)
+  trainingType String?  // References TrainingType.name — null = legacy row, treated as "Internal Training"
+  capability   String?  // References DifferentiatingCapability.name
   batchId      String
   createdAt    DateTime @default(now())
 
