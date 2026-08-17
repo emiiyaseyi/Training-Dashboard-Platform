@@ -34,7 +34,23 @@ declare module 'plotly.js-dist-min' {
     tickfont?: Record<string, unknown>
     automargin?: boolean
     range?: [number, number]
+    autorange?: boolean
     tickformat?: string
+    showticklabels?: boolean
+  }
+
+  interface Annotation {
+    xref?: 'paper' | 'x'
+    yref?: 'paper' | 'y'
+    x?: number | string
+    y?: number | string
+    xanchor?: 'left' | 'center' | 'right'
+    yanchor?: 'top' | 'middle' | 'bottom'
+    xshift?: number
+    yshift?: number
+    text?: string
+    showarrow?: boolean
+    font?: Record<string, unknown>
   }
 
   interface Layout {
@@ -50,6 +66,7 @@ declare module 'plotly.js-dist-min' {
     yaxis?: Axis
     bargap?: number
     title?: { text?: string; font?: Record<string, unknown> }
+    annotations?: Annotation[]
   }
 
   interface Config {
