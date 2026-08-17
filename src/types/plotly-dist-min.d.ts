@@ -24,6 +24,10 @@ declare module 'plotly.js-dist-min' {
     orientation?: 'h' | 'v'
     colorscale?: unknown
     showscale?: boolean
+    cliponaxis?: boolean
+    insidetextfont?: Record<string, unknown>
+    outsidetextfont?: Record<string, unknown>
+    constraintext?: string
   }
 
   interface Axis {
