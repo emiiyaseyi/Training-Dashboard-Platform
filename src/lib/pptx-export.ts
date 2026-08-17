@@ -266,29 +266,31 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     } else {
       slide.addShape('roundRect', { x: x + 0.18, y: y + 0.18, w: 0.35, h: 0.35, rectRadius: 0.05, fill: { color: C.navyLight }, line: { type: 'none' } })
     }
-    slide.addText(bu.name, { x: x + 0.65, y: y + 0.16, w: cardW - 2.0, h: 0.4, fontFace: 'Calibri', fontSize: 12, bold: true, color: C.navy, valign: 'middle' })
+    slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.1, h: 0.4, fontFace: 'Calibri', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle' })
     slide.addText([
-      { text: 'Total Investment\n', options: { fontSize: 8, color: C.gray } },
-      { text: fmt(bu.totalInvestment), options: { fontSize: 13, bold: true, color: C.navy } },
-    ], { x: x + cardW - 1.6, y: y + 0.15, w: 1.45, h: 0.5, align: 'right', fontFace: 'Calibri' })
+      { text: 'Total Investment\n', options: { fontSize: 11, color: C.gray } },
+      { text: fmt(bu.totalInvestment), options: { fontSize: 24, bold: true, color: C.navy, breakLine: true } },
+    ], { x: x + cardW - 1.7, y: y + 0.1, w: 1.55, h: 0.6, align: 'right', fontFace: 'Calibri' })
 
-    slide.addText([{ text: 'Training Spend\n', options: { fontSize: 8, color: C.gray } }, { text: fmt(bu.trainingCost), options: { fontSize: 11, bold: true, color: C.navy } }], { x: x + 0.2, y: y + 0.75, w: cardW / 2 - 0.3, h: 0.5, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 8, color: C.gray } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 11, bold: true, color: C.navy } }], { x: x + cardW / 2, y: y + 0.75, w: cardW / 2 - 0.3, h: 0.5, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Training Spend\n', options: { fontSize: 12, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 20, bold: true, color: C.navyDark } }], { x: x + 0.2, y: y + 0.65, w: cardW / 2 - 0.3, h: 0.55, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 12, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 20, bold: true, color: C.navyDark } }], { x: x + cardW / 2, y: y + 0.65, w: cardW / 2 - 0.3, h: 0.55, fontFace: 'Calibri' })
     slide.addText(
       bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set',
-      { x: x + 0.2, y: y + 1.3, w: cardW / 2 - 0.3, h: 0.3, fontFace: 'Calibri', fontSize: 8, color: C.gray }
+      { x: x + 0.2, y: y + 1.25, w: cardW / 2 - 0.3, h: 0.28, fontFace: 'Calibri', fontSize: 11, color: C.gray }
     )
     slide.addText(
       `${bu.subscriptionStaff} members`,
-      { x: x + cardW / 2, y: y + 1.3, w: cardW / 2 - 0.3, h: 0.3, fontFace: 'Calibri', fontSize: 8, color: C.gray }
+      { x: x + cardW / 2, y: y + 1.25, w: cardW / 2 - 0.3, h: 0.28, fontFace: 'Calibri', fontSize: 11, color: C.gray }
     )
 
-    slide.addText([
-      { text: 'Coverage  ', options: { fontSize: 8, color: C.gray } },
-      { text: `${bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'}    `, options: { fontSize: 10, bold: true, color: C.gold } },
-      { text: 'Impact  ', options: { fontSize: 8, color: C.gray } },
-      { text: rating(bu.avgImpactScore), options: { fontSize: 10, bold: true, color: C.green } },
-    ], { x: x + 0.2, y: y + cardH - 0.4, w: cardW - 0.4, h: 0.3, fontFace: 'Calibri' })
+    const statsY = y + 1.6
+    slide.addShape('line', { x: x + 0.2, y: statsY, w: cardW - 0.4, h: 0, line: { color: C.navyLight, width: 0.5 } })
+    slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 12, color: C.gray })
+    slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: cardW / 2 - 0.3, h: 0.32, fontFace: 'Calibri', fontSize: 24, bold: true, color: C.gold })
+    slide.addText(`${bu.staffTrained} trained`, { x: x + 0.2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
+    slide.addText('Impact', { x: x + cardW / 2, y: statsY + 0.08, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 12, color: C.gray })
+    slide.addText(rating(bu.avgImpactScore), { x: x + cardW / 2, y: statsY + 0.3, w: cardW / 2 - 0.3, h: 0.32, fontFace: 'Calibri', fontSize: 24, bold: true, color: C.green })
+    slide.addText('confidence', { x: x + cardW / 2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
   })
 
   addFooter(slide, pageNumber, periodLabel)

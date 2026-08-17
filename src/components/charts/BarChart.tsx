@@ -33,6 +33,24 @@ export function BarChart({
     const maxLabelLen = horizontal ? Math.max(...labels.map((l) => l.length), 0) : 0
     const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 7, 140), 420) : 50
 
+    // Plotly right-aligns y-axis category labels against the plot by default, which leaves a
+    // ragged gap before shorter labels. Render them as our own left-aligned annotations instead,
+    // flush against the chart's left edge, and hide the native tick labels.
+    const categoryAnnotations = horizontal
+      ? labels.map((label) => ({
+          xref: 'paper' as const,
+          yref: 'y' as const,
+          x: 0,
+          y: label,
+          xanchor: 'left' as const,
+          yanchor: 'middle' as const,
+          text: label,
+          showarrow: false,
+          font: { size: 10, color: '#64748b' },
+          xshift: 4,
+        }))
+      : undefined
+
     const labelText = showLabels
       ? values.map((v) =>
           labelFormatter
@@ -85,9 +103,11 @@ export function BarChart({
         gridcolor: '#f1f5f9',
         zeroline: false,
         automargin: true,
+        showticklabels: !horizontal,
         ...(!horizontal ? percentAxis : {}),
       },
       bargap: 0.35,
+      annotations: categoryAnnotations,
     }
 
     const el = ref.current
