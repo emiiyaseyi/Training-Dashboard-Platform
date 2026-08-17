@@ -31,25 +31,7 @@ export function BarChart({
     if (!ref.current || labels.length === 0) return
 
     const maxLabelLen = horizontal ? Math.max(...labels.map((l) => l.length), 0) : 0
-    const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 7, 140), 420) : 50
-
-    // Plotly right-aligns y-axis category labels against the plot by default, which leaves a
-    // ragged gap before shorter labels. Render them as our own left-aligned annotations instead,
-    // flush against the chart's left edge, and hide the native tick labels.
-    const categoryAnnotations = horizontal
-      ? labels.map((label) => ({
-          xref: 'paper' as const,
-          yref: 'y' as const,
-          x: 0,
-          y: label,
-          xanchor: 'left' as const,
-          yanchor: 'middle' as const,
-          text: label,
-          showarrow: false,
-          font: { size: 10, color: '#64748b' },
-          xshift: 4,
-        }))
-      : undefined
+    const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 7, 140), 300) : 50
 
     const labelText = showLabels
       ? values.map((v) =>
@@ -103,16 +85,10 @@ export function BarChart({
         showgrid: horizontal,
         gridcolor: '#f1f5f9',
         zeroline: false,
-        // automargin measures native tick labels to size the margin — since horizontal charts
-        // hide those labels and use our own left-aligned annotations instead, automargin has
-        // nothing to measure and collapses the margin to ~0, so it must stay off there and rely
-        // entirely on the explicit margin.l (leftMargin) computed above.
-        automargin: !horizontal,
-        showticklabels: !horizontal,
+        automargin: true,
         ...(!horizontal ? percentAxis : {}),
       },
       bargap: 0.35,
-      annotations: categoryAnnotations,
     }
 
     const el = ref.current

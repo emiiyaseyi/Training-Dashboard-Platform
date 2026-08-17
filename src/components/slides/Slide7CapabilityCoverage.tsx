@@ -1,5 +1,5 @@
 import { SlideShell } from './SlideShell'
-import { BarChart } from '@/components/charts/BarChart'
+import { HorizontalBarList } from '@/components/charts/HorizontalBarList'
 import type { GroupAnalytics } from '@/lib/analytics'
 
 export function Slide7CapabilityCoverage({ data, pageNumber, periodLabel }: { data: GroupAnalytics; pageNumber: number; periodLabel: string }) {
@@ -11,15 +11,16 @@ export function Slide7CapabilityCoverage({ data, pageNumber, periodLabel }: { da
           No Differentiating Capabilities configured yet — add them in Admin.
         </div>
       ) : (
-        <div className="rounded-xl border border-navy-200 bg-navy-100 p-5 h-full">
-          <BarChart
+        <div className="rounded-xl border border-navy-200 bg-navy-100 p-5 h-full flex flex-col justify-center">
+          <HorizontalBarList
             labels={coverage.map((c) => c.capability)}
-            values={coverage.map((c) => c.coverageRatio)}
+            values={coverage.map((c) => Math.round(c.coverageRatio * 10) / 10)}
             color="#1E2761"
-            height={Math.max(460, coverage.length * 60)}
-            horizontal
-            showLabels
             labelSuffix="%"
+            maxValue={100}
+            labelColWidth={260}
+            barHeight={36}
+            rowGap={40}
           />
         </div>
       )}
