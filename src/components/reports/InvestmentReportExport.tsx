@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, createRef, useRef } from 'react'
 import { FileDown, Image as ImageIcon, Loader2, Presentation } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { AlertBadge } from '@/components/ui/AlertBadge'
-import { buildSlideNodes, SLIDE_TITLES } from '@/components/slides'
+import { buildSlideNodes, SLIDE_TITLES, SLIDE_COUNT } from '@/components/slides'
 import { exportFullDeckPptx, exportSingleSlidePptx } from '@/lib/pptx-export'
 import { captureSlidePng, downloadSlidePng, bundleZip } from '@/lib/slide-export'
 import type { GroupAnalytics } from '@/lib/analytics'
@@ -18,11 +18,11 @@ export function InvestmentReportExport() {
   const [data, setData] = useState<GroupAnalytics | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [formats, setFormats] = useState<SlideFormat[]>(Array(7).fill('pptx'))
+  const [formats, setFormats] = useState<SlideFormat[]>(Array(SLIDE_COUNT).fill('pptx'))
   const [exportingAll, setExportingAll] = useState(false)
   const [exportingSlide, setExportingSlide] = useState<number | null>(null)
 
-  const slideRefs = useMemo(() => Array.from({ length: 7 }, () => createRef<HTMLDivElement>()), [])
+  const slideRefs = useMemo(() => Array.from({ length: SLIDE_COUNT }, () => createRef<HTMLDivElement>()), [])
   const loadedOnce = useRef(false)
 
   const load = useCallback(async (f: PeriodFilter) => {
@@ -77,7 +77,7 @@ export function InvestmentReportExport() {
       }
       // Mixed formats — bundle everything into one zip
       const files: { name: string; blob: Blob }[] = []
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < SLIDE_COUNT; i++) {
         const title = SLIDE_TITLES[i].replace(/[^\w]+/g, '_')
         if (formats[i] === 'png') {
           const el = slideRefs[i].current

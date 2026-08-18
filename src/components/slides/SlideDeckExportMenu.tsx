@@ -2,7 +2,7 @@
 
 import { useState, useMemo, createRef, useRef, useEffect } from 'react'
 import { Download, Loader2, ChevronDown, Presentation, FileText, Image as ImageIcon } from 'lucide-react'
-import { buildSlideNodes, SLIDE_TITLES } from './index'
+import { buildSlideNodes, SLIDE_TITLES, SLIDE_COUNT } from './index'
 import { exportFullDeckPptx } from '@/lib/pptx-export'
 import { exportSlidesAsPdf, exportSlidesAsJpgZip } from '@/lib/slide-export'
 import type { GroupAnalytics } from '@/lib/analytics'
@@ -24,7 +24,7 @@ export function SlideDeckExportMenu({ data, periodLabel }: SlideDeckExportMenuPr
   const [everOpened, setEverOpened] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const slideRefs = useMemo(() => Array.from({ length: 7 }, () => createRef<HTMLDivElement>()), [])
+  const slideRefs = useMemo(() => Array.from({ length: SLIDE_COUNT }, () => createRef<HTMLDivElement>()), [])
   const slides = everOpened ? buildSlideNodes(data, periodLabel) : []
 
   useEffect(() => {

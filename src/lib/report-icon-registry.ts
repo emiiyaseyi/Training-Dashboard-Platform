@@ -1,5 +1,5 @@
 import {
-  Users, Target, BarChart2, BadgeCheck, UserCheck, GraduationCap,
+  Users, Target, BarChart2, BadgeCheck, UserCheck, UserX, GraduationCap,
   CreditCard, CheckCircle, Star, Award, ShieldCheck, Clock, Timer, Building2,
 } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
@@ -14,6 +14,7 @@ export const REPORT_ICON_SPECS: IconSpec[] = [
   { key: 'badgeCheck', icon: BadgeCheck, variant: 'circle' },
   { key: 'users', icon: Users, variant: 'circle' },
   { key: 'userCheck', icon: UserCheck, variant: 'circle' },
+  { key: 'userX', icon: UserX, variant: 'circle' },
   { key: 'star', icon: Star, variant: 'circle' },
   { key: 'barChart2', icon: BarChart2, variant: 'circle' },
   { key: 'creditCard', icon: CreditCard, variant: 'circle' },

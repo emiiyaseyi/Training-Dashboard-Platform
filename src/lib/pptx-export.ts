@@ -326,6 +326,36 @@ function buildSlide7(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   return slide
 }
 
+function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) {
+  const slide = pptx.addSlide()
+  addHeader(slide, 'Talent Member (TM) Trainings', 'Coverage and investment for the Talent Member population')
+  const tm = data.talentMember
+  const trainedPct = tm.totalHeadcount > 0 ? (tm.staffTrained / tm.totalHeadcount) * 100 : 0
+  const notTrainedPct = tm.totalHeadcount > 0 ? (tm.staffNotTrained / tm.totalHeadcount) * 100 : 0
+
+  const tiles: Tile[] = [
+    { iconKey: 'users', title: 'Total Talent Members', value: tm.totalHeadcount.toLocaleString() },
+    { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No TM headcount configured', valueColor: C.green },
+    { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No TM headcount configured', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
+    { iconKey: 'nairaSign', title: 'Total Spend', value: fmt(tm.totalSpend), subtitle: 'Counts toward Formal Training Spend', valueColor: C.gold },
+  ]
+  addTileGrid(slide, tiles, icons, 4, CONTENT_TOP, CONTENT_TOP + 1.6)
+
+  const panelTop = CONTENT_TOP + 1.85
+  const panelH = FOOTER_Y - 0.25 - panelTop
+  const panelW = PAGE_W - MARGIN * 2
+  slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
+  slide.addText('TM Training Coverage', { x: MARGIN + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+
+  slide.addText(`Trained          ${tm.staffTrained.toLocaleString()} (${trainedPct.toFixed(1)}%)`, { x: MARGIN + 0.2, y: panelTop + 0.6, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+  slide.addShape('rect', { x: MARGIN + 0.2, y: panelTop + 0.95, w: (panelW - 0.4) * Math.min(1, trainedPct / 100), h: 0.1, fill: { color: C.green }, line: { type: 'none' } })
+  slide.addText(`Yet to be Trained          ${tm.staffNotTrained.toLocaleString()} (${notTrainedPct.toFixed(1)}%)`, { x: MARGIN + 0.2, y: panelTop + 1.25, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+  slide.addShape('rect', { x: MARGIN + 0.2, y: panelTop + 1.6, w: (panelW - 0.4) * Math.min(1, notTrainedPct / 100), h: 0.1, fill: { color: C.red }, line: { type: 'none' } })
+
+  addFooter(slide, 8, periodLabel)
+  return slide
+}
+
 const SLIDE_BUILDERS = [
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildSlide1(pptx, data, periodLabel, icons),
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildSlide2(pptx, data, periodLabel, icons),
@@ -334,6 +364,7 @@ const SLIDE_BUILDERS = [
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildBUProfileSlide(pptx, 'Business Unit Profiles', 'Top performing entities by total investment', data.businessUnits.slice(0, 4), 5, periodLabel, icons),
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildBUProfileSlide(pptx, 'Business Unit Profiles', 'Remaining entities across the group', data.businessUnits.slice(4, 8), 6, periodLabel, icons),
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string) => buildSlide7(pptx, data, periodLabel),
+  (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildSlide8(pptx, data, periodLabel, icons),
 ]
 
 async function newPresentation() {
@@ -346,14 +377,14 @@ async function newPresentation() {
   return pptx
 }
 
-/** Build a full 7-slide presentation and return it (not yet saved). */
+/** Build the full report presentation and return it (not yet saved). */
 export async function buildReportPptx(data: GroupAnalytics, periodLabel: string) {
   const [pptx, icons] = await Promise.all([newPresentation(), rasterizeIconBadges(REPORT_ICON_SPECS)])
   SLIDE_BUILDERS.forEach((build) => build(pptx, data, periodLabel, icons))
   return pptx
 }
 
-/** Build and download the full 7-slide deck. */
+/** Build and download the full report deck. */
 export async function exportFullDeckPptx(data: GroupAnalytics, periodLabel: string, filename = 'LD_Investment_Report') {
   const pptx = await buildReportPptx(data, periodLabel)
   await pptx.writeFile({ fileName: `${filename}.pptx` })

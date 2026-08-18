@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma'
 const DEFAULT_TYPES = [
   { name: 'Internal Training', classification: 'formal', order: 0 },
   { name: 'External Training', classification: 'formal', order: 1 },
-  { name: 'Summit',            classification: 'other',  order: 2 },
-  { name: 'Leadership Cafe',   classification: 'other',  order: 3 },
-  { name: 'Workshop',          classification: 'other',  order: 4 },
+  { name: 'TM',                classification: 'formal', order: 2 },
+  { name: 'Summit',            classification: 'other',  order: 3 },
+  { name: 'Leadership Cafe',   classification: 'other',  order: 4 },
+  { name: 'Workshop',          classification: 'other',  order: 5 },
 ]
 
 export async function GET() {

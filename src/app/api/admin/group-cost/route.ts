@@ -29,10 +29,25 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { training, totalAmount, apply } = body as { training: string; totalAmount: number; apply?: boolean }
+    const { training, totalAmount, apply, confirmDuplicate } = body as {
+      training: string; totalAmount: number; apply?: boolean; confirmDuplicate?: boolean
+    }
 
     if (!training || !training.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!totalAmount || totalAmount <= 0) return NextResponse.json({ error: 'Total amount must be greater than 0.' }, { status: 400 })
+
+    // Flag if this training has already had a group cost applied before — likely a duplicate
+    // entry unless the admin explicitly confirms they want to apply another one.
+    const priorApplications = await prisma.groupCostDistribution.findMany({
+      where: { training: { equals: training.trim() } },
+      orderBy: { appliedAt: 'desc' },
+    })
+    if (apply && priorApplications.length > 0 && !confirmDuplicate) {
+      return NextResponse.json({
+        duplicate: true,
+        priorApplications: priorApplications.map((p) => ({ totalAmount: p.totalAmount, appliedAt: p.appliedAt })),
+      }, { status: 409 })
+    }
 
     const records = await prisma.trainingRecord.findMany({
       where: { training: { equals: training.trim() } },
@@ -69,11 +84,18 @@ export async function POST(req: NextRequest) {
       .sort((a, b) => b.share - a.share)
 
     if (apply) {
-      await prisma.$transaction(
-        breakdown.flatMap((b) =>
+      await prisma.$transaction([
+        ...breakdown.flatMap((b) =>
           b.recordIds.map((id) => prisma.trainingRecord.update({ where: { id }, data: { cost: b.perPersonAmount } }))
-        )
-      )
+        ),
+        prisma.groupCostDistribution.create({
+          data: {
+            training: training.trim(),
+            totalAmount,
+            breakdown: JSON.stringify(breakdown.map(({ businessUnit, attendeeCount, share, perPersonAmount }) => ({ businessUnit, attendeeCount, share, perPersonAmount }))),
+          },
+        }),
+      ])
     }
 
     return NextResponse.json({

@@ -13,7 +13,7 @@ import { SubscriptionBreakdown } from '@/components/ui/SubscriptionBreakdown'
 import { LearningIntelligenceLayer } from '@/components/ui/LearningIntelligenceLayer'
 import { MetricsKey } from '@/components/ui/MetricsKey'
 import { SlideViewer } from '@/components/ui/SlideViewer'
-import { buildSlideNodes } from '@/components/slides'
+import { buildSlideNodes, SLIDE_COUNT } from '@/components/slides'
 import { SlideDeckExportMenu } from '@/components/slides/SlideDeckExportMenu'
 import type { GroupAnalytics } from '@/lib/analytics'
 import { type PeriodFilter, filterToQuery, filterLabel } from '@/lib/filter-types'
@@ -29,7 +29,7 @@ export default function ExecutiveDashboard() {
   const [slideIndex, setSlideIndex] = useState(0)
 
   const buTableRef = useRef<HTMLDivElement>(null)
-  const slideRefs = useMemo(() => Array.from({ length: 7 }, () => createRef<HTMLDivElement>()), [])
+  const slideRefs = useMemo(() => Array.from({ length: SLIDE_COUNT }, () => createRef<HTMLDivElement>()), [])
 
   const load = useCallback(async (f: PeriodFilter) => {
     setLoading(true)

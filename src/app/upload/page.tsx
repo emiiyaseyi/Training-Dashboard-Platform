@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FileSpreadsheet, Trash2, RefreshCw } from 'lucide-react'
+import { FileSpreadsheet, Trash2, RefreshCw, Download, Loader2 } from 'lucide-react'
 import { FileUpload } from '@/components/upload/FileUpload'
 import { DataQualityIssues } from '@/components/upload/DataQualityIssues'
 import { AlertBadge } from '@/components/ui/AlertBadge'
@@ -21,6 +21,7 @@ export default function UploadPage() {
   const [history, setHistory] = useState<UploadBatch[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [downloadId, setDownloadId] = useState<string | null>(null)
 
   const loadHistory = async () => {
     setLoadingHistory(true)
@@ -56,6 +57,22 @@ export default function UploadPage() {
       await loadHistory()
     } finally {
       setDeleteId(null)
+    }
+  }
+
+  const handleDownload = async (batch: UploadBatch) => {
+    setDownloadId(batch.id)
+    try {
+      const res = await fetch(`/api/upload/history/${batch.id}/records`)
+      const json = await res.json()
+      if (!res.ok) { alert(json.error ?? 'Failed to download.'); return }
+      const { exportExcel } = await import('@/lib/export')
+      await exportExcel(
+        [{ name: typeLabel[json.type] ?? json.type, rows: json.rows }],
+        batch.filename.replace(/\.[^.]+$/, '')
+      )
+    } finally {
+      setDownloadId(null)
     }
   }
 
@@ -204,14 +221,24 @@ export default function UploadPage() {
                   header: '',
                   align: 'center',
                   render: (r) => (
-                    <button
-                      onClick={() => handleDelete(r.id as string)}
-                      disabled={deleteId === r.id}
-                      className="p-1.5 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
-                      title="Delete batch"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleDownload(r as unknown as UploadBatch)}
+                        disabled={downloadId === r.id}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                        title="Download uploaded data"
+                      >
+                        {downloadId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r.id as string)}
+                        disabled={deleteId === r.id}
+                        className="p-1.5 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="Delete batch"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   ),
                 },
               ]}

@@ -139,6 +139,14 @@ export interface GroupAnalytics {
   vendorPerformance: VendorPerformance[]
   learningIntelligence: LearningIntelligence
   hoursReport: TrainingHoursReport
+  talentMember: TalentMemberReport
+}
+
+export interface TalentMemberReport {
+  totalHeadcount: number
+  staffTrained: number
+  staffNotTrained: number
+  totalSpend: number
 }
 
 export interface StaffAttendanceRow {
@@ -579,6 +587,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     allKSS,
     trainingTypes,
     capabilities,
+    talentMemberConfig,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
@@ -587,6 +596,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.kSSRecord.findMany(),
     prisma.trainingType.findMany(),
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
+    prisma.talentMemberConfig.findUnique({ where: { year: filter.year ?? new Date().getFullYear() } }),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
 
@@ -840,6 +850,18 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     .sort((a, b) => a.order - b.order)
     .map((t) => t.name)
 
+  // ── Talent Member (TM) — a Training Type that still counts as formal training, but is also
+  // tracked separately against a configured total TM population ──
+  const tmRecords = trainingRecords.filter((r) => (r.trainingType ?? '').toLowerCase() === 'tm')
+  const tmTotalHeadcount = talentMemberConfig?.totalHeadcount ?? 0
+  const tmStaffTrained = new Set(tmRecords.map((r) => r.staffId.toUpperCase())).size
+  const talentMember: TalentMemberReport = {
+    totalHeadcount: tmTotalHeadcount,
+    staffTrained: tmStaffTrained,
+    staffNotTrained: Math.max(0, tmTotalHeadcount - tmStaffTrained),
+    totalSpend: tmRecords.reduce((s, r) => s + r.cost, 0),
+  }
+
   return {
     totalTrainingCost,
     totalOtherTrainingCost,
@@ -876,6 +898,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     vendorPerformance,
     learningIntelligence,
     hoursReport,
+    talentMember,
   }
 }
 

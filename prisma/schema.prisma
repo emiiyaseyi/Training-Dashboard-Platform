@@ -38,6 +38,27 @@ model DifferentiatingCapability {
   updatedAt DateTime @updatedAt
 }
 
+// Year-specific total headcount for the Talent Member (TM) population, used by the TM Trainings report
+model TalentMemberConfig {
+  id            String   @id @default(cuid())
+  year          Int      @unique
+  totalHeadcount Int     @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Audit trail for "Other Investment Budget" group-cost distributions — lets the admin see what's
+// already been applied (and to which training) before applying another, and flags likely duplicates.
+model GroupCostDistribution {
+  id          String   @id @default(cuid())
+  training    String
+  totalAmount Float
+  breakdown   String   // JSON: { businessUnit, attendeeCount, share, perPersonAmount }[]
+  appliedAt   DateTime @default(now())
+
+  @@index([training])
+}
+
 // Year-specific budget and headcount per BU
 model BusinessUnitYearConfig {
   id         String   @id @default(cuid())
