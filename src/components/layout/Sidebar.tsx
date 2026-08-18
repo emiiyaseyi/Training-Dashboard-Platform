@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import {
   LayoutDashboard,
   GraduationCap,
@@ -13,21 +14,55 @@ import {
   BookOpen,
   FileBarChart,
   Layers,
+  LogOut,
+  UserCircle,
 } from 'lucide-react'
+import { hasAccess, type PageKey } from '@/lib/permissions'
 
-const navItems = [
-  { href: '/',                 label: 'Executive Overview',      icon: LayoutDashboard },
-  { href: '/training',         label: 'Training Analytics',      icon: GraduationCap },
-  { href: '/subscriptions',    label: 'Subscriptions',           icon: BadgeCheck },
-  { href: '/business-units',   label: 'Business Units',          icon: Building2 },
-  { href: '/capabilities',     label: 'Capability Coverage',     icon: Layers },
-  { href: '/reports',          label: 'Report Generation',       icon: FileBarChart },
-  { href: '/upload',           label: 'Upload & Data',           icon: Upload },
-  { href: '/admin',            label: 'Admin Settings',          icon: Settings },
+const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
+  { href: '/',               label: 'Executive Overview',  icon: LayoutDashboard, page: 'executive-overview' },
+  { href: '/training',       label: 'Training Analytics',  icon: GraduationCap,   page: 'training-analytics' },
+  { href: '/subscriptions',  label: 'Subscriptions',       icon: BadgeCheck,      page: 'subscriptions' },
+  { href: '/business-units', label: 'Business Units',      icon: Building2,       page: 'business-units' },
+  { href: '/capabilities',   label: 'Capability Coverage', icon: Layers,          page: 'capability-coverage' },
+  { href: '/reports',        label: 'Report Generation',   icon: FileBarChart,    page: 'report-generation' },
+  { href: '/upload',         label: 'Upload & Data',       icon: Upload,          page: 'upload-data' },
+  { href: '/admin',          label: 'Admin Settings',      icon: Settings,        page: 'admin-settings' },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: session, status } = useSession()
+
+  if (status === 'loading') {
+    return <aside className="w-64 shrink-0 bg-navy-700 h-screen" />
+  }
+  if (!session?.user) return null
+
+  const isSuperAdmin = session.user.isSuperAdmin
+  const visibleItems = navItems.filter(
+    (item) => isSuperAdmin || hasAccess(session.user.permissions?.[item.page], 'view')
+  )
+  const analyticsItems = visibleItems.filter((item) => navItems.indexOf(item) < 5)
+  const managementItems = visibleItems.filter((item) => navItems.indexOf(item) >= 5)
+
+  const renderLink = ({ href, label, icon: Icon }: (typeof navItems)[number]) => {
+    const active = pathname === href
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
+          active
+            ? 'bg-gold-400 text-navy-800'
+            : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
+        }`}
+      >
+        <Icon className="w-4 h-4 shrink-0" />
+        {label}
+      </Link>
+    )
+  }
 
   return (
     <aside className="w-64 shrink-0 bg-navy-700 text-slate-300 flex flex-col h-screen">
@@ -46,56 +81,47 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        <p className="px-3 pt-2 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
-          Analytics
-        </p>
-        {navItems.slice(0, 5).map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                active
-                  ? 'bg-gold-400 text-navy-800'
-                  : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
-              }`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
-            </Link>
-          )
-        })}
+        {analyticsItems.length > 0 && (
+          <>
+            <p className="px-3 pt-2 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
+              Analytics
+            </p>
+            {analyticsItems.map(renderLink)}
+          </>
+        )}
 
-        <p className="px-3 pt-4 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
-          Management
-        </p>
-        {navItems.slice(5).map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                active
-                  ? 'bg-gold-400 text-navy-800'
-                  : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
-              }`}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
-            </Link>
-          )
-        })}
+        {managementItems.length > 0 && (
+          <>
+            <p className="px-3 pt-4 pb-1 text-xs font-medium text-slate-500 uppercase tracking-wider">
+              Management
+            </p>
+            {managementItems.map(renderLink)}
+          </>
+        )}
       </nav>
 
-      {/* Footer */}
-      <div className="px-6 py-4 border-t border-navy-500/40">
-        <div className="flex items-center gap-2 text-slate-500 text-xs">
+      {/* User / footer */}
+      <div className="px-4 py-4 border-t border-navy-500/40 space-y-3">
+        <Link href="/account" className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-navy-600">
+          <UserCircle className="w-6 h-6 text-slate-400 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-slate-200 text-xs font-medium truncate">{session.user.name}</p>
+            <p className="text-slate-500 text-[11px] truncate">
+              {isSuperAdmin ? 'Super Admin' : session.user.staffId || session.user.email}
+            </p>
+          </div>
+        </Link>
+        <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-slate-400 hover:bg-navy-600 hover:text-slate-100 text-xs"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Sign out
+        </button>
+        <div className="flex items-center gap-2 text-slate-500 text-xs px-2">
           <TrendingUp className="w-3.5 h-3.5" />
           <span>Learning Intelligence Platform</span>
         </div>
-        <p className="text-slate-600 text-xs mt-1">v1.0.0</p>
       </div>
     </aside>
   )

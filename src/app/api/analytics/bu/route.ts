@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computeBUAnalytics } from '@/lib/analytics'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
+import { requireSession, buScopeFilter } from '@/lib/session-guard'
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession()
+  if (session instanceof NextResponse) return session
+
   const sp = req.nextUrl.searchParams
   const bu = sp.get('name')
   if (!bu) {
     return NextResponse.json({ error: 'Missing ?name= parameter.' }, { status: 400 })
+  }
+
+  const scope = buScopeFilter(session)
+  if (scope && scope !== bu) {
+    return NextResponse.json({ error: 'You do not have access to this Business Unit.' }, { status: 403 })
   }
 
   const mode = (sp.get('filterMode') ?? 'all') as PeriodFilter['mode']
