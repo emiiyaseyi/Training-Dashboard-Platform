@@ -5,6 +5,7 @@ import { Slide4BUCharts } from './Slide4BUCharts'
 import { Slide5BUProfiles } from './Slide5BUProfiles'
 import { Slide6BUProfiles } from './Slide6BUProfiles'
 import { Slide7CapabilityCoverage } from './Slide7CapabilityCoverage'
+import { Slide8TalentMember } from './Slide8TalentMember'
 import type { GroupAnalytics } from '@/lib/analytics'
 
 export const SLIDE_TITLES = [
@@ -15,9 +16,12 @@ export const SLIDE_TITLES = [
   'Business Unit Profiles (Top 4)',
   'Business Unit Profiles (Remaining)',
   'Differentiating Capabilities Coverage',
+  'Talent Member (TM) Trainings',
 ]
 
-/** The 7 report slides, in order — shared by the live slide viewer and the export panel. */
+export const SLIDE_COUNT = SLIDE_TITLES.length
+
+/** The report slides, in order — shared by the live slide viewer and the export panel. */
 export function buildSlideNodes(data: GroupAnalytics, periodLabel: string): React.ReactNode[] {
   return [
     <Slide1ExecutiveOverview key="s1" data={data} pageNumber={1} periodLabel={periodLabel} />,
@@ -27,5 +31,6 @@ export function buildSlideNodes(data: GroupAnalytics, periodLabel: string): Reac
     <Slide5BUProfiles key="s5" data={data} pageNumber={5} periodLabel={periodLabel} />,
     <Slide6BUProfiles key="s6" data={data} pageNumber={6} periodLabel={periodLabel} />,
     <Slide7CapabilityCoverage key="s7" data={data} pageNumber={7} periodLabel={periodLabel} />,
+    <Slide8TalentMember key="s8" data={data} pageNumber={8} periodLabel={periodLabel} />,
   ]
 }
