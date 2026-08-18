@@ -8,6 +8,7 @@ import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } 
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
+import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 
 interface BU {
   id: string
@@ -606,6 +607,9 @@ export default function AdminPage() {
             namePlaceholder="e.g. Risk Management"
           />
         </div>
+
+        {/* Budget calculation settings */}
+        <BudgetSettingsPanel />
 
         {/* Talent Member (TM) population */}
         <TalentMemberConfigPanel />
