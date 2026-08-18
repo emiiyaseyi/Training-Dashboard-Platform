@@ -41,7 +41,7 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
             <span className="text-report-gray" style={{ fontSize: 14 }}>Coverage</span>
           </div>
           <p className="font-bold tabular-nums" style={{ fontSize: 26, lineHeight: '30px', color: '#C9A24B' }}>{bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>{bu.staffTrained} trained</p>
+          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>{bu.staffTrained} trained (1+ training)</p>
         </div>
         <div>
           <div className="flex items-center gap-1.5">
