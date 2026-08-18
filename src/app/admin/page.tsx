@@ -6,6 +6,7 @@ import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
+import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 
 interface BU {
   id: string
@@ -604,6 +605,9 @@ export default function AdminPage() {
             namePlaceholder="e.g. Risk Management"
           />
         </div>
+
+        {/* Other Investment Budget — group training cost distribution */}
+        <GroupCostDistribution />
 
         {/* Info box */}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
