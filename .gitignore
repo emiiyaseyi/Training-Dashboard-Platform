@@ -29,3 +29,6 @@ next-env.d.ts
 
 # uploads
 /uploads/
+
+# migration data — contains real staff names/costs, never commit
+migration-data.json
