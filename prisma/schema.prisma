@@ -26,6 +26,42 @@ model BudgetSettings {
   updatedAt                  DateTime @updatedAt
 }
 
+// Login identity is Staff ID and/or email — at least one must be set.
+// Default password (set at creation) is the user's own Staff ID (or email if no Staff ID) —
+// they can change it later from Account Settings. Admin can toggle requiresPassword off per
+// user for a passwordless (identifier-only) login.
+model User {
+  id                String   @id @default(cuid())
+  staffId           String?  @unique
+  email             String?  @unique
+  name              String
+  passwordHash      String?
+  requiresPassword  Boolean  @default(true)
+  mustChangePassword Boolean @default(false)
+  isSuperAdmin      Boolean  @default(false)
+  businessUnitScope String   @default("ALL") // "ALL" or one BusinessUnit.name
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  permissions UserPagePermission[]
+
+  @@index([staffId])
+  @@index([email])
+}
+
+// Per-page permission level for a user. Ignored entirely for isSuperAdmin users (full access).
+model UserPagePermission {
+  id     String @id @default(cuid())
+  userId String
+  page   String // 'executive-overview' | 'training-analytics' | 'subscriptions' | 'business-units' | 'capability-coverage' | 'report-generation' | 'upload-data' | 'admin-settings'
+  level  String // 'view' | 'view-export' | 'admin'
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, page])
+}
+
 // Training Type taxonomy — classifies training spend as "formal" (Internal/External Training)
 // or "other" (Summit, Leadership Cafe, Workshop, etc. — the "Strategic Learning Initiatives" bucket)
 model TrainingType {

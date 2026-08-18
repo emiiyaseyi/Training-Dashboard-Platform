@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { AppShell } from '@/components/layout/AppShell'
+import { AuthProvider } from '@/components/auth/AuthProvider'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -24,10 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${reportSerif.variable}`} suppressHydrationWarning>
       <body className="flex h-screen overflow-hidden bg-slate-50 font-sans" suppressHydrationWarning>
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   )

@@ -9,6 +9,7 @@ import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
+import { UserManagementPanel } from '@/components/admin/UserManagementPanel'
 
 interface BU {
   id: string
@@ -607,6 +608,9 @@ export default function AdminPage() {
             namePlaceholder="e.g. Risk Management"
           />
         </div>
+
+        {/* User access & permissions */}
+        <UserManagementPanel />
 
         {/* Budget calculation settings */}
         <BudgetSettingsPanel />
