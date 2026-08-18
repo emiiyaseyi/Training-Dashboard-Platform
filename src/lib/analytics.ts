@@ -588,6 +588,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     trainingTypes,
     capabilities,
     talentMemberConfig,
+    budgetSettings,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
@@ -597,7 +598,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.trainingType.findMany(),
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
     prisma.talentMemberConfig.findUnique({ where: { year: filter.year ?? new Date().getFullYear() } }),
+    prisma.budgetSettings.findFirst(),
   ])
+  // Subscription spend counts against budget only if explicitly enabled in Admin — off by
+  // default, since subscriptions (professional memberships) are a separate cost category.
+  const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
   const typeMap = buildTypeClassMap(trainingTypes)
 
   // Collect all available years for the filter UI
@@ -728,11 +733,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   })
   const applicationRates = Object.entries(appMap).map(([category, count]) => ({ category, count }))
 
-  // ── Forecasting (projects total learning investment — training + strategic initiatives + subscriptions) ──
+  // ── Forecasting (projects the budget-comparable total — training + strategic initiatives,
+  // plus subscriptions only if that's enabled in Admin) ──
+  const budgetComparableTotal = totalTrainingCost + totalOtherTrainingCost + (countSubsInBudget ? totalSubscriptionCost : 0)
   const completedMonths = monthlySpend.length > 0 ? monthlySpend.length : 1
-  const avgMonthlySpend = totalLearningInvestment / completedMonths
+  const avgMonthlySpend = budgetComparableTotal / completedMonths
   const remainingMonths = Math.max(0, 12 - completedMonths)
-  const forecastedSpend = totalLearningInvestment + avgMonthlySpend * remainingMonths
+  const forecastedSpend = budgetComparableTotal + avgMonthlySpend * remainingMonths
   const totalBudget = businessUnits.reduce((s, b) => s + b.budget, 0)
   // Only calculate budget risk when at least one BU has a budget configured
   const budgetRisk: 'on-track' | 'at-risk' | 'over-budget' =
@@ -771,7 +778,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
         ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
         : 0
     const subscriptionRatio = totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0
-    const budgetUtilisation = budget > 0 ? (totalInvestment / budget) * 100 : 0
+    const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
+    const budgetUtilisation = budget > 0 ? (buBudgetComparable / budget) * 100 : 0
 
     return {
       name: buName,
@@ -787,7 +795,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       avgImpactScore: avgImpact,
       subscriptionRatio,
       budgetUtilisation,
-      isOverBudget: budget > 0 && totalInvestment > budget,
+      isOverBudget: budget > 0 && buBudgetComparable > budget,
     }
   })
 
@@ -907,7 +915,7 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, budgetSettings] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -917,8 +925,10 @@ export async function computeBUAnalytics(
     prisma.businessUnit.findMany(),
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.trainingType.findMany(),
+    prisma.budgetSettings.findFirst(),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
+  const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -972,6 +982,7 @@ export async function computeBUAnalytics(
   const avgImpact = validF.length > 0
     ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
     : 0
+  const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
 
   const bu: BUSummary = {
     name: buName,
@@ -986,8 +997,8 @@ export async function computeBUAnalytics(
     coverageRatio,
     avgImpactScore: avgImpact,
     subscriptionRatio: totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0,
-    budgetUtilisation: budget > 0 ? (totalInvestment / budget) * 100 : 0,
-    isOverBudget: budget > 0 && totalInvestment > budget,
+    budgetUtilisation: budget > 0 ? (buBudgetComparable / budget) * 100 : 0,
+    isOverBudget: budget > 0 && buBudgetComparable > budget,
   }
 
   // monthly spend (Formal Training trend)
@@ -1067,7 +1078,7 @@ export async function computeBUAnalytics(
   const buParticipationInequality = participationInequalityPct(trainingRecords)
   const buRedFlags = buildRedFlags({
     businessUnits: [bu],
-    budgetRisk: budget > 0 && totalInvestment > budget ? 'over-budget' : budget > 0 && totalInvestment > budget * 0.85 ? 'at-risk' : 'on-track',
+    budgetRisk: budget > 0 && buBudgetComparable > budget ? 'over-budget' : budget > 0 && buBudgetComparable > budget * 0.85 ? 'at-risk' : 'on-track',
     avgImpactScore: avgImpact,
     feedbackCredibility: buFeedbackCoverage,
   })

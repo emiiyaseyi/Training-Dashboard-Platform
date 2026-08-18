@@ -19,6 +19,13 @@ model BusinessUnit {
   updatedAt  DateTime @updatedAt
 }
 
+// Single-row global settings — currently just the subscription/budget toggle
+model BudgetSettings {
+  id                         String   @id @default(cuid())
+  countSubscriptionsInBudget Boolean  @default(false)
+  updatedAt                  DateTime @updatedAt
+}
+
 // Training Type taxonomy — classifies training spend as "formal" (Internal/External Training)
 // or "other" (Summit, Leadership Cafe, Workshop, etc. — the "Strategic Learning Initiatives" bucket)
 model TrainingType {
