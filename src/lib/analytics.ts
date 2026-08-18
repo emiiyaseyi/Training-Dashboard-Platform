@@ -552,18 +552,20 @@ function computeCapabilityCoverage(
   capabilities: { name: string }[],
   totalStaffCount: number,
 ): CapabilityCoverage[] {
-  return capabilities.map(({ name }) => {
-    const staffTrained = new Set(
-      records
-        .filter((r) => (r.capability ?? '').toLowerCase() === name.toLowerCase())
-        .map((r) => r.staffId.toUpperCase())
-    ).size
-    return {
-      capability: name,
-      staffTrained,
-      coverageRatio: totalStaffCount > 0 ? (staffTrained / totalStaffCount) * 100 : 0,
-    }
-  })
+  return capabilities
+    .map(({ name }) => {
+      const staffTrained = new Set(
+        records
+          .filter((r) => (r.capability ?? '').toLowerCase() === name.toLowerCase())
+          .map((r) => r.staffId.toUpperCase())
+      ).size
+      return {
+        capability: name,
+        staffTrained,
+        coverageRatio: totalStaffCount > 0 ? (staffTrained / totalStaffCount) * 100 : 0,
+      }
+    })
+    .sort((a, b) => b.coverageRatio - a.coverageRatio)
 }
 
 // ─── Core analytics function ──────────────────────────────────────────────────
