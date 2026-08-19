@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
-import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight } from 'lucide-react'
+import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
@@ -621,6 +621,23 @@ export default function AdminPage() {
               <p className="text-sm font-semibold text-slate-800">User Access</p>
               <p className="text-xs text-slate-500 mt-0.5">
                 Manage who can sign in, which pages they see, and their permission level per page.
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+        </Link>
+
+        {/* Survey automation */}
+        <Link
+          href="/admin/surveys"
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+        >
+          <div className="flex items-start gap-3">
+            <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Survey Automation</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                SMTP settings, Google Form links, training schedules, and pre/post-training survey email triggers.
               </p>
             </div>
           </div>

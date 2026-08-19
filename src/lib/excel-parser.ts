@@ -50,6 +50,8 @@ export interface RosterRow {
   firstName: string
   middleName: string
   lastName: string
+  email: string
+  lineManagerStaffId: string
   businessUnit: string
   role: string
   department: string
@@ -112,8 +114,12 @@ function findHeader(headers: string[], candidates: string[]): string | undefined
     const idx = lower.indexOf(nc)
     if (idx !== -1) return headers[idx]
   }
-  // Pass 2 — header contains the candidate (e.g. "Based on Confidence Ratings" → 'confidence')
+  // Pass 2 — header contains the candidate (e.g. "Based on Confidence Ratings" → 'confidence').
+  // Skip candidates shorter than 4 chars here — short fragments like "id" or "bu" match by
+  // pure coincidence inside unrelated words (e.g. "id" inside "MIDdle Name"), causing silent
+  // wrong-column matches. Short candidates still work via Pass 1's exact match.
   for (const nc of normCandidates) {
+    if (nc.length < 4) continue
     const idx = lower.findIndex((h) => h.includes(nc))
     if (idx !== -1) return headers[idx]
   }
@@ -401,6 +407,8 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
     dept:           findHeader(headers, ['department', 'dept', 'division', 'team']),
     employmentDate: findHeader(headers, ['employmentdate', 'dateofemployment', 'joindate', 'dateofjoining', 'startdate', 'hiredate']),
     confirmed:      findHeader(headers, ['confirmationstatus', 'confirmed', 'isconfirmed', 'staffstatus', 'status']),
+    email:          findHeader(headers, ['email', 'emailaddress', 'staffemail', 'workemail']),
+    lineManager:    findHeader(headers, ['linemanagerstaffid', 'linemanagerid', 'reportsto', 'managerstaffid', 'manager', 'linemanager', 'supervisor']),
   }
 
   if (!col.firstName) errors.push('Could not find a "First Name" column.')
@@ -427,6 +435,8 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
       firstName,
       middleName:     normalise(r[col.middleName ?? ''] ?? ''),
       lastName,
+      email:              normalise(r[col.email ?? ''] ?? '').toLowerCase(),
+      lineManagerStaffId: normalise(r[col.lineManager ?? ''] ?? '').toUpperCase(),
       businessUnit:   normalise(r[col.bu!]),
       role:           normalise(r[col.role ?? ''] ?? ''),
       department:     normalise(r[col.dept ?? ''] ?? ''),

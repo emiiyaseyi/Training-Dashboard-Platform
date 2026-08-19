@@ -67,6 +67,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         'First Name': r.firstName,
         'Middle Name': r.middleName ?? '',
         'Last Name': r.lastName,
+        Email: r.email ?? '',
+        'Line Manager Staff ID': r.lineManagerStaffId ?? '',
         'Business Unit': r.businessUnit,
         Role: r.role ?? '',
         Department: r.department ?? '',
