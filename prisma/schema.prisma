@@ -143,11 +143,35 @@ model UploadBatch {
   period      String?
   createdAt   DateTime @default(now())
 
-  trainingRecords     TrainingRecord[]
-  feedbackRecords     FeedbackRecord[]
-  subscriptionRecords SubscriptionRecord[]
-  kssRecords          KSSRecord[]
-  staffRosterRecords  StaffRosterRecord[]
+  trainingRecords      TrainingRecord[]
+  feedbackRecords      FeedbackRecord[]
+  subscriptionRecords  SubscriptionRecord[]
+  kssRecords           KSSRecord[]
+  staffRosterRecords   StaffRosterRecord[]
+  managerReviewRecords ManagerReviewRecord[]
+}
+
+// Line-manager post-training reviews — a second, independent impact rating (0-5, same scale
+// as FeedbackRecord.confidenceRating) assessed by the manager rather than self-reported by the
+// trainee. Surfaced on Slide 2 of the Executive Overview and per-BU reports alongside the
+// existing confidence rating, but computed and stored separately from FeedbackRecord.
+model ManagerReviewRecord {
+  id           String   @id @default(cuid())
+  staffId      String
+  staffName    String
+  businessUnit String
+  training     String
+  managerName  String?
+  impactScore  Float // 0–5
+  comments     String?
+  month        String?
+  batchId      String
+  createdAt    DateTime @default(now())
+
+  batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([businessUnit])
+  @@index([staffId])
 }
 
 // Staff roster snapshot — used only by the "Yet to Attend Training" report (compares the

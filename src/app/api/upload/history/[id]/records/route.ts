@@ -60,6 +60,29 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         'In-Meeting Duration (minutes)': r.durationMinutes,
         Month: r.month ?? '',
       }))
+    } else if (batch.type === 'roster') {
+      const records = await prisma.staffRosterRecord.findMany({ where: { batchId: id } })
+      rows = records.map((r) => ({
+        'Staff ID': r.staffId,
+        Name: r.staffName,
+        'Business Unit': r.businessUnit,
+        Role: r.role ?? '',
+        Department: r.department ?? '',
+        'Join Date': r.joinDate ? r.joinDate.toISOString().slice(0, 10) : '',
+        Confirmed: r.confirmed ? 'Yes' : 'No',
+      }))
+    } else if (batch.type === 'manager-review') {
+      const records = await prisma.managerReviewRecord.findMany({ where: { batchId: id } })
+      rows = records.map((r) => ({
+        'Staff ID': r.staffId,
+        Name: r.staffName,
+        'Business Unit': r.businessUnit,
+        Training: r.training,
+        'Manager Name': r.managerName ?? '',
+        'Impact Score': r.impactScore,
+        Comments: r.comments ?? '',
+        Month: r.month ?? '',
+      }))
     } else {
       return NextResponse.json({ error: `Unknown batch type "${batch.type}".` }, { status: 400 })
     }

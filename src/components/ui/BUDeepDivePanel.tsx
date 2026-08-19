@@ -173,13 +173,16 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               <MiniKPI label="Subscription Members" value={bu.subscriptionStaff.toLocaleString()} sub="Staff with active memberships" accent="text-blue-700" />
             </div>
             {/* Feedback dimensions */}
-            {(detail.avgRoleRelevance > 0 || detail.avgExpectationsMet > 0) && (
+            {(detail.avgRoleRelevance > 0 || detail.avgExpectationsMet > 0 || bu.postTrainingImpactScore > 0) && (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 {detail.avgRoleRelevance > 0 && (
                   <MiniKPI label="Role Relevance" value={rating(detail.avgRoleRelevance)} sub="How relevant is training to their role?" accent={detail.avgRoleRelevance >= 4 ? 'text-green-700' : 'text-amber-700'} />
                 )}
                 {detail.avgExpectationsMet > 0 && (
                   <MiniKPI label="Expectations Met" value={rating(detail.avgExpectationsMet)} sub="To what extent were expectations met?" accent={detail.avgExpectationsMet >= 4 ? 'text-green-700' : 'text-amber-700'} />
+                )}
+                {bu.postTrainingImpactScore > 0 && (
+                  <MiniKPI label="Post-Training Impact (Manager)" value={rating(bu.postTrainingImpactScore)} sub="Line manager assessed, post-training" accent={bu.postTrainingImpactScore >= 4 ? 'text-green-700' : bu.postTrainingImpactScore >= 3 ? 'text-amber-700' : 'text-red-700'} />
                 )}
               </div>
             )}

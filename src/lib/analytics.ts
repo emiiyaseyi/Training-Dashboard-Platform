@@ -90,6 +90,7 @@ export interface BUSummary {
   budget: number
   coverageRatio: number
   avgImpactScore: number
+  postTrainingImpactScore: number // line-manager-assessed rating, 0-5, separate from self-reported avgImpactScore
   subscriptionRatio: number
   budgetUtilisation: number
   isOverBudget: boolean
@@ -114,6 +115,8 @@ export interface GroupAnalytics {
   totalStaffCount: number
   groupCoverageRatio: number
   avgImpactScore: number
+  postTrainingImpactScore: number // line-manager-assessed rating, 0-5
+  postTrainingReviewCount: number
   trainingSharePct: number
   otherSharePct: number
   subscriptionSharePct: number
@@ -589,6 +592,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     capabilities,
     talentMemberConfig,
     budgetSettings,
+    allManagerReviews,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
@@ -599,6 +603,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
     prisma.talentMemberConfig.findUnique({ where: { year: filter.year ?? new Date().getFullYear() } }),
     prisma.budgetSettings.findFirst(),
+    prisma.managerReviewRecord.findMany(),
   ])
   // Subscription spend counts against budget only if explicitly enabled in Admin — off by
   // default, since subscriptions (professional memberships) are a separate cost category.
@@ -644,6 +649,14 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     )
   }
 
+  // Apply month filter to manager reviews (Post-Training Impact Score)
+  let managerReviews = allManagerReviews
+  if (months) {
+    managerReviews = allManagerReviews.filter(
+      (r) => !r.month || months.has(r.month as typeof MONTHS[number])
+    )
+  }
+
   // ── Training aggregates ── (split Formal Training vs Strategic Learning Initiatives)
   const formalTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'formal')
   const otherTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
@@ -670,6 +683,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     validFeedback.length > 0
       ? validFeedback.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validFeedback.length
       : 0
+
+  // ── Post-Training Impact Score — line-manager-assessed, separate from self-reported avgImpactScore ──
+  const postTrainingImpactScore =
+    managerReviews.length > 0
+      ? managerReviews.reduce((s, r) => s + r.impactScore, 0) / managerReviews.length
+      : 0
+  const postTrainingReviewCount = managerReviews.length
 
   const trainingSharePct = totalLearningInvestment > 0 ? (totalTrainingCost / totalLearningInvestment) * 100 : 0
   const otherSharePct = totalLearningInvestment > 0 ? (totalOtherTrainingCost / totalLearningInvestment) * 100 : 0
@@ -761,6 +781,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const otherTRecs = tRecs.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
     const sRecs = subscriptionRecords.filter((r) => r.businessUnit === buName)
     const fRecs = feedbackRecords.filter((r) => r.businessUnit === buName)
+    const mrRecs = managerReviews.filter((r) => r.businessUnit === buName)
     const buConfig = businessUnits.find((b) => b.name.toLowerCase() === buName.toLowerCase())
 
     const trainingCost = formalTRecs.reduce((s, r) => s + r.cost, 0)
@@ -780,6 +801,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const subscriptionRatio = totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0
     const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
     const budgetUtilisation = budget > 0 ? (buBudgetComparable / budget) * 100 : 0
+    const avgPostTrainingImpact = mrRecs.length > 0 ? mrRecs.reduce((s, r) => s + r.impactScore, 0) / mrRecs.length : 0
 
     return {
       name: buName,
@@ -793,6 +815,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       budget,
       coverageRatio,
       avgImpactScore: avgImpact,
+      postTrainingImpactScore: avgPostTrainingImpact,
       subscriptionRatio,
       budgetUtilisation,
       isOverBudget: budget > 0 && buBudgetComparable > budget,
@@ -881,6 +904,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     totalStaffCount,
     groupCoverageRatio,
     avgImpactScore,
+    postTrainingImpactScore,
+    postTrainingReviewCount,
     trainingSharePct,
     otherSharePct,
     subscriptionSharePct,
@@ -915,7 +940,7 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, budgetSettings] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, budgetSettings, buManagerReviews] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -926,6 +951,7 @@ export async function computeBUAnalytics(
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.trainingType.findMany(),
     prisma.budgetSettings.findFirst(),
+    prisma.managerReviewRecord.findMany({ where: { businessUnit: { equals: buName } } }),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
   const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
@@ -958,6 +984,14 @@ export async function computeBUAnalytics(
     )
   }
 
+  // Apply month filter to manager reviews (Post-Training Impact Score)
+  let managerReviews = buManagerReviews
+  if (months) {
+    managerReviews = managerReviews.filter((r) =>
+      !r.month || months.has(r.month as typeof MONTHS[number])
+    )
+  }
+
   // Filter KSS records for this BU
   let kssRecords = buKSS
   if (filter.mode !== 'all' && filter.year) {
@@ -982,6 +1016,9 @@ export async function computeBUAnalytics(
   const avgImpact = validF.length > 0
     ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
     : 0
+  const avgPostTrainingImpact = managerReviews.length > 0
+    ? managerReviews.reduce((s, r) => s + r.impactScore, 0) / managerReviews.length
+    : 0
   const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
 
   const bu: BUSummary = {
@@ -996,6 +1033,7 @@ export async function computeBUAnalytics(
     budget,
     coverageRatio,
     avgImpactScore: avgImpact,
+    postTrainingImpactScore: avgPostTrainingImpact,
     subscriptionRatio: totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0,
     budgetUtilisation: budget > 0 ? (buBudgetComparable / budget) * 100 : 0,
     isOverBudget: budget > 0 && buBudgetComparable > budget,
@@ -1101,6 +1139,7 @@ export async function computeBUAnalytics(
       totalStaff: ts, budget: cfg?.budget ?? 0,
       coverageRatio: ts > 0 ? (st / ts) * 100 : 0,
       avgImpactScore: ai,
+      postTrainingImpactScore: 0,
       subscriptionRatio: 0, budgetUtilisation: 0, isOverBudget: false,
     } as BUSummary
   })

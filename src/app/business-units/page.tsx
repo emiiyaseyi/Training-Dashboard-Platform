@@ -31,6 +31,7 @@ interface BUSummaryRow {
   totalStaff: number
   coverageRatio: number
   avgImpactScore: number
+  postTrainingImpactScore: number
   isOverBudget: boolean
   budget: number
   subscriptionRatio: number
@@ -117,7 +118,9 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
           }`}>
             {rating(bu.avgImpactScore)}
           </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">confidence</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            confidence{bu.postTrainingImpactScore > 0 ? ` · Mgr ${rating(bu.postTrainingImpactScore)}` : ''}
+          </p>
         </div>
         <div className="text-center">
           <div className="flex items-center justify-center gap-1 mb-1">
@@ -206,6 +209,7 @@ export default function BusinessUnitsDashboard() {
     'Total Staff': b.totalStaff,
     'Coverage %': b.totalStaff > 0 ? b.coverageRatio.toFixed(1) : '—',
     'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1),
+    'Manager Post-Training Impact (out of 5)': b.postTrainingImpactScore > 0 ? b.postTrainingImpactScore.toFixed(1) : '—',
     'Budget (₦)': b.budget > 0 ? b.budget : '—',
     'Budget Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : '—',
     'Budget Status': b.isOverBudget ? 'Over' : b.budget > 0 ? 'On Track' : 'Not Set',
@@ -318,6 +322,7 @@ export default function BusinessUnitsDashboard() {
                     },
                   },
                   { key: 'avgImpactScore',     header: 'Impact',            align: 'right', render: (r) => rating(r.avgImpactScore as number) },
+                  { key: 'postTrainingImpactScore', header: 'Mgr Impact', align: 'right', render: (r) => rating(r.postTrainingImpactScore as number) },
                   {
                     key: 'isOverBudget', header: 'Budget', align: 'center',
                     render: (r) => (

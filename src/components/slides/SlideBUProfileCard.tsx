@@ -49,7 +49,9 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
             <span className="text-report-gray" style={{ fontSize: 14 }}>Impact</span>
           </div>
           <p className="font-bold tabular-nums" style={{ fontSize: 26, lineHeight: '30px', color: '#1F9D6C' }}>{rating(bu.avgImpactScore)}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>confidence</p>
+          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>
+            confidence{bu.postTrainingImpactScore > 0 ? ` · Mgr ${rating(bu.postTrainingImpactScore)}` : ''}
+          </p>
         </div>
       </div>
     </div>
