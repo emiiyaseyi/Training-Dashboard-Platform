@@ -107,7 +107,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
       totalConfirmed: v.totalConfirmed,
       attended: v.attended,
       yetToAttend: v.totalConfirmed - v.attended,
-      coverageRatio: v.totalConfirmed > 0 ? v.attended / v.totalConfirmed : 0,
+      coverageRatio: v.totalConfirmed > 0 ? (v.attended / v.totalConfirmed) * 100 : 0,
     }))
     .sort((a, b) => b.yetToAttend - a.yetToAttend)
 
@@ -115,7 +115,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     totalConfirmedStaff: roster.length,
     totalAttended,
     totalYetToAttend: roster.length - totalAttended,
-    overallCoverageRatio: roster.length > 0 ? totalAttended / roster.length : 0,
+    overallCoverageRatio: roster.length > 0 ? (totalAttended / roster.length) * 100 : 0,
     byBU,
     list: list.sort((a, b) => a.businessUnit.localeCompare(b.businessUnit) || a.staffName.localeCompare(b.staffName)),
     hasRosterData: allRoster.length > 0,
