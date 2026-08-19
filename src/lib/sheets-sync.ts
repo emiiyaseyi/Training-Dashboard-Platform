@@ -4,16 +4,30 @@ import { connectToSpreadsheet, type SheetsConnection } from '@/lib/google-sheets
 import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
 import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
+import { normalizeBUName } from '@/lib/bu-normalizer'
 
 // Unlike manual file uploads (where re-uploading the same file twice is the admin's call), a
 // live sheet is re-read on every sync, so it would otherwise re-import the same rows forever.
 // Each function below drops rows that already have a matching record in the DB, keyed on the
 // fields that identify "the same event" for that data type.
+//
+// Two normalization steps matter here: Business Unit names must be run through the same
+// normalizeBUName() used at import time (a stored record has the canonical name, e.g. "Meristem
+// Securities Limited", not the raw sheet text "MSL" — comparing raw-to-canonical never matches).
+// Numeric fields derived from unit conversion (durationMinutes from HH:MM:SS) are rounded before
+// comparing, since the same value can serialize with different floating-point noise
+// (49.199999999999996 vs 49.2) depending on which tool wrote it.
+
+function roundNum(n: number, decimals: number): number {
+  const f = Math.pow(10, decimals)
+  return Math.round(n * f) / f
+}
 
 async function dedupeTraining(rows: TrainingRow[]): Promise<TrainingRow[]> {
   const existing = await prisma.trainingRecord.findMany({ select: { staffId: true, training: true, cost: true } })
-  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.training.trim().toLowerCase()}|${r.cost}`))
-  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.training.trim().toLowerCase()}|${r.cost}`))
+  const key = (staffId: string, training: string, cost: number) => `${staffId.toUpperCase()}|${training.trim().toLowerCase()}|${roundNum(cost, 2)}`
+  const seen = new Set(existing.map((r) => key(r.staffId, r.training, r.cost)))
+  return rows.filter((r) => !seen.has(key(r.staffId, r.training, r.cost)))
 }
 
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
@@ -21,24 +35,24 @@ async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
   const existing = await prisma.feedbackRecord.findMany({
     select: { businessUnit: true, trainingTitle: true, month: true, confidenceRating: true },
   })
-  const seen = new Set(
-    existing.map((r) => `${r.businessUnit.trim().toLowerCase()}|${r.trainingTitle.trim().toLowerCase()}|${r.month ?? ''}|${r.confidenceRating ?? ''}`)
-  )
-  return rows.filter(
-    (r) => !seen.has(`${r.businessUnit.trim().toLowerCase()}|${r.trainingTitle.trim().toLowerCase()}|${r.month || ''}|${r.confidenceRating > 0 ? r.confidenceRating : ''}`)
-  )
+  const key = (bu: string, title: string, month: string | null, rating: number | null) =>
+    `${normalizeBUName(bu).toLowerCase()}|${title.trim().toLowerCase()}|${month || ''}|${rating && rating > 0 ? rating : ''}`
+  const seen = new Set(existing.map((r) => key(r.businessUnit, r.trainingTitle, r.month, r.confidenceRating)))
+  return rows.filter((r) => !seen.has(key(r.businessUnit, r.trainingTitle, r.month, r.confidenceRating)))
 }
 
 async function dedupeSubscription(rows: SubscriptionRow[]): Promise<SubscriptionRow[]> {
   const existing = await prisma.subscriptionRecord.findMany({ select: { staffId: true, membershipOrg: true, amount: true } })
-  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.membershipOrg.trim().toLowerCase()}|${r.amount}`))
-  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.membershipOrg.trim().toLowerCase()}|${r.amount}`))
+  const key = (staffId: string, org: string, amount: number) => `${staffId.toUpperCase()}|${org.trim().toLowerCase()}|${roundNum(amount, 2)}`
+  const seen = new Set(existing.map((r) => key(r.staffId, r.membershipOrg, r.amount)))
+  return rows.filter((r) => !seen.has(key(r.staffId, r.membershipOrg, r.amount)))
 }
 
 async function dedupeKSS(rows: KSSRow[]): Promise<KSSRow[]> {
   const existing = await prisma.kSSRecord.findMany({ select: { staffId: true, durationMinutes: true, month: true } })
-  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.durationMinutes}|${r.month ?? ''}`))
-  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.durationMinutes}|${r.month || ''}`))
+  const key = (staffId: string, duration: number, month: string | null) => `${staffId.toUpperCase()}|${roundNum(duration, 1)}|${month || ''}`
+  const seen = new Set(existing.map((r) => key(r.staffId, r.durationMinutes, r.month)))
+  return rows.filter((r) => !seen.has(key(r.staffId, r.durationMinutes, r.month)))
 }
 
 // Pulls the full contents of a tab and reassembles it as an XLSX buffer so it can go through
