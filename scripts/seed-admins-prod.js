@@ -59,18 +59,21 @@ async function run() {
         const passwordHash = await bcrypt.hash(admin.staffId, 10)
         const user = await prisma.user.upsert({
           where: { staffId: admin.staffId },
-          update: { isSuperAdmin: true, isActive: true },
+          // Reset passwordHash on every run (not just create) so this script is a reliable way
+          // to force the password back to the Staff ID if it's ever in a bad state.
+          update: { isSuperAdmin: true, isActive: true, requiresPassword: true, passwordHash },
           create: {
             staffId: admin.staffId,
             name: admin.name,
             isSuperAdmin: true,
             businessUnitScope: 'ALL',
             requiresPassword: true,
-            mustChangePassword: true,
+            mustChangePassword: false,
             passwordHash,
           },
         })
-        console.log(`✓ ${user.staffId} — login password is "${admin.staffId}" (forced change on first login)`)
+        const verify = await bcrypt.compare(admin.staffId, user.passwordHash || '')
+        console.log(`✓ ${user.staffId} — login password is "${admin.staffId}" — verified: ${verify}`)
       }
     } finally {
       await prisma.$disconnect()
