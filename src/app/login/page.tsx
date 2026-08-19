@@ -46,6 +46,10 @@ function LoginForm() {
       })
       const data = await res.json()
       setLoading(false)
+      if (!data.exists) {
+        setError('Staff ID/email not found.')
+        return
+      }
       if (data.requiresPassword) {
         setStep('password')
       } else {
