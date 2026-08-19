@@ -114,7 +114,7 @@ export function GoogleSheetsPanel() {
   }
 
   const syncNow = async () => {
-    if (!confirm('Import data from the spreadsheet now? Each sync adds new records — like uploading a fresh Excel file — it does not replace or de-duplicate previous imports. Manage duplicates via Upload History if needed.')) return
+    if (!confirm('Import new data from the spreadsheet now? Only rows that don’t already exist in the platform are added — existing records are left untouched.')) return
     setSyncing(true)
     setSyncResult(null)
     setErrors([])
