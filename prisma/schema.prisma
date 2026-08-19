@@ -44,6 +44,21 @@ model GoogleSheetsConfig {
   updatedAt              DateTime  @updatedAt
 }
 
+// One row per completed sync run (manual "Sync Now" or scheduled) — only the 5 most recent are
+// kept. batchIds records which UploadBatch rows this run created, so "Undo" can delete exactly
+// those (cascading to their records) without touching anything from other syncs or uploads.
+model GoogleSheetsSyncLog {
+  id        String   @id @default(cuid())
+  syncedAt  DateTime @default(now())
+  trigger   String // "manual" | "scheduled"
+  success   Boolean
+  imported  String // JSON: { training?: number, feedback?: number, subscription?: number, kss?: number }
+  errors    String // JSON: { sheet: string, message: string }[]
+  batchIds  String // JSON array of UploadBatch ids created by this run
+  undone    Boolean  @default(false)
+  undoneAt  DateTime?
+}
+
 // Login identity is Staff ID and/or email — at least one must be set.
 // Default password (set at creation) is the user's own Staff ID (or email if no Staff ID) —
 // they can change it later from Account Settings. Admin can toggle requiresPassword off per
