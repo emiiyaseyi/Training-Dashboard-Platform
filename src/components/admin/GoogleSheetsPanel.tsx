@@ -256,6 +256,12 @@ export function GoogleSheetsPanel() {
               </label>
             )}
           </div>
+          {state.autoSyncEnabled && state.syncFrequencyMinutes < 1440 && (
+            <p className="text-xs text-amber-600 -mt-2">
+              Vercel&apos;s free (Hobby) plan only runs scheduled jobs once per day, regardless of this setting —
+              syncs will happen at most daily unless the plan is upgraded to Pro. Use &quot;Sync Now&quot; for anything more frequent.
+            </p>
+          )}
 
           <div className="flex items-center gap-2">
             <button
