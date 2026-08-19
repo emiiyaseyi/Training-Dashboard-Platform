@@ -64,12 +64,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const records = await prisma.staffRosterRecord.findMany({ where: { batchId: id } })
       rows = records.map((r) => ({
         'Staff ID': r.staffId,
-        Name: r.staffName,
+        'First Name': r.firstName,
+        'Middle Name': r.middleName ?? '',
+        'Last Name': r.lastName,
         'Business Unit': r.businessUnit,
         Role: r.role ?? '',
         Department: r.department ?? '',
-        'Join Date': r.joinDate ? r.joinDate.toISOString().slice(0, 10) : '',
-        Confirmed: r.confirmed ? 'Yes' : 'No',
+        'Employment Date': r.employmentDate ? r.employmentDate.toISOString().slice(0, 10) : '',
+        'Confirmation Status': r.confirmed ? 'Yes' : 'No',
       }))
     } else if (batch.type === 'manager-review') {
       const records = await prisma.managerReviewRecord.findMany({ where: { batchId: id } })

@@ -70,3 +70,24 @@ export function normalizeEmail(value: string | null | undefined): string | null 
   const trimmed = value?.trim().toLowerCase()
   return trimmed ? trimmed : null
 }
+
+// User.businessUnitScope is stored as a plain string — either the literal "ALL", or a JSON
+// array of BU names for multi-BU access. A bare BU name (pre-multi-select data) is treated as
+// a single-item list for backward compatibility.
+export function parseBUScope(raw: string | null | undefined): string[] | 'ALL' {
+  if (!raw || raw === 'ALL') return 'ALL'
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+      return parsed.length === 0 ? 'ALL' : parsed
+    }
+  } catch {
+    // not JSON — legacy plain BU name
+  }
+  return [raw]
+}
+
+export function serializeBUScope(scope: string[] | 'ALL'): string {
+  if (scope === 'ALL' || (Array.isArray(scope) && scope.length === 0)) return 'ALL'
+  return JSON.stringify(scope)
+}

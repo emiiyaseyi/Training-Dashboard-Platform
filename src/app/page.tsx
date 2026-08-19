@@ -35,7 +35,10 @@ export default function ExecutiveDashboard() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/analytics/group${filterToQuery(f)}`)
+      // Executive Overview always shows full group-wide data to every user, regardless of
+      // their assigned Business Unit scope — the other analytics pages restrict to it.
+      const qs = filterToQuery(f)
+      const res = await fetch(`/api/analytics/group${qs}${qs ? '&' : '?'}full=true`)
       if (!res.ok) throw new Error()
       setData(await res.json())
     } catch {

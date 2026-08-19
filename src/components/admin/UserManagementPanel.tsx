@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, Plus, Trash2, KeyRound, ChevronDown, ChevronUp, ShieldCheck, Loader2 } from 'lucide-react'
-import { PAGE_KEYS, PAGE_LABELS, PERMISSION_LEVELS, PERMISSION_LEVEL_LABELS, type PageKey } from '@/lib/permissions'
+import { useEffect, useRef, useState } from 'react'
+import { Users, Plus, Trash2, KeyRound, ChevronDown, ChevronUp, ShieldCheck, Loader2, Download, Upload } from 'lucide-react'
+import { PAGE_KEYS, PAGE_LABELS, PERMISSION_LEVELS, PERMISSION_LEVEL_LABELS, parseBUScope, serializeBUScope, type PageKey } from '@/lib/permissions'
+import { BusinessUnitMultiSelect } from '@/components/admin/BusinessUnitMultiSelect'
 
 type PermMap = Partial<Record<PageKey, string>>
+type BUScope = string[] | 'ALL'
 
 type UserRow = {
   id: string
@@ -18,13 +20,15 @@ type UserRow = {
   permissions: PermMap
 }
 
+type EditDraft = Omit<UserRow, 'businessUnitScope'> & { businessUnitScope: BUScope }
+
 type DraftUser = {
   key: string
   staffId: string
   email: string
   name: string
   isSuperAdmin: boolean
-  businessUnitScope: string
+  businessUnitScope: BUScope
   requiresPassword: boolean
   permissions: PermMap
 }
@@ -42,6 +46,13 @@ function emptyDraft(): DraftUser {
   }
 }
 
+function buScopeSummary(raw: string): string {
+  const scope = parseBUScope(raw)
+  if (scope === 'ALL') return 'All BUs'
+  if (scope.length === 1) return scope[0]
+  return `${scope.length} BUs`
+}
+
 function PermissionGrid({
   permissions,
   onChange,
@@ -52,27 +63,72 @@ function PermissionGrid({
   disabled?: boolean
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-      {PAGE_KEYS.map((page) => (
-        <div key={page} className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-slate-600">{PAGE_LABELS[page]}</span>
-          <select
-            disabled={disabled}
-            value={permissions[page] || 'none'}
-            onChange={(e) => onChange(page, e.target.value)}
-            className="border border-slate-300 rounded-md px-2 py-1 text-xs disabled:bg-slate-50 disabled:text-slate-400"
-          >
-            <option value="none">No access</option>
-            {PERMISSION_LEVELS.map((lvl) => (
-              <option key={lvl} value={lvl}>
-                {PERMISSION_LEVEL_LABELS[lvl]}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
+    <div>
+      <p className="text-xs font-medium text-slate-500 mb-2">Page access</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+        {PAGE_KEYS.map((page) => (
+          <div key={page} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-600">{PAGE_LABELS[page]}</span>
+            <select
+              disabled={disabled}
+              value={permissions[page] || 'none'}
+              onChange={(e) => onChange(page, e.target.value)}
+              className="border border-slate-300 rounded-md px-2 py-1 text-xs disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="none">No access</option>
+              {PERMISSION_LEVELS.map((lvl) => (
+                <option key={lvl} value={lvl}>
+                  {PERMISSION_LEVEL_LABELS[lvl]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
     </div>
   )
+}
+
+const CSV_HEADERS = [
+  'Name',
+  'Staff ID',
+  'Email',
+  'Business Unit Access (ALL or Name1; Name2)',
+  'Super Admin (Yes/No)',
+  'Requires Password (Yes/No)',
+  ...PAGE_KEYS.map((k) => PAGE_LABELS[k] + ' (blank / view / view-export / admin)'),
+]
+
+function csvEscape(val: string): string {
+  if (/[",\n]/.test(val)) return `"${val.replace(/"/g, '""')}"`
+  return val
+}
+
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0)
+  if (lines.length < 2) return []
+  const parseLine = (line: string): string[] => {
+    const cells: string[] = []
+    let cur = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i]
+      if (inQuotes) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++ }
+        else if (c === '"') inQuotes = false
+        else cur += c
+      } else if (c === '"') inQuotes = true
+      else if (c === ',') { cells.push(cur); cur = '' }
+      else cur += c
+    }
+    cells.push(cur)
+    return cells
+  }
+  const headers = parseLine(lines[0]).map((h) => h.trim())
+  return lines.slice(1).map((line) => {
+    const cells = parseLine(line)
+    return Object.fromEntries(headers.map((h, i) => [h, (cells[i] ?? '').trim()]))
+  })
 }
 
 export function UserManagementPanel() {
@@ -84,7 +140,8 @@ export function UserManagementPanel() {
   const [saving, setSaving] = useState(false)
   const [addErrors, setAddErrors] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState<UserRow | null>(null)
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
   const load = async () => {
     setLoading(true)
@@ -117,7 +174,7 @@ export function UserManagementPanel() {
           email: d.email || null,
           name: d.name,
           isSuperAdmin: d.isSuperAdmin,
-          businessUnitScope: d.businessUnitScope,
+          businessUnitScope: serializeBUScope(d.businessUnitScope),
           requiresPassword: d.requiresPassword,
           permissions: Object.fromEntries(Object.entries(d.permissions).filter(([, v]) => v && v !== 'none')),
         })),
@@ -141,7 +198,7 @@ export function UserManagementPanel() {
 
   const startEdit = (user: UserRow) => {
     setEditingId(user.id)
-    setEditDraft({ ...user, permissions: { ...user.permissions } })
+    setEditDraft({ ...user, businessUnitScope: parseBUScope(user.businessUnitScope), permissions: { ...user.permissions } })
   }
 
   const saveEdit = async () => {
@@ -156,7 +213,7 @@ export function UserManagementPanel() {
           email: editDraft.email,
           name: editDraft.name,
           isSuperAdmin: editDraft.isSuperAdmin,
-          businessUnitScope: editDraft.businessUnitScope,
+          businessUnitScope: serializeBUScope(editDraft.businessUnitScope),
           requiresPassword: editDraft.requiresPassword,
           isActive: editDraft.isActive,
           permissions: Object.fromEntries(Object.entries(editDraft.permissions).filter(([, v]) => v && v !== 'none')),
@@ -191,6 +248,61 @@ export function UserManagementPanel() {
     await load()
   }
 
+  const downloadTemplate = () => {
+    const csv = CSV_HEADERS.map(csvEscape).join(',') + '\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'user_upload_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleCSVUpload = async (file: File) => {
+    const text = await file.text()
+    const rows = parseCSV(text)
+    if (rows.length === 0) {
+      setAddErrors(['CSV file has no data rows.'])
+      setShowAddForm(true)
+      return
+    }
+
+    const buLabel = CSV_HEADERS[3]
+    const superAdminLabel = CSV_HEADERS[4]
+    const requiresPwLabel = CSV_HEADERS[5]
+
+    const parsedDrafts: DraftUser[] = rows.map((row) => {
+      const buRaw = (row[buLabel] || '').trim()
+      const businessUnitScope: BUScope =
+        !buRaw || buRaw.toUpperCase() === 'ALL'
+          ? 'ALL'
+          : buRaw.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+
+      const permissions: PermMap = {}
+      PAGE_KEYS.forEach((key) => {
+        const header = CSV_HEADERS.find((h) => h.startsWith(PAGE_LABELS[key] + ' ('))!
+        const val = (row[header] || '').trim().toLowerCase()
+        if (val === 'view' || val === 'view-export' || val === 'admin') permissions[key] = val
+      })
+
+      return {
+        key: Math.random().toString(36).slice(2),
+        name: row['Name'] || '',
+        staffId: row['Staff ID'] || '',
+        email: row['Email'] || '',
+        isSuperAdmin: /^y(es)?$/i.test((row[superAdminLabel] || '').trim()),
+        requiresPassword: (row[requiresPwLabel] || '').trim() === '' ? true : /^y(es)?$/i.test(row[requiresPwLabel].trim()),
+        businessUnitScope,
+        permissions,
+      }
+    })
+
+    setDrafts(parsedDrafts)
+    setShowAddForm(true)
+    setAddErrors([])
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -203,17 +315,44 @@ export function UserManagementPanel() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setShowAddForm((v) => !v)
-            setDrafts([emptyDraft()])
-            setAddErrors([])
-          }}
-          className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add User
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV Template
+          </button>
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Upload CSV
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleCSVUpload(file)
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => {
+              setShowAddForm((v) => !v)
+              setDrafts([emptyDraft()])
+              setAddErrors([])
+            }}
+            className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add User
+          </button>
+        </div>
       </div>
 
       {showAddForm && (
@@ -254,18 +393,11 @@ export function UserManagementPanel() {
               <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-1.5 text-xs text-slate-600">
                   <span>Business Unit access</span>
-                  <select
+                  <BusinessUnitMultiSelect
                     value={draft.businessUnitScope}
-                    onChange={(e) => updateDraft(draft.key, { businessUnitScope: e.target.value })}
-                    className="border border-slate-300 rounded-md px-2 py-1 text-xs"
-                  >
-                    <option value="ALL">All Business Units</option>
-                    {buOptions.map((bu) => (
-                      <option key={bu} value={bu}>
-                        {bu}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateDraft(draft.key, { businessUnitScope: v })}
+                    options={buOptions}
+                  />
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-slate-600">
                   <input
@@ -342,7 +474,10 @@ export function UserManagementPanel() {
                         {user.name} {!user.isActive && <span className="text-[10px] font-normal">(inactive)</span>}
                       </p>
                       <p className="text-xs text-slate-500 truncate">
-                        {[user.staffId, user.email].filter(Boolean).join(' • ') || '—'} · {user.businessUnitScope === 'ALL' ? 'All BUs' : user.businessUnitScope}
+                        {[user.staffId, user.email].filter(Boolean).join(' • ') || '—'} · {buScopeSummary(user.businessUnitScope)}
+                        {!user.isSuperAdmin && Object.keys(user.permissions).length === 0 && (
+                          <span className="text-amber-600"> · No page access set</span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -373,18 +508,11 @@ export function UserManagementPanel() {
                     <div className="flex flex-wrap items-center gap-4">
                       <label className="flex items-center gap-1.5 text-xs text-slate-600">
                         <span>Business Unit access</span>
-                        <select
+                        <BusinessUnitMultiSelect
                           value={editDraft.businessUnitScope}
-                          onChange={(e) => setEditDraft({ ...editDraft, businessUnitScope: e.target.value })}
-                          className="border border-slate-300 rounded-md px-2 py-1 text-xs"
-                        >
-                          <option value="ALL">All Business Units</option>
-                          {buOptions.map((bu) => (
-                            <option key={bu} value={bu}>
-                              {bu}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(v) => setEditDraft({ ...editDraft, businessUnitScope: v })}
+                          options={buOptions}
+                        />
                       </label>
                       <label className="flex items-center gap-1.5 text-xs text-slate-600">
                         <input

@@ -581,18 +581,18 @@ function computeCapabilityCoverage(
 
 // ─── Core analytics function ──────────────────────────────────────────────────
 
-export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }): Promise<GroupAnalytics> {
+export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }, buScope?: string[] | null): Promise<GroupAnalytics> {
   const [
-    allTraining,
-    allFeedbackRecords,
-    allSubscriptionRecords,
-    businessUnits,
-    allKSS,
+    rawTraining,
+    rawFeedbackRecords,
+    rawSubscriptionRecords,
+    rawBusinessUnits,
+    rawKSS,
     trainingTypes,
     capabilities,
     talentMemberConfig,
     budgetSettings,
-    allManagerReviews,
+    rawManagerReviews,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
@@ -605,6 +605,19 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.budgetSettings.findFirst(),
     prisma.managerReviewRecord.findMany(),
   ])
+
+  // BU-scoped users only see data for their assigned Business Unit(s) on this endpoint — every
+  // downstream calculation below operates on these arrays, so restricting them here scopes the
+  // whole response (totals, coverage, capability coverage, top trainings, etc.) automatically.
+  // Executive Overview calls this with buScope omitted/null to always show full group data.
+  const scopeSet = buScope ? new Set(buScope) : null
+  const allTraining = scopeSet ? rawTraining.filter((r) => scopeSet.has(r.businessUnit)) : rawTraining
+  const allFeedbackRecords = scopeSet ? rawFeedbackRecords.filter((r) => scopeSet.has(r.businessUnit)) : rawFeedbackRecords
+  const allSubscriptionRecords = scopeSet ? rawSubscriptionRecords.filter((r) => scopeSet.has(r.businessUnit)) : rawSubscriptionRecords
+  const businessUnits = scopeSet ? rawBusinessUnits.filter((b) => scopeSet.has(b.name)) : rawBusinessUnits
+  const allKSS = scopeSet ? rawKSS.filter((r) => scopeSet.has(r.businessUnit)) : rawKSS
+  const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
+
   // Subscription spend counts against budget only if explicitly enabled in Admin — off by
   // default, since subscriptions (professional memberships) are a separate cost category.
   const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
