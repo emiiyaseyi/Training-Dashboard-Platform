@@ -18,6 +18,18 @@ interface ValidateError {
   message: string
 }
 
+interface KeyDiagnostics {
+  configured: boolean
+  rawLength: number
+  hasBeginMarker: boolean
+  hasEndMarker: boolean
+  wrappedInQuotes: boolean
+  containsLiteralBackslashN: boolean
+  containsRealNewline: boolean
+  lineCount: number
+  normalizedParses: boolean
+}
+
 const DEFAULT_STATE: ConfigState = {
   spreadsheetUrl: '',
   trainingSheetName: 'Training Cost',
@@ -35,6 +47,7 @@ export function GoogleSheetsPanel() {
   const [validating, setValidating] = useState(false)
   const [serverHasCredentials, setServerHasCredentials] = useState<boolean | null>(null)
   const [serviceAccountEmail, setServiceAccountEmail] = useState<string | null>(null)
+  const [keyDiagnostics, setKeyDiagnostics] = useState<KeyDiagnostics | null>(null)
   const [lastStatus, setLastStatus] = useState<'success' | 'error' | null>(null)
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null)
   const [errors, setErrors] = useState<ValidateError[]>([])
@@ -59,6 +72,7 @@ export function GoogleSheetsPanel() {
       })
       setServerHasCredentials(!!data.serverHasCredentials)
       setServiceAccountEmail(data.serviceAccountEmail || null)
+      setKeyDiagnostics(data.privateKeyDiagnostics || null)
       setLastStatus(data.lastSyncStatus || null)
       setLastCheckedAt(data.lastSyncedAt || null)
       setErrors(data.lastSyncErrors || [])
@@ -166,6 +180,30 @@ export function GoogleSheetsPanel() {
             <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
               Share your spreadsheet (Viewer access) with:{' '}
               <span className="font-mono text-slate-700">{serviceAccountEmail}</span>
+            </div>
+          )}
+
+          {keyDiagnostics?.configured && !keyDiagnostics.normalizedParses && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 space-y-1">
+              <p className="font-medium">GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY doesn&apos;t parse as a valid key.</p>
+              <ul className="space-y-0.5 text-red-600">
+                <li>Length: {keyDiagnostics.rawLength} characters, {keyDiagnostics.lineCount} line(s)</li>
+                <li>Has &quot;BEGIN...PRIVATE KEY&quot; marker: {keyDiagnostics.hasBeginMarker ? 'yes' : 'no'}</li>
+                <li>Has &quot;END...PRIVATE KEY&quot; marker: {keyDiagnostics.hasEndMarker ? 'yes' : 'no'}</li>
+                <li>Wrapped in extra quotes: {keyDiagnostics.wrappedInQuotes ? 'yes — remove them' : 'no'}</li>
+                <li>Contains real line breaks: {keyDiagnostics.containsRealNewline ? 'yes' : 'no'}</li>
+                <li>Contains literal \n text: {keyDiagnostics.containsLiteralBackslashN ? 'yes' : 'no'}</li>
+              </ul>
+              <p>
+                A correctly-pasted key is usually ~1,700 characters. If yours is much shorter, the paste was
+                truncated — re-copy the full <code className="bg-red-100 px-1 rounded">private_key</code> value from
+                the JSON file and re-save it in Vercel, then redeploy.
+              </p>
+            </div>
+          )}
+          {keyDiagnostics?.configured && keyDiagnostics.normalizedParses && (
+            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
+              Private key format looks valid ({keyDiagnostics.rawLength} characters).
             </div>
           )}
 

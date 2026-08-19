@@ -1,4 +1,5 @@
 import { JWT } from 'google-auth-library'
+import { createPrivateKey } from 'crypto'
 
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 
@@ -43,6 +44,48 @@ function normalizePrivateKey(raw: string): string {
   return key
 }
 
+// Safe, non-sensitive diagnostics about the configured key's shape — never returns the key
+// itself, only structural facts, so this can be surfaced in the admin UI/error messages.
+export function privateKeyDiagnostics(): {
+  configured: boolean
+  rawLength: number
+  hasBeginMarker: boolean
+  hasEndMarker: boolean
+  wrappedInQuotes: boolean
+  containsLiteralBackslashN: boolean
+  containsRealNewline: boolean
+  lineCount: number
+  normalizedParses: boolean
+} {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  if (!raw) {
+    return {
+      configured: false, rawLength: 0, hasBeginMarker: false, hasEndMarker: false,
+      wrappedInQuotes: false, containsLiteralBackslashN: false, containsRealNewline: false,
+      lineCount: 0, normalizedParses: false,
+    }
+  }
+  const trimmed = raw.trim()
+  let normalizedParses = false
+  try {
+    createPrivateKey(normalizePrivateKey(raw))
+    normalizedParses = true
+  } catch {
+    normalizedParses = false
+  }
+  return {
+    configured: true,
+    rawLength: raw.length,
+    hasBeginMarker: raw.includes('BEGIN') && raw.includes('PRIVATE KEY'),
+    hasEndMarker: raw.includes('END') && raw.includes('PRIVATE KEY'),
+    wrappedInQuotes: (trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")),
+    containsLiteralBackslashN: raw.includes('\\n'),
+    containsRealNewline: raw.includes('\n'),
+    lineCount: raw.split('\n').length,
+    normalizedParses,
+  }
+}
+
 async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
@@ -58,6 +101,18 @@ async function getAccessToken(): Promise<string> {
     throw new Error(
       'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY does not look like a valid private key (missing "-----BEGIN PRIVATE KEY-----"). ' +
         'Re-copy the full "private_key" value from the downloaded JSON file, including the BEGIN/END lines.'
+    )
+  }
+  try {
+    createPrivateKey(key)
+  } catch {
+    const d = privateKeyDiagnostics()
+    throw new Error(
+      `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY is present but does not parse as a valid key even after cleanup ` +
+        `(length ${d.rawLength}, ${d.lineCount} line(s), begin marker: ${d.hasBeginMarker}, end marker: ${d.hasEndMarker}). ` +
+        `This usually means the value got truncated or corrupted when pasted into Vercel. Re-open the downloaded ` +
+        `JSON key file, select and copy only the "private_key" value (the whole quoted string), and paste it into ` +
+        `Vercel's env var field, then redeploy. If it's still wrong, try generating a brand new key from Google Cloud Console.`
     )
   }
   try {
