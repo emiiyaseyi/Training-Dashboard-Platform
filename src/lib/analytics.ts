@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
+import { normalizeStaffIdKey } from './staff-id'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -229,7 +230,7 @@ function computeHoursReport(
   const kssItemsMap = new Map<string, { hours: number; month: string }[]>()
 
   for (const r of trainingRecords) {
-    const id = r.staffId.toUpperCase()
+    const id = normalizeStaffIdKey(r.staffId)
     if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
     const e = staffMap.get(id)!
     const h = r.hours ?? 0
@@ -241,7 +242,7 @@ function computeHoursReport(
     }
   }
   for (const r of kssRecords) {
-    const id = r.staffId.toUpperCase()
+    const id = normalizeStaffIdKey(r.staffId)
     if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, businessUnit: r.businessUnit, formalH: 0, kssH: 0, count: 0 })
     const h = r.durationMinutes / 60
     staffMap.get(id)!.kssH += h
@@ -381,7 +382,7 @@ function feedbackCredibilityLabel(pct: number): 'High Confidence' | 'Moderate' |
 function participationInequalityPct(trainingRecords: { staffId: string }[]): number {
   const countMap = new Map<string, number>()
   for (const r of trainingRecords) {
-    const id = r.staffId.toUpperCase()
+    const id = normalizeStaffIdKey(r.staffId)
     countMap.set(id, (countMap.get(id) ?? 0) + 1)
   }
   const sorted = [...countMap.values()].sort((a, b) => b - a)
@@ -522,7 +523,7 @@ function computeParticipation(
 ): StaffParticipation {
   const countMap = new Map<string, { staffName: string; count: number }>()
   for (const r of records) {
-    const id = r.staffId.toUpperCase()
+    const id = normalizeStaffIdKey(r.staffId)
     const entry = countMap.get(id)
     if (entry) entry.count++
     else countMap.set(id, { staffName: r.staffName, count: 1 })
@@ -568,7 +569,7 @@ function computeCapabilityCoverage(
       const staffTrained = new Set(
         records
           .filter((r) => (r.capability ?? '').toLowerCase() === name.toLowerCase())
-          .map((r) => r.staffId.toUpperCase())
+          .map((r) => normalizeStaffIdKey(r.staffId))
       ).size
       return {
         capability: name,
@@ -675,12 +676,12 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const otherTrainingRecords = trainingRecords.filter((r) => classifyTraining(r.trainingType, typeMap) === 'other')
   const totalTrainingCost = formalTrainingRecords.reduce((s, r) => s + r.cost, 0)
   const totalOtherTrainingCost = otherTrainingRecords.reduce((s, r) => s + r.cost, 0)
-  const uniqueTrainedIds = new Set(trainingRecords.map((r) => r.staffId.toUpperCase()))
+  const uniqueTrainedIds = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId)))
   const uniqueStaffTrained = uniqueTrainedIds.size
 
   // ── Subscription aggregates ──
   const totalSubscriptionCost = subscriptionRecords.reduce((s, r) => s + r.amount, 0)
-  const uniqueSubIds = new Set(subscriptionRecords.map((r) => r.staffId.toUpperCase()))
+  const uniqueSubIds = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId)))
   const uniqueSubscriptionStaff = uniqueSubIds.size
 
   // ── Combined ──
@@ -801,8 +802,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const otherInvestmentCost = otherTRecs.reduce((s, r) => s + r.cost, 0)
     const subscriptionCost = sRecs.reduce((s, r) => s + r.amount, 0)
     const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
-    const staffTrained = new Set(tRecs.map((r) => r.staffId.toUpperCase())).size
-    const subscriptionStaff = new Set(sRecs.map((r) => r.staffId.toUpperCase())).size
+    const staffTrained = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
+    const subscriptionStaff = new Set(sRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const totalStaff = buConfig?.staffCount ?? 0
     const budget = buConfig?.budget ?? 0
     const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
@@ -898,7 +899,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   // tracked separately against a configured total TM population ──
   const tmRecords = trainingRecords.filter((r) => (r.trainingType ?? '').toLowerCase() === 'tm')
   const tmTotalHeadcount = talentMemberConfig?.totalHeadcount ?? 0
-  const tmStaffTrained = new Set(tmRecords.map((r) => r.staffId.toUpperCase())).size
+  const tmStaffTrained = new Set(tmRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const talentMember: TalentMemberReport = {
     totalHeadcount: tmTotalHeadcount,
     staffTrained: tmStaffTrained,
@@ -1020,8 +1021,8 @@ export async function computeBUAnalytics(
   const otherInvestmentCost = otherTrainingRecords.reduce((s, r) => s + r.cost, 0)
   const subscriptionCost = subscriptionRecords.reduce((s, r) => s + r.amount, 0)
   const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
-  const staffTrained = new Set(trainingRecords.map((r) => r.staffId.toUpperCase())).size
-  const subscriptionStaff = new Set(subscriptionRecords.map((r) => r.staffId.toUpperCase())).size
+  const staffTrained = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
+  const subscriptionStaff = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const totalStaff = buConfig?.staffCount ?? 0
   const budget = buConfig?.budget ?? 0
   const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
@@ -1141,7 +1142,7 @@ export async function computeBUAnalytics(
     const fRecs = groupAllFeedback.filter((r) => r.businessUnit === name)
     const cfg   = groupAllBUConfigs.find((b) => b.name === name)
     const tc    = tRecs.reduce((s, r) => s + r.cost, 0)
-    const st    = new Set(tRecs.map((r) => r.staffId.toUpperCase())).size
+    const st    = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const ts    = cfg?.staffCount ?? 0
     const vF    = fRecs.filter((f) => f.confidenceRating != null)
     const ai    = vF.length > 0 ? vF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / vF.length : 0
@@ -1184,7 +1185,7 @@ export async function computeBUAnalytics(
   // ── Staff attendance list (filtered period) ──────────────────────────────
   const staffMap = new Map<string, { staffName: string; programmes: Set<string> }>()
   for (const r of trainingRecords) {
-    const id = r.staffId.toUpperCase()
+    const id = normalizeStaffIdKey(r.staffId)
     if (!staffMap.has(id)) staffMap.set(id, { staffName: r.staffName, programmes: new Set() })
     staffMap.get(id)!.programmes.add(r.training || 'Unknown')
   }
@@ -1202,7 +1203,7 @@ export async function computeBUAnalytics(
   for (const r of trainingRecords) {
     const t = r.training || 'Unknown'
     if (!rosterMap.has(t)) rosterMap.set(t, new Map())
-    rosterMap.get(t)!.set(r.staffId.toUpperCase(), r.staffName)
+    rosterMap.get(t)!.set(normalizeStaffIdKey(r.staffId), r.staffName)
   }
   const trainingRosters: TrainingRoster[] = [...rosterMap.entries()]
     .map(([training, staffMap2]) => ({

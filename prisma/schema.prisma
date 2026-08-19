@@ -193,22 +193,75 @@ model ManagerReviewRecord {
 // confirmed roster against TrainingRecord attendance). Does not feed any other report.
 // Multiple uploads accumulate; the report always uses each staffId's most recent record.
 model StaffRosterRecord {
-  id             String    @id @default(cuid())
-  staffId        String
-  firstName      String
-  middleName     String?
-  lastName       String
-  businessUnit   String
-  role           String?
-  department     String?
-  employmentDate DateTime?
-  confirmed      Boolean   @default(true)
-  batchId        String
-  createdAt      DateTime  @default(now())
+  id                String    @id @default(cuid())
+  staffId           String
+  firstName         String
+  middleName        String?
+  lastName          String
+  email             String? // second unique key alongside staffId — also used for survey CC lookups
+  lineManagerStaffId String? // references another StaffRosterRecord.staffId — plain string, not an FK (same pattern as businessUnit)
+  businessUnit      String
+  role              String?
+  department        String?
+  employmentDate    DateTime?
+  confirmed         Boolean   @default(true)
+  batchId           String
+  createdAt         DateTime  @default(now())
 
   batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   @@index([businessUnit])
+  @@index([staffId])
+  @@index([email])
+}
+
+// Survey automation — single-row settings: the 3 Google Form links and sender display name.
+// SMTP credentials themselves live in environment variables, never here.
+model SurveySettings {
+  id                 String   @id @default(cuid())
+  fromName           String   @default("Meristem L&D")
+  preSurveyFormUrl   String?
+  post1SurveyFormUrl String?
+  post2SurveyFormUrl String?
+  updatedAt          DateTime @updatedAt
+}
+
+// An "upcoming training" — distinct from TrainingRecord (actual cost, uploaded after the fact)
+// so nothing double-counts. Drives the 3-stage survey email lifecycle for its attendees.
+model TrainingSchedule {
+  id           String   @id @default(cuid())
+  trainingName String
+  businessUnit String
+  startDate    DateTime
+  endDate      DateTime
+  hours        Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attendees TrainingScheduleAttendee[]
+}
+
+// One row per attendee on a schedule. Line-manager name/email are resolved from
+// StaffRosterRecord at add-time and snapshotted here, so sending stays correct even if the
+// roster changes later. sentAt timestamps double as "has this stage been sent" state.
+model TrainingScheduleAttendee {
+  id               String   @id @default(cuid())
+  scheduleId       String
+  staffId          String
+  staffName        String
+  email            String?
+  lineManagerName  String?
+  lineManagerEmail String?
+
+  preSurveySentAt   DateTime?
+  post1SurveySentAt DateTime?
+  post2SurveySentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  schedule TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
   @@index([staffId])
 }
 

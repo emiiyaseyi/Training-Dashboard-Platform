@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
         firstName:      r.firstName,
         middleName:     r.middleName || null,
         lastName:       r.lastName,
+        email:          r.email || null,
+        lineManagerStaffId: r.lineManagerStaffId || null,
         businessUnit:   r.businessUnit,
         role:           r.role || null,
         department:     r.department || null,

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 // Kept intentionally separate from analytics.ts — this report reads TrainingRecord for
 // attendance but never writes back to it, and touches no other report's calculations.
@@ -73,14 +74,14 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   if (months) {
     training = training.filter((r) => months.has(r.month))
   }
-  const attendedStaffIds = new Set(training.map((r) => r.staffId.toUpperCase()))
+  const attendedStaffIds = new Set(training.map((r) => normalizeStaffIdKey(r.staffId)))
 
   const list: YetToAttendStaff[] = []
   let totalAttended = 0
   const buMap = new Map<string, { totalConfirmed: number; attended: number }>()
 
   for (const staff of roster) {
-    const attended = attendedStaffIds.has(staff.staffId.toUpperCase())
+    const attended = attendedStaffIds.has(normalizeStaffIdKey(staff.staffId))
     if (attended) totalAttended++
 
     const bu = buMap.get(staff.businessUnit) || { totalConfirmed: 0, attended: 0 }

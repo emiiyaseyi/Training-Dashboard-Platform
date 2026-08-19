@@ -17,6 +17,7 @@ import {
   LogOut,
   UserCircle,
   UserX,
+  Mail,
 } from 'lucide-react'
 import { hasAccess, type PageKey } from '@/lib/permissions'
 
@@ -31,6 +32,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
   { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
+  { href: '/admin/surveys',  label: 'Survey Automation',       icon: Mail,            page: 'admin-settings' },
   { href: '/admin',          label: 'Admin Settings',          icon: Settings,        page: 'admin-settings' },
 ]
 
