@@ -45,6 +45,27 @@ export interface SubscriptionRow {
   amount: number
 }
 
+export interface RosterRow {
+  staffId: string
+  staffName: string
+  businessUnit: string
+  role: string
+  department: string
+  joinDate: string | null // ISO date string, or null if unparseable
+  confirmed: boolean
+}
+
+export interface ManagerReviewRow {
+  staffId: string
+  staffName: string
+  businessUnit: string
+  training: string
+  managerName: string
+  impactScore: number // 0–5
+  comments: string
+  month: string
+}
+
 export interface ParseResult<T> {
   rows: T[]
   errors: string[]
@@ -58,6 +79,26 @@ function normalise(val: unknown): string {
 function toFloat(val: unknown): number {
   const n = parseFloat(String(val ?? '0').replace(/[^0-9.-]/g, ''))
   return isNaN(n) ? 0 : n
+}
+
+// Excel dates arrive either as a serial day-number (when the cell is date-formatted) or as a
+// plain string. Handles both; returns an ISO date string, or null if it can't be parsed.
+function parseExcelDate(val: unknown): string | null {
+  if (val === '' || val === null || val === undefined) return null
+  if (typeof val === 'number') {
+    // Excel serial date epoch: Dec 30 1899
+    const ms = Math.round((val - 25569) * 86400 * 1000)
+    const d = new Date(ms)
+    return isNaN(d.getTime()) ? null : d.toISOString()
+  }
+  const d = new Date(String(val))
+  return isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function parseConfirmed(val: unknown): boolean {
+  const s = String(val ?? '').trim().toLowerCase()
+  if (!s) return true // no column/empty — default to confirmed rather than silently dropping real staff
+  return !['no', 'false', 'unconfirmed', 'not confirmed', '0', 'n'].includes(s)
 }
 
 function findHeader(headers: string[], candidates: string[]): string | undefined {
@@ -325,6 +366,124 @@ export function parseKSSExcel(buffer: Buffer): ParseResult<KSSRow> {
       businessUnit:    normalise(r[col.bu!]),
       durationMinutes: Math.max(0, durationMinutes),
       month:           normalise(r[col.month ?? ''] ?? ''),
+    })
+  })
+
+  return { rows, errors, warnings }
+}
+
+// ── Staff Roster (feeds only the "Yet to Attend Training" report) ───────────
+
+export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+
+  const rows: RosterRow[] = []
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (raw.length === 0) {
+    errors.push('File contains no data rows.')
+    return { rows, errors, warnings }
+  }
+
+  const headers = Object.keys(raw[0])
+  const col = {
+    staffId:    findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id']),
+    name:       findHeader(headers, ['name', 'staffname', 'employeename', 'fullname']),
+    bu:         findHeader(headers, ['businessunit', 'businessunits', 'bu']),
+    role:       findHeader(headers, ['role', 'jobtitle', 'position', 'jobrole']),
+    dept:       findHeader(headers, ['department', 'dept', 'division', 'team']),
+    joinDate:   findHeader(headers, ['joindate', 'dateofjoining', 'startdate', 'employmentdate', 'hiredate']),
+    confirmed:  findHeader(headers, ['confirmed', 'confirmationstatus', 'isconfirmed', 'staffstatus', 'status']),
+  }
+
+  if (!col.name)     errors.push('Could not find a "Name" column.')
+  if (!col.bu)       errors.push('Could not find a "Business Unit" column.')
+  if (errors.length) return { rows, errors, warnings }
+
+  raw.forEach((r, i) => {
+    const lineNo = i + 2
+    const name = normalise(r[col.name!])
+    if (!name) { warnings.push(`Row ${lineNo}: Name is empty — skipped.`); return }
+
+    const staffId = normalise(r[col.staffId ?? ''] ?? '')
+    if (!staffId) warnings.push(`Row ${lineNo}: No Staff ID for "${name}" — using row index as fallback.`)
+
+    const joinDate = col.joinDate ? parseExcelDate(r[col.joinDate]) : null
+    if (col.joinDate && r[col.joinDate] && !joinDate) {
+      warnings.push(`Row ${lineNo}: Could not parse Join Date "${r[col.joinDate]}" for "${name}".`)
+    }
+
+    rows.push({
+      staffId:      staffId || `UNKNOWN_${i + 1}`,
+      staffName:    name,
+      businessUnit: normalise(r[col.bu!]),
+      role:         normalise(r[col.role ?? ''] ?? ''),
+      department:   normalise(r[col.dept ?? ''] ?? ''),
+      joinDate,
+      confirmed:    parseConfirmed(r[col.confirmed ?? '']),
+    })
+  })
+
+  return { rows, errors, warnings }
+}
+
+// ── Post-Training Manager Reviews (Post-Training Impact Score) ──────────────
+
+export function parseManagerReviewExcel(buffer: Buffer): ParseResult<ManagerReviewRow> {
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
+
+  const rows: ManagerReviewRow[] = []
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (raw.length === 0) {
+    errors.push('File contains no data rows.')
+    return { rows, errors, warnings }
+  }
+
+  const headers = Object.keys(raw[0])
+  const col = {
+    staffId:     findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id']),
+    name:        findHeader(headers, ['name', 'staffname', 'employeename', 'fullname']),
+    bu:          findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
+    training:    findHeader(headers, ['training', 'trainingname', 'trainingtitle', 'course', 'programme']),
+    manager:     findHeader(headers, ['managername', 'linemanager', 'reviewedby', 'manager', 'supervisor']),
+    impact:      findHeader(headers, ['posttrainingimpactscore', 'impactscore', 'impactrating', 'managerrating', 'impact', 'rating', 'score']),
+    comments:    findHeader(headers, ['comments', 'remarks', 'notes', 'observation']),
+    month:       findHeader(headers, ['month', 'reviewmonth', 'period']),
+  }
+
+  if (!col.name)     errors.push('Could not find a "Name" column.')
+  if (!col.bu)       errors.push('Could not find a "Business Unit" column.')
+  if (!col.training) errors.push('Could not find a "Training" column.')
+  if (!col.impact)   errors.push('Could not find an "Impact Score" column.')
+  if (errors.length) return { rows, errors, warnings }
+
+  raw.forEach((r, i) => {
+    const lineNo = i + 2
+    const name = normalise(r[col.name!])
+    if (!name) { warnings.push(`Row ${lineNo}: Name is empty — skipped.`); return }
+
+    const staffId = normalise(r[col.staffId ?? ''] ?? '')
+    if (!staffId) warnings.push(`Row ${lineNo}: No Staff ID for "${name}" — using row index as fallback.`)
+
+    const impactScore = toFloat(r[col.impact!])
+    if (impactScore > 5) warnings.push(`Row ${lineNo}: Impact score ${impactScore} > 5 for "${name}".`)
+
+    rows.push({
+      staffId:      staffId || `UNKNOWN_${i + 1}`,
+      staffName:    name,
+      businessUnit: normalise(r[col.bu!]),
+      training:     normalise(r[col.training!]),
+      managerName:  normalise(r[col.manager ?? ''] ?? ''),
+      impactScore:  Math.min(5, Math.max(0, impactScore)),
+      comments:     normalise(r[col.comments ?? ''] ?? ''),
+      month:        normalise(r[col.month ?? ''] ?? ''),
     })
   })
 

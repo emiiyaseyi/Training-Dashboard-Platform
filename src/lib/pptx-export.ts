@@ -134,8 +134,15 @@ function buildSlide2(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     { iconKey: 'graduationCap', title: 'Training Hours', value: `${h.totalFormalHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`, subtitle: 'From formal training programmes' },
     { iconKey: 'users', title: 'KSS Hours', value: `${h.totalKSSHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs`, subtitle: 'From knowledge sharing sessions', valueColor: C.green },
     { iconKey: 'timer', title: 'Avg Hours per Staff', value: `${h.avgHoursPerStaff.toFixed(1)} hrs`, subtitle: 'Average per employee with learning records', valueColor: C.gold },
+    {
+      iconKey: 'checkCircle',
+      title: 'Post-Training Impact',
+      value: data.postTrainingReviewCount > 0 ? rating(data.postTrainingImpactScore) : 'No data',
+      subtitle: data.postTrainingReviewCount > 0 ? `From ${data.postTrainingReviewCount} manager review${data.postTrainingReviewCount === 1 ? '' : 's'}` : 'Upload manager reviews to populate',
+      valueColor: C.green,
+    },
   ]
-  addTileGrid(slide, tiles, icons, 4, CONTENT_TOP, CONTENT_TOP + 1.6)
+  addTileGrid(slide, tiles, icons, 5, CONTENT_TOP, CONTENT_TOP + 1.6)
 
   const panelTop = CONTENT_TOP + 1.85
   const panelH = FOOTER_Y - 0.25 - panelTop
@@ -291,7 +298,10 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     slide.addText(`${bu.staffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
     slide.addText('Impact', { x: x + cardW / 2, y: statsY + 0.08, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 12, color: C.gray })
     slide.addText(rating(bu.avgImpactScore), { x: x + cardW / 2, y: statsY + 0.3, w: cardW / 2 - 0.3, h: 0.32, fontFace: 'Calibri', fontSize: 24, bold: true, color: C.green })
-    slide.addText('confidence', { x: x + cardW / 2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
+    slide.addText(
+      `confidence${bu.postTrainingImpactScore > 0 ? ` · Mgr ${rating(bu.postTrainingImpactScore)}` : ''}`,
+      { x: x + cardW / 2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray }
+    )
   })
 
   addFooter(slide, pageNumber, periodLabel)

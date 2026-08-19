@@ -16,18 +16,22 @@ import {
   Layers,
   LogOut,
   UserCircle,
+  UserX,
 } from 'lucide-react'
 import { hasAccess, type PageKey } from '@/lib/permissions'
 
+const ANALYTICS_PAGE_COUNT = 6
+
 const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
-  { href: '/',               label: 'Executive Overview',  icon: LayoutDashboard, page: 'executive-overview' },
-  { href: '/training',       label: 'Training Analytics',  icon: GraduationCap,   page: 'training-analytics' },
-  { href: '/subscriptions',  label: 'Subscriptions',       icon: BadgeCheck,      page: 'subscriptions' },
-  { href: '/business-units', label: 'Business Units',      icon: Building2,       page: 'business-units' },
-  { href: '/capabilities',   label: 'Capability Coverage', icon: Layers,          page: 'capability-coverage' },
-  { href: '/reports',        label: 'Report Generation',   icon: FileBarChart,    page: 'report-generation' },
-  { href: '/upload',         label: 'Upload & Data',       icon: Upload,          page: 'upload-data' },
-  { href: '/admin',          label: 'Admin Settings',      icon: Settings,        page: 'admin-settings' },
+  { href: '/',               label: 'Executive Overview',      icon: LayoutDashboard, page: 'executive-overview' },
+  { href: '/training',       label: 'Training Analytics',      icon: GraduationCap,   page: 'training-analytics' },
+  { href: '/subscriptions',  label: 'Subscriptions',           icon: BadgeCheck,      page: 'subscriptions' },
+  { href: '/business-units', label: 'Business Units',          icon: Building2,       page: 'business-units' },
+  { href: '/capabilities',   label: 'Capability Coverage',     icon: Layers,          page: 'capability-coverage' },
+  { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
+  { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
+  { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
+  { href: '/admin',          label: 'Admin Settings',          icon: Settings,        page: 'admin-settings' },
 ]
 
 export function Sidebar() {
@@ -43,8 +47,8 @@ export function Sidebar() {
   const visibleItems = navItems.filter(
     (item) => isSuperAdmin || hasAccess(session.user.permissions?.[item.page], 'view')
   )
-  const analyticsItems = visibleItems.filter((item) => navItems.indexOf(item) < 5)
-  const managementItems = visibleItems.filter((item) => navItems.indexOf(item) >= 5)
+  const analyticsItems = visibleItems.filter((item) => navItems.indexOf(item) < ANALYTICS_PAGE_COUNT)
+  const managementItems = visibleItems.filter((item) => navItems.indexOf(item) >= ANALYTICS_PAGE_COUNT)
 
   const renderLink = ({ href, label, icon: Icon }: (typeof navItems)[number]) => {
     const active = pathname === href

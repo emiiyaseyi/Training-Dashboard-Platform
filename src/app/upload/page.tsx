@@ -80,12 +80,18 @@ export default function UploadPage() {
     training: 'Training Cost',
     feedback: 'Training Feedback',
     subscription: 'Subscriptions',
+    kss: 'KSS',
+    roster: 'Staff Roster',
+    'manager-review': 'Manager Reviews',
   }
 
   const typeBadge: Record<string, string> = {
     training: 'bg-blue-100 text-blue-700',
     feedback: 'bg-purple-100 text-purple-700',
     subscription: 'bg-green-100 text-green-700',
+    kss: 'bg-amber-100 text-amber-700',
+    roster: 'bg-slate-200 text-slate-700',
+    'manager-review': 'bg-rose-100 text-rose-700',
   }
 
   return (
@@ -136,6 +142,18 @@ export default function UploadPage() {
             description="Headers: Staff ID, Name, Business Unit, In-Meeting Duration, Month — tracks internal learning hours"
             onSuccess={loadHistory}
           />
+          <FileUpload
+            endpoint="/api/upload/roster"
+            label="Staff Roster"
+            description="Headers: Staff ID, Name, Business Unit, Role, Department, Join Date, Confirmed — powers the Yet to Attend Training report only"
+            onSuccess={loadHistory}
+          />
+          <FileUpload
+            endpoint="/api/upload/manager-review"
+            label="Post-Training Manager Reviews"
+            description="Headers: Staff ID, Name, Business Unit, Training, Manager Name, Impact Score (0–5), Comments, Month — powers the Post-Training Impact Score"
+            onSuccess={loadHistory}
+          />
         </div>
 
         {/* Expected formats */}
@@ -160,6 +178,16 @@ export default function UploadPage() {
               title: 'KSS — Expected Columns',
               columns: ['Staff ID', 'Name', 'Business Unit', 'In-Meeting Duration', 'Month'],
               color: 'blue',
+            },
+            {
+              title: 'Staff Roster — Expected Columns',
+              columns: ['Staff ID', 'Name', 'Business Unit', 'Role', 'Department', 'Join Date', 'Confirmed (Yes/No)'],
+              color: 'purple',
+            },
+            {
+              title: 'Manager Reviews — Expected Columns',
+              columns: ['Staff ID', 'Name', 'Business Unit', 'Training', 'Manager Name', 'Impact Score (0–5)', 'Comments', 'Month'],
+              color: 'green',
             },
           ].map(({ title, columns, color }) => (
             <div key={title} className={`rounded-xl border border-${color}-100 bg-${color}-50 p-4`}>
