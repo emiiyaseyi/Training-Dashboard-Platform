@@ -31,8 +31,8 @@ function loadProdUrl() {
   const match = raw.match(/^PROD_DATABASE_URL=["']?(.+?)["']?\s*$/m)
   if (!match) throw new Error('PROD_DATABASE_URL not found in .env.production.local')
   const url = match[1]
-  if (url.includes('PROJECT_REF') || url.includes('PASSWORD')) {
-    throw new Error('.env.production.local still has the placeholder value — replace it with your real Supabase direct connection string first.')
+  if (url.includes('PROJECT_REF') || url.includes('PASSWORD') || !/^postgres(ql)?:\/\//.test(url)) {
+    throw new Error('.env.production.local still has a placeholder value, not a real connection string — open the file and replace it with your actual Supabase direct connection string (starts with postgresql://).')
   }
   return url
 }
@@ -48,6 +48,7 @@ async function run() {
   try {
     execSync('npx prisma generate', { stdio: 'inherit' })
 
+    process.env.DATABASE_URL = prodUrl
     Object.keys(require.cache).forEach((k) => { if (k.includes('@prisma/client') || k.includes('bcryptjs')) delete require.cache[k] })
     const { PrismaClient } = require('@prisma/client')
     const bcrypt = require('bcryptjs')
@@ -76,8 +77,23 @@ async function run() {
     }
   } finally {
     fs.writeFileSync(schemaPath, originalSchema)
-    execSync('npx prisma generate', { stdio: 'inherit' })
-    console.log('✓ Schema reverted: postgresql → sqlite (local dev restored)')
+    // On Windows, the query engine's file handle can take a moment to release after
+    // $disconnect() — retry a few times instead of letting a transient EPERM here mask
+    // whatever real error happened above (a finally-block throw replaces the original one).
+    let reverted = false
+    for (let attempt = 1; attempt <= 5 && !reverted; attempt++) {
+      try {
+        execSync('npx prisma generate', { stdio: 'inherit' })
+        reverted = true
+      } catch (err) {
+        if (attempt === 5) {
+          console.warn('⚠ Could not regenerate the local Prisma client automatically. Run `npx prisma generate` manually once nothing else is using node.')
+        } else {
+          await new Promise((r) => setTimeout(r, 1500))
+        }
+      }
+    }
+    if (reverted) console.log('✓ Schema reverted: postgresql → sqlite (local dev restored)')
   }
 }
 
