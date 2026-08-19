@@ -63,7 +63,7 @@ export default function YetToAttendPage() {
             'Business Unit': s.businessUnit,
             Role: s.role ?? '',
             Department: s.department ?? '',
-            'Join Date': s.joinDate ? new Date(s.joinDate).toLocaleDateString() : '',
+            'Employment Date': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString() : '',
           })),
         }],
         'yet_to_attend_training'
@@ -109,7 +109,7 @@ export default function YetToAttendPage() {
         {!data.hasRosterData ? (
           <AlertBadge
             variant="info"
-            message="No Staff Roster uploaded yet. Go to Upload & Data → Staff Roster to upload the current staff list (Staff ID, Name, Business Unit, Role, Department, Join Date, Confirmed). This report is additive — it doesn't affect any other report."
+            message="No Staff Roster uploaded yet. Go to Upload & Data → Staff Roster to upload the current staff list (Staff ID, First/Middle/Last Name, Business Unit, Role, Department, Employment Date, Confirmation Status). This report is additive — it doesn't affect any other report."
           />
         ) : (
           <>
@@ -211,9 +211,9 @@ export default function YetToAttendPage() {
                   { key: 'role', header: 'Role', render: (r) => (r.role as string) || '—' },
                   { key: 'department', header: 'Department', render: (r) => (r.department as string) || '—' },
                   {
-                    key: 'joinDate',
-                    header: 'Join Date',
-                    render: (r) => (r.joinDate ? new Date(r.joinDate as string).toLocaleDateString() : '—'),
+                    key: 'employmentDate',
+                    header: 'Employment Date',
+                    render: (r) => (r.employmentDate ? new Date(r.employmentDate as string).toLocaleDateString() : '—'),
                   },
                 ]}
                 data={filteredList as unknown as Record<string, unknown>[]}

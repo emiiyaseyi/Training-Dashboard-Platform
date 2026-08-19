@@ -145,7 +145,7 @@ export default function UploadPage() {
           <FileUpload
             endpoint="/api/upload/roster"
             label="Staff Roster"
-            description="Headers: Staff ID, Name, Business Unit, Role, Department, Join Date, Confirmed — powers the Yet to Attend Training report only"
+            description="Headers: Staff ID, First Name, Middle Name, Last Name, Business Unit, Role, Department, Employment Date, Confirmation Status — powers the Yet to Attend Training report only"
             onSuccess={loadHistory}
           />
           <FileUpload
@@ -181,7 +181,7 @@ export default function UploadPage() {
             },
             {
               title: 'Staff Roster — Expected Columns',
-              columns: ['Staff ID', 'Name', 'Business Unit', 'Role', 'Department', 'Join Date', 'Confirmed (Yes/No)'],
+              columns: ['Staff ID', 'First Name', 'Middle Name (optional)', 'Last Name', 'Business Unit', 'Role', 'Department', 'Employment Date', 'Confirmation Status (Yes/No/N-A)'],
               color: 'purple',
             },
             {

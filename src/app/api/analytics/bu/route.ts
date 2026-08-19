@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   const scope = buScopeFilter(session)
-  if (scope && scope !== bu) {
+  if (scope && !scope.includes(bu)) {
     return NextResponse.json({ error: 'You do not have access to this Business Unit.' }, { status: 403 })
   }
 

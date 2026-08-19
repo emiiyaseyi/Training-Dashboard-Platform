@@ -47,11 +47,13 @@ export interface SubscriptionRow {
 
 export interface RosterRow {
   staffId: string
-  staffName: string
+  firstName: string
+  middleName: string
+  lastName: string
   businessUnit: string
   role: string
   department: string
-  joinDate: string | null // ISO date string, or null if unparseable
+  employmentDate: string | null // ISO date string, or null if unparseable
   confirmed: boolean
 }
 
@@ -98,7 +100,7 @@ function parseExcelDate(val: unknown): string | null {
 function parseConfirmed(val: unknown): boolean {
   const s = String(val ?? '').trim().toLowerCase()
   if (!s) return true // no column/empty — default to confirmed rather than silently dropping real staff
-  return !['no', 'false', 'unconfirmed', 'not confirmed', '0', 'n'].includes(s)
+  return !['no', 'false', 'unconfirmed', 'not confirmed', '0', 'n', 'n/a', 'na'].includes(s)
 }
 
 function findHeader(headers: string[], candidates: string[]): string | undefined {
@@ -390,40 +392,46 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
 
   const headers = Object.keys(raw[0])
   const col = {
-    staffId:    findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id']),
-    name:       findHeader(headers, ['name', 'staffname', 'employeename', 'fullname']),
-    bu:         findHeader(headers, ['businessunit', 'businessunits', 'bu']),
-    role:       findHeader(headers, ['role', 'jobtitle', 'position', 'jobrole']),
-    dept:       findHeader(headers, ['department', 'dept', 'division', 'team']),
-    joinDate:   findHeader(headers, ['joindate', 'dateofjoining', 'startdate', 'employmentdate', 'hiredate']),
-    confirmed:  findHeader(headers, ['confirmed', 'confirmationstatus', 'isconfirmed', 'staffstatus', 'status']),
+    staffId:        findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id']),
+    firstName:      findHeader(headers, ['firstname', 'first']),
+    middleName:     findHeader(headers, ['middlename', 'middle']),
+    lastName:       findHeader(headers, ['lastname', 'surname', 'last']),
+    bu:             findHeader(headers, ['businessunit', 'businessunits', 'bu']),
+    role:           findHeader(headers, ['role', 'jobtitle', 'position', 'jobrole']),
+    dept:           findHeader(headers, ['department', 'dept', 'division', 'team']),
+    employmentDate: findHeader(headers, ['employmentdate', 'dateofemployment', 'joindate', 'dateofjoining', 'startdate', 'hiredate']),
+    confirmed:      findHeader(headers, ['confirmationstatus', 'confirmed', 'isconfirmed', 'staffstatus', 'status']),
   }
 
-  if (!col.name)     errors.push('Could not find a "Name" column.')
-  if (!col.bu)       errors.push('Could not find a "Business Unit" column.')
+  if (!col.firstName) errors.push('Could not find a "First Name" column.')
+  if (!col.lastName)  errors.push('Could not find a "Last Name" column.')
+  if (!col.bu)         errors.push('Could not find a "Business Unit" column.')
   if (errors.length) return { rows, errors, warnings }
 
   raw.forEach((r, i) => {
     const lineNo = i + 2
-    const name = normalise(r[col.name!])
-    if (!name) { warnings.push(`Row ${lineNo}: Name is empty — skipped.`); return }
+    const firstName = normalise(r[col.firstName!])
+    const lastName = normalise(r[col.lastName!])
+    if (!firstName && !lastName) { warnings.push(`Row ${lineNo}: First/Last Name both empty — skipped.`); return }
 
     const staffId = normalise(r[col.staffId ?? ''] ?? '')
-    if (!staffId) warnings.push(`Row ${lineNo}: No Staff ID for "${name}" — using row index as fallback.`)
+    if (!staffId) warnings.push(`Row ${lineNo}: No Staff ID for "${firstName} ${lastName}" — using row index as fallback.`)
 
-    const joinDate = col.joinDate ? parseExcelDate(r[col.joinDate]) : null
-    if (col.joinDate && r[col.joinDate] && !joinDate) {
-      warnings.push(`Row ${lineNo}: Could not parse Join Date "${r[col.joinDate]}" for "${name}".`)
+    const employmentDate = col.employmentDate ? parseExcelDate(r[col.employmentDate]) : null
+    if (col.employmentDate && r[col.employmentDate] && !employmentDate) {
+      warnings.push(`Row ${lineNo}: Could not parse Employment Date "${r[col.employmentDate]}" for "${firstName} ${lastName}".`)
     }
 
     rows.push({
-      staffId:      staffId || `UNKNOWN_${i + 1}`,
-      staffName:    name,
-      businessUnit: normalise(r[col.bu!]),
-      role:         normalise(r[col.role ?? ''] ?? ''),
-      department:   normalise(r[col.dept ?? ''] ?? ''),
-      joinDate,
-      confirmed:    parseConfirmed(r[col.confirmed ?? '']),
+      staffId:        staffId || `UNKNOWN_${i + 1}`,
+      firstName,
+      middleName:     normalise(r[col.middleName ?? ''] ?? ''),
+      lastName,
+      businessUnit:   normalise(r[col.bu!]),
+      role:           normalise(r[col.role ?? ''] ?? ''),
+      department:     normalise(r[col.dept ?? ''] ?? ''),
+      employmentDate,
+      confirmed:      parseConfirmed(r[col.confirmed ?? '']),
     })
   })
 

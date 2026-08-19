@@ -178,16 +178,18 @@ model ManagerReviewRecord {
 // confirmed roster against TrainingRecord attendance). Does not feed any other report.
 // Multiple uploads accumulate; the report always uses each staffId's most recent record.
 model StaffRosterRecord {
-  id           String    @id @default(cuid())
-  staffId      String
-  staffName    String
-  businessUnit String
-  role         String?
-  department   String?
-  joinDate     DateTime?
-  confirmed    Boolean   @default(true)
-  batchId      String
-  createdAt    DateTime  @default(now())
+  id             String    @id @default(cuid())
+  staffId        String
+  firstName      String
+  middleName     String?
+  lastName       String
+  businessUnit   String
+  role           String?
+  department     String?
+  employmentDate DateTime?
+  confirmed      Boolean   @default(true)
+  batchId        String
+  createdAt      DateTime  @default(now())
 
   batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 

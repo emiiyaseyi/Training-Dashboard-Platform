@@ -46,14 +46,16 @@ export async function POST(req: NextRequest) {
 
     await prisma.staffRosterRecord.createMany({
       data: normalizedRows.map((r) => ({
-        staffId:      r.staffId.toUpperCase(),
-        staffName:    r.staffName,
-        businessUnit: r.businessUnit,
-        role:         r.role || null,
-        department:   r.department || null,
-        joinDate:     r.joinDate ? new Date(r.joinDate) : null,
-        confirmed:    r.confirmed,
-        batchId:      batch.id,
+        staffId:        r.staffId.toUpperCase(),
+        firstName:      r.firstName,
+        middleName:     r.middleName || null,
+        lastName:       r.lastName,
+        businessUnit:   r.businessUnit,
+        role:           r.role || null,
+        department:     r.department || null,
+        employmentDate: r.employmentDate ? new Date(r.employmentDate) : null,
+        confirmed:      r.confirmed,
+        batchId:        batch.id,
       })),
     })
 

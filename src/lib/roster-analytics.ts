@@ -24,7 +24,11 @@ export interface YetToAttendStaff {
   businessUnit: string
   role: string | null
   department: string | null
-  joinDate: string | null
+  employmentDate: string | null
+}
+
+function fullName(r: { firstName: string; middleName: string | null; lastName: string }): string {
+  return [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ')
 }
 
 export interface BUAttendanceBreakdown {
@@ -46,7 +50,7 @@ export interface YetToAttendReport {
   availableYears: number[]
 }
 
-export async function computeYetToAttend(filter: PeriodFilter, buScope?: string | null): Promise<YetToAttendReport> {
+export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[] | null): Promise<YetToAttendReport> {
   const [allRoster, allTraining] = await Promise.all([
     prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } }),
     prisma.trainingRecord.findMany({ select: { staffId: true, year: true, month: true } }),
@@ -59,7 +63,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string 
   for (const r of allRoster) latestByStaffId.set(r.staffId, r)
 
   let roster = [...latestByStaffId.values()].filter((r) => r.confirmed)
-  if (buScope) roster = roster.filter((r) => r.businessUnit === buScope)
+  if (buScope) roster = roster.filter((r) => buScope.includes(r.businessUnit))
 
   let training = allTraining
   if (filter.mode !== 'all' && filter.year) {
@@ -87,11 +91,11 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string 
     if (!attended) {
       list.push({
         staffId: staff.staffId,
-        staffName: staff.staffName,
+        staffName: fullName(staff),
         businessUnit: staff.businessUnit,
         role: staff.role,
         department: staff.department,
-        joinDate: staff.joinDate ? staff.joinDate.toISOString() : null,
+        employmentDate: staff.employmentDate ? staff.employmentDate.toISOString() : null,
       })
     }
   }
