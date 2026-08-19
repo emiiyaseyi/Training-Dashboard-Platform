@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { parseTrainingExcel } from '@/lib/excel-parser'
-import { normalizeBUName } from '@/lib/bu-normalizer'
+import { importTrainingRows } from '@/lib/import-records'
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,71 +23,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File parsed but contained no valid rows.', warnings }, { status: 422 })
     }
 
-    // Derive year from the period or current year
-    const year = period ? parseInt(period.split('-')[0]) : new Date().getFullYear()
-
-    // Normalize BU names before storing
-    const normalizedRows = rows.map((r) => ({ ...r, businessUnit: normalizeBUName(r.businessUnit) }))
-
-    // Auto-create any new BusinessUnit records encountered
-    const buNames = [...new Set(normalizedRows.map((r) => r.businessUnit).filter(Boolean))]
-    for (const name of buNames) {
-      await prisma.businessUnit.upsert({
-        where: { name },
-        update: {},
-        create: { name, budget: 0, staffCount: 0 },
-      })
-    }
-
-    // Warn on Training Type / Capability values that don't match the configured taxonomies
-    const [knownTypes, knownCapabilities] = await Promise.all([
-      prisma.trainingType.findMany({ select: { name: true } }),
-      prisma.differentiatingCapability.findMany({ select: { name: true } }),
-    ])
-    const knownTypeNames = new Set(knownTypes.map((t) => t.name.toLowerCase()))
-    const knownCapabilityNames = new Set(knownCapabilities.map((c) => c.name.toLowerCase()))
-    normalizedRows.forEach((r, i) => {
-      if (r.trainingType && !knownTypeNames.has(r.trainingType.toLowerCase())) {
-        warnings.push(`Row ${i + 2}: Training Type "${r.trainingType}" not recognised — check Admin → Training Types.`)
-      }
-      if (r.capability && !knownCapabilityNames.has(r.capability.toLowerCase())) {
-        warnings.push(`Row ${i + 2}: Differentiating Capability "${r.capability}" not recognised — check Admin → Capabilities.`)
-      }
-    })
-
-    // Create upload batch
-    const batch = await prisma.uploadBatch.create({
-      data: {
-        type: 'training',
-        filename: file.name,
-        recordCount: normalizedRows.length,
-        period: period || null,
-      },
-    })
-
-    // Bulk insert records
-    await prisma.trainingRecord.createMany({
-      data: normalizedRows.map((r) => ({
-        serialNo:    r.serialNo,
-        staffName:   r.staffName,
-        staffId:     r.staffId.toUpperCase(),
-        training:    r.training,
-        businessUnit:r.businessUnit,
-        month:       r.month,
-        year,
-        cost:        r.cost,
-        hours:       r.hours > 0 ? r.hours : null,
-        trainingType:r.trainingType || null,
-        capability:  r.capability || null,
-        batchId:     batch.id,
-      })),
-    })
+    const result = await importTrainingRows(rows, file.name, period || null, warnings)
 
     return NextResponse.json({
       success: true,
-      batchId: batch.id,
-      recordCount: normalizedRows.length,
-      warnings,
+      batchId: result.batchId,
+      recordCount: result.recordCount,
+      warnings: result.warnings,
     })
   } catch (err) {
     console.error('[upload/training]', err)

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { parseFeedbackExcel } from '@/lib/excel-parser'
-import { normalizeBUName } from '@/lib/bu-normalizer'
+import { importFeedbackRows } from '@/lib/import-records'
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,49 +23,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File parsed but contained no valid rows.', warnings }, { status: 422 })
     }
 
-    const normalizedRows = rows.map((r) => ({ ...r, businessUnit: normalizeBUName(r.businessUnit) }))
-
-    const buNames = [...new Set(normalizedRows.map((r) => r.businessUnit).filter(Boolean))]
-    for (const name of buNames) {
-      await prisma.businessUnit.upsert({
-        where: { name },
-        update: {},
-        create: { name, budget: 0, staffCount: 0 },
-      })
-    }
-
-    const batch = await prisma.uploadBatch.create({
-      data: {
-        type: 'feedback',
-        filename: file.name,
-        recordCount: normalizedRows.length,
-        period: period || null,
-      },
-    })
-
-    await prisma.feedbackRecord.createMany({
-      data: normalizedRows.map((r) => ({
-        businessUnit:        r.businessUnit,
-        trainingTitle:       r.trainingTitle,
-        role:                r.role,
-        applicationResponse: r.applicationResponse,
-        impactAlignment:     r.impactAlignment,
-        confidenceRating:    r.confidenceRating > 0 ? r.confidenceRating : null,
-        roleRelevance:       r.roleRelevance   > 0 ? r.roleRelevance   : null,
-        expectationsMet:     r.expectationsMet > 0 ? r.expectationsMet : null,
-        vendorRating:        r.vendorRating    > 0 ? r.vendorRating    : null,
-        vendorName:          r.vendorName       || null,
-        qualitativeResponse: r.qualitativeResponse,
-        month:               r.month || null,
-        batchId:             batch.id,
-      })),
-    })
+    const result = await importFeedbackRows(rows, file.name, period || null, warnings)
 
     return NextResponse.json({
       success: true,
-      batchId: batch.id,
-      recordCount: normalizedRows.length,
-      warnings,
+      batchId: result.batchId,
+      recordCount: result.recordCount,
+      warnings: result.warnings,
     })
   } catch (err) {
     console.error('[upload/feedback]', err)

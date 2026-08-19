@@ -40,6 +40,8 @@ export function GoogleSheetsPanel() {
   const [errors, setErrors] = useState<ValidateError[]>([])
   const [tabTitles, setTabTitles] = useState<string[]>([])
   const [saved, setSaved] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ success: boolean; imported: Record<string, number> } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -108,6 +110,23 @@ export function GoogleSheetsPanel() {
       setLastCheckedAt(new Date().toISOString())
     } finally {
       setValidating(false)
+    }
+  }
+
+  const syncNow = async () => {
+    if (!confirm('Import data from the spreadsheet now? Each sync adds new records — like uploading a fresh Excel file — it does not replace or de-duplicate previous imports. Manage duplicates via Upload History if needed.')) return
+    setSyncing(true)
+    setSyncResult(null)
+    setErrors([])
+    try {
+      const res = await fetch('/api/admin/google-sheets/sync', { method: 'POST' })
+      const data = await res.json()
+      setSyncResult({ success: !!data.success, imported: data.imported || {} })
+      setErrors(data.errors || [])
+      setLastStatus(data.success ? 'success' : 'error')
+      setLastCheckedAt(new Date().toISOString())
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -218,13 +237,29 @@ export function GoogleSheetsPanel() {
               Validate Connection
             </button>
             <button
-              disabled
-              title="Sync engine coming soon — validate the connection first"
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-400 border border-slate-200 rounded-lg px-3 py-1.5 cursor-not-allowed"
+              onClick={syncNow}
+              disabled={syncing || !state.spreadsheetUrl.trim()}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
             >
-              Sync Now (coming soon)
+              {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Sync Now
             </button>
           </div>
+
+          {syncResult && (
+            <div
+              className={`text-xs rounded-lg px-3 py-2.5 border ${
+                syncResult.success
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                  : 'text-amber-800 bg-amber-50 border-amber-200'
+              }`}
+            >
+              {Object.keys(syncResult.imported).length > 0
+                ? `Imported: ${Object.entries(syncResult.imported).map(([k, v]) => `${v} ${k}`).join(', ')}.`
+                : 'No new records imported.'}
+              {!syncResult.success && ' Some tabs had issues — see below.'}
+            </div>
+          )}
 
           {lastStatus && (
             <div
