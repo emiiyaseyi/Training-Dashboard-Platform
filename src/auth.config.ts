@@ -25,27 +25,8 @@ export const authConfig = {
       }
       return true
     },
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-        token.staffId = user.staffId
-        token.isSuperAdmin = user.isSuperAdmin
-        token.businessUnitScope = user.businessUnitScope
-        token.mustChangePassword = user.mustChangePassword
-        token.permissions = user.permissions
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string
-        session.user.staffId = token.staffId as string | null
-        session.user.isSuperAdmin = token.isSuperAdmin as boolean
-        session.user.businessUnitScope = token.businessUnitScope as string
-        session.user.mustChangePassword = token.mustChangePassword as boolean
-        session.user.permissions = token.permissions as Record<string, string>
-      }
-      return session
-    },
+    // jwt/session enrichment callbacks live in auth.ts, not here — they need Prisma to refresh
+    // custom fields (e.g. after a password change), and Prisma isn't Edge-safe. Middleware only
+    // needs `authorized` above, which just checks whether a session exists.
   },
 } satisfies NextAuthConfig

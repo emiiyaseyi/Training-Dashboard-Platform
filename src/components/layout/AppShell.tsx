@@ -13,12 +13,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
   const isLoginPage = pathname === '/login'
 
-  useEffect(() => {
-    if (session?.user?.mustChangePassword && pathname !== '/account' && pathname !== '/login') {
-      router.push('/account')
-    }
-  }, [session, pathname, router])
-
   // Defense in depth: middleware normally redirects unauthenticated requests to /login before
   // this ever renders, but a stale/undecryptable session cookie (e.g. left over from before
   // AUTH_SECRET was set) can leave the client stuck "logged out" without a server redirect.

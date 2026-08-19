@@ -61,7 +61,7 @@ export default function AccountPage() {
 
       {forced && (
         <div className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          Your admin requires you to set a new password before continuing.
+          You&apos;re still using the default password. Consider setting your own below whenever you&apos;re ready.
         </div>
       )}
 
