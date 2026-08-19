@@ -51,4 +51,43 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user, trigger }) {
+      if (user) {
+        token.id = user.id
+        token.staffId = user.staffId
+        token.isSuperAdmin = user.isSuperAdmin
+        token.businessUnitScope = user.businessUnitScope
+        token.mustChangePassword = user.mustChangePassword
+        token.permissions = user.permissions
+      } else if (trigger === 'update' && token.id) {
+        // Re-read from the DB so a password change or admin-side permission edit takes effect
+        // immediately, without needing a full sign-out/sign-in.
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          include: { permissions: true },
+        })
+        if (fresh) {
+          token.staffId = fresh.staffId
+          token.isSuperAdmin = fresh.isSuperAdmin
+          token.businessUnitScope = fresh.businessUnitScope
+          token.mustChangePassword = fresh.mustChangePassword
+          token.permissions = Object.fromEntries(fresh.permissions.map((p) => [p.page, p.level]))
+        }
+      }
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string
+        session.user.staffId = token.staffId as string | null
+        session.user.isSuperAdmin = token.isSuperAdmin as boolean
+        session.user.businessUnitScope = token.businessUnitScope as string
+        session.user.mustChangePassword = token.mustChangePassword as boolean
+        session.user.permissions = token.permissions as Record<string, string>
+      }
+      return session
+    },
+  },
 })
