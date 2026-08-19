@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { hasServiceAccountCredentials, serviceAccountEmail } from '@/lib/google-sheets'
+import { hasServiceAccountCredentials, serviceAccountEmail, privateKeyDiagnostics } from '@/lib/google-sheets'
 
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
@@ -13,6 +13,7 @@ export async function GET() {
     lastSyncErrors: config?.lastSyncErrors ? JSON.parse(config.lastSyncErrors) : [],
     serverHasCredentials: hasServiceAccountCredentials(),
     serviceAccountEmail: serviceAccountEmail(),
+    privateKeyDiagnostics: privateKeyDiagnostics(),
   })
 }
 
