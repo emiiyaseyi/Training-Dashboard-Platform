@@ -11,6 +11,7 @@ import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
+import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
 
 interface BU {
   id: string
@@ -643,6 +644,9 @@ export default function AdminPage() {
           </div>
           <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
         </Link>
+
+        {/* Data quality audit */}
+        <DataQualityAudit />
 
         {/* Live Google Sheets data source */}
         <GoogleSheetsPanel />
