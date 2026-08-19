@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
-import { connectToSpreadsheet } from '@/lib/google-sheets'
+import { connectToSpreadsheet, type SheetsConnection } from '@/lib/google-sheets'
 import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
 import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
@@ -61,13 +61,119 @@ async function fetchSheetAsBuffer(spreadsheetId: string, sheetName: string, acce
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
+type JobType = 'training' | 'feedback' | 'subscription' | 'kss'
+interface Job { type: JobType; sheetName: string; label: string }
+
+function jobsFor(config: { trainingSheetName: string; feedbackSheetName: string; subscriptionSheetName: string; kssSheetName: string }): Job[] {
+  return [
+    { type: 'training', sheetName: config.trainingSheetName, label: 'Training Cost' },
+    { type: 'feedback', sheetName: config.feedbackSheetName, label: 'Feedback' },
+    { type: 'subscription', sheetName: config.subscriptionSheetName, label: 'Subscriptions' },
+    { type: 'kss', sheetName: config.kssSheetName, label: 'KSS' },
+  ]
+}
+
+async function connectOrThrow(spreadsheetUrl: string | null): Promise<SheetsConnection> {
+  if (!spreadsheetUrl) throw new Error('No Google Sheet configured yet.')
+  return connectToSpreadsheet(spreadsheetUrl)
+}
+
+function trainingSample(rows: TrainingRow[]) {
+  return rows.slice(0, 5).map((r) => ({ Name: r.staffName, Training: r.training, 'Business Unit': r.businessUnit, Month: r.month, Cost: r.cost }))
+}
+function feedbackSample(rows: FeedbackRow[]) {
+  return rows.slice(0, 5).map((r) => ({ 'Business Unit': r.businessUnit, 'Training Title': r.trainingTitle, Month: r.month, Rating: r.confidenceRating || '—' }))
+}
+function subscriptionSample(rows: SubscriptionRow[]) {
+  return rows.slice(0, 5).map((r) => ({ Name: r.staffName, 'Business Unit': r.businessUnit, Organization: r.membershipOrg, Amount: r.amount }))
+}
+function kssSample(rows: KSSRow[]) {
+  return rows.slice(0, 5).map((r) => ({ Name: r.staffName, 'Business Unit': r.businessUnit, 'Duration (min)': r.durationMinutes, Month: r.month }))
+}
+
+export interface SheetPreview {
+  type: JobType
+  label: string
+  sheetName: string
+  totalRows: number
+  newRows: number
+  alreadyImported: number
+  sample: Record<string, string | number>[]
+  error?: string
+}
+
+export interface SyncPreviewResult {
+  success: boolean
+  connectionError?: string
+  spreadsheetTitle?: string
+  sheets: SheetPreview[]
+}
+
+// Read-only — fetches, parses, and de-dupes each tab, but never writes to the database. Powers
+// the "Preview" step so the admin can see exactly what would be imported before confirming.
+export async function previewGoogleSheetsSync(): Promise<SyncPreviewResult> {
+  const config = await prisma.googleSheetsConfig.findFirst()
+  let connection: SheetsConnection
+  try {
+    connection = await connectOrThrow(config?.spreadsheetUrl ?? null)
+  } catch (err) {
+    return { success: false, connectionError: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.', sheets: [] }
+  }
+
+  const sheets: SheetPreview[] = []
+
+  for (const job of jobsFor(config!)) {
+    const base = { type: job.type, label: job.label, sheetName: job.sheetName || '' }
+    if (!job.sheetName?.trim()) {
+      sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: 'No tab name configured.' })
+      continue
+    }
+    if (!connection.tabTitles.includes(job.sheetName.trim())) {
+      sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: `Tab "${job.sheetName}" not found in the spreadsheet.` })
+      continue
+    }
+    try {
+      const buffer = await fetchSheetAsBuffer(connection.spreadsheetId, job.sheetName.trim(), connection.accessToken)
+
+      if (job.type === 'training') {
+        const { rows, errors } = parseTrainingExcel(buffer)
+        if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
+        const newRows = await dedupeTraining(rows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: trainingSample(newRows) })
+      } else if (job.type === 'feedback') {
+        const { rows, errors } = parseFeedbackExcel(buffer)
+        if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
+        const newRows = await dedupeFeedback(rows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: feedbackSample(newRows) })
+      } else if (job.type === 'subscription') {
+        const { rows, errors } = parseSubscriptionExcel(buffer)
+        if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
+        const newRows = await dedupeSubscription(rows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: subscriptionSample(newRows) })
+      } else if (job.type === 'kss') {
+        const { rows, errors } = parseKSSExcel(buffer)
+        if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
+        const newRows = await dedupeKSS(rows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: kssSample(newRows) })
+      }
+    } catch (err) {
+      sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: err instanceof Error ? err.message : 'Failed to read this tab.' })
+    }
+  }
+
+  return { success: sheets.every((s) => !s.error), spreadsheetTitle: connection.spreadsheetTitle, sheets }
+}
+
 export interface SyncResult {
   success: boolean
   imported: Record<string, number>
   errors: { sheet: string; message: string }[]
 }
 
-export async function syncFromGoogleSheets(): Promise<SyncResult> {
+// Writes to the database — call after the admin has reviewed previewGoogleSheetsSync()'s output
+// and confirmed. Re-fetches and re-dedupes at commit time (rather than trusting the preview's
+// snapshot) so a stale preview can never double-import if the sheet changed in between.
+export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'manual'): Promise<SyncResult> {
   const config = await prisma.googleSheetsConfig.findFirst()
   if (!config?.spreadsheetUrl) {
     return { success: false, imported: {}, errors: [{ sheet: 'Connection', message: 'No Google Sheet configured yet.' }] }
@@ -75,8 +181,9 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
 
   const errors: { sheet: string; message: string }[] = []
   const imported: Record<string, number> = {}
+  const batchIds: string[] = []
 
-  let connection
+  let connection: SheetsConnection
   try {
     connection = await connectToSpreadsheet(config.spreadsheetUrl)
   } catch (err) {
@@ -87,17 +194,10 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
     }
   }
 
-  const jobs = [
-    { type: 'training' as const, sheetName: config.trainingSheetName, label: 'Training Cost' },
-    { type: 'feedback' as const, sheetName: config.feedbackSheetName, label: 'Feedback' },
-    { type: 'subscription' as const, sheetName: config.subscriptionSheetName, label: 'Subscriptions' },
-    { type: 'kss' as const, sheetName: config.kssSheetName, label: 'KSS' },
-  ]
-
   const filenamePrefix = `Google Sheets — ${connection.spreadsheetTitle}`
   const today = new Date().toISOString().slice(0, 10)
 
-  for (const job of jobs) {
+  for (const job of jobsFor(config)) {
     if (!job.sheetName?.trim()) {
       errors.push({ sheet: job.label, message: 'No tab name configured.' })
       continue
@@ -119,6 +219,7 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
         if (newRows.length === 0) { imported.training = 0; continue }
         const result = await importTrainingRows(newRows, filename, null, warnings)
         imported.training = result.recordCount
+        batchIds.push(result.batchId)
       } else if (job.type === 'feedback') {
         const { rows, errors: parseErrors, warnings } = parseFeedbackExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
@@ -127,6 +228,7 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
         if (newRows.length === 0) { imported.feedback = 0; continue }
         const result = await importFeedbackRows(newRows, filename, null, warnings)
         imported.feedback = result.recordCount
+        batchIds.push(result.batchId)
       } else if (job.type === 'subscription') {
         const { rows, errors: parseErrors, warnings } = parseSubscriptionExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
@@ -135,6 +237,7 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
         if (newRows.length === 0) { imported.subscription = 0; continue }
         const result = await importSubscriptionRows(newRows, filename, null, warnings)
         imported.subscription = result.recordCount
+        batchIds.push(result.batchId)
       } else if (job.type === 'kss') {
         const { rows, errors: parseErrors, warnings } = parseKSSExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
@@ -143,6 +246,7 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
         if (newRows.length === 0) { imported.kss = 0; continue }
         const result = await importKSSRows(newRows, filename, null, warnings)
         imported.kss = result.recordCount
+        batchIds.push(result.batchId)
       }
     } catch (err) {
       errors.push({ sheet: job.label, message: err instanceof Error ? err.message : 'Sync failed for this tab.' })
@@ -159,6 +263,27 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
       lastSyncErrors: JSON.stringify(errors),
     },
   })
+
+  await prisma.googleSheetsSyncLog.create({
+    data: {
+      trigger,
+      success,
+      imported: JSON.stringify(imported),
+      errors: JSON.stringify(errors),
+      batchIds: JSON.stringify(batchIds),
+    },
+  })
+
+  // Keep only the 5 most recent runs — this only prunes the log/undo trail, never the imported
+  // records themselves (those stay in Upload History regardless of how old the sync log is).
+  const staleLogEntries = await prisma.googleSheetsSyncLog.findMany({
+    orderBy: { syncedAt: 'desc' },
+    skip: 5,
+    select: { id: true },
+  })
+  if (staleLogEntries.length > 0) {
+    await prisma.googleSheetsSyncLog.deleteMany({ where: { id: { in: staleLogEntries.map((e) => e.id) } } })
+  }
 
   return { success, imported, errors }
 }

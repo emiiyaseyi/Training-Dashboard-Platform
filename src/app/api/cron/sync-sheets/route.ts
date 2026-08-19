@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await syncFromGoogleSheets()
+    const result = await syncFromGoogleSheets('scheduled')
     return NextResponse.json(result)
   } catch (err) {
     console.error('[cron/sync-sheets]', err)

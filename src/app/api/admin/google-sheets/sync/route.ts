@@ -8,7 +8,7 @@ export async function POST() {
   if (gate instanceof NextResponse) return gate
 
   try {
-    const result = await syncFromGoogleSheets()
+    const result = await syncFromGoogleSheets('manual')
     return NextResponse.json(result)
   } catch (err) {
     console.error('[admin/google-sheets/sync]', err)
