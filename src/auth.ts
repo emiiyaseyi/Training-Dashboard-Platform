@@ -18,7 +18,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const password = typeof credentials?.password === 'string' ? credentials.password : ''
         const idAsStaffId = normalizeStaffId(rawIdentifier)
         const idAsEmail = normalizeEmail(rawIdentifier)
-        if (!idAsStaffId && !idAsEmail) return null
+        console.log('[auth/authorize] rawIdentifier length:', rawIdentifier.length, 'idAsStaffId:', idAsStaffId, 'idAsEmail:', idAsEmail)
+        if (!idAsStaffId && !idAsEmail) {
+          console.log('[auth/authorize] rejected: no parseable identifier')
+          return null
+        }
 
         const user = await prisma.user.findFirst({
           where: {
@@ -30,11 +34,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           },
           include: { permissions: true },
         })
-        if (!user) return null
+        if (!user) {
+          console.log('[auth/authorize] rejected: no matching active user')
+          return null
+        }
+        console.log('[auth/authorize] user found. requiresPassword:', user.requiresPassword, 'hasHash:', !!user.passwordHash, 'passwordLength:', password.length)
 
         if (user.requiresPassword) {
-          if (!password || !user.passwordHash) return null
+          if (!password || !user.passwordHash) {
+            console.log('[auth/authorize] rejected: missing password or hash on record')
+            return null
+          }
           const valid = await bcrypt.compare(password, user.passwordHash)
+          console.log('[auth/authorize] bcrypt.compare result:', valid)
           if (!valid) return null
         }
 
