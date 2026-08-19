@@ -10,6 +10,7 @@ import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { UserManagementPanel } from '@/components/admin/UserManagementPanel'
+import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
 
 interface BU {
   id: string
@@ -611,6 +612,9 @@ export default function AdminPage() {
 
         {/* User access & permissions */}
         <UserManagementPanel />
+
+        {/* Live Google Sheets data source */}
+        <GoogleSheetsPanel />
 
         {/* Budget calculation settings */}
         <BudgetSettingsPanel />
