@@ -19,15 +19,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [session, pathname, router])
 
+  // Defense in depth: middleware normally redirects unauthenticated requests to /login before
+  // this ever renders, but a stale/undecryptable session cookie (e.g. left over from before
+  // AUTH_SECRET was set) can leave the client stuck "logged out" without a server redirect.
+  // Push to /login ourselves rather than rendering a permanently empty page.
+  useEffect(() => {
+    if (!isLoginPage && status === 'unauthenticated') {
+      router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`)
+    }
+  }, [status, isLoginPage, pathname, router])
+
   if (isLoginPage) {
     return <main className="w-full min-h-screen overflow-y-auto">{children}</main>
   }
 
-  if (status === 'loading' || !session?.user) {
+  if (status === 'loading' || status === 'unauthenticated' || !session?.user) {
     return (
       <>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto" />
+        <main className="flex-1 overflow-y-auto flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+        </main>
       </>
     )
   }
