@@ -21,6 +21,7 @@ const CANONICAL_NAMES: Record<string, string> = {
   'Meristem Wealth Manangement Limited':           'Meristem Wealth Management Limited',  // typo in source
   'MERISTEM WEALTH MANANGEMENT LIMITED':           'Meristem Wealth Management Limited',
   'Meristem Wealth Management':                    'Meristem Wealth Management Limited',
+  'NESI':                                          'Meristem Wealth Management Limited',
 
   // --- Meristem Registrars and Probate Services Limited ---
   'MRPSL':                                                    'Meristem Registrars and Probate Services Limited',
