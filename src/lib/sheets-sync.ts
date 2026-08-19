@@ -2,7 +2,44 @@ import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
 import { connectToSpreadsheet } from '@/lib/google-sheets'
 import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
+import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
+
+// Unlike manual file uploads (where re-uploading the same file twice is the admin's call), a
+// live sheet is re-read on every sync, so it would otherwise re-import the same rows forever.
+// Each function below drops rows that already have a matching record in the DB, keyed on the
+// fields that identify "the same event" for that data type.
+
+async function dedupeTraining(rows: TrainingRow[]): Promise<TrainingRow[]> {
+  const existing = await prisma.trainingRecord.findMany({ select: { staffId: true, training: true, cost: true } })
+  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.training.trim().toLowerCase()}|${r.cost}`))
+  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.training.trim().toLowerCase()}|${r.cost}`))
+}
+
+async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
+  // FeedbackRecord has no staffId field — the closest available fingerprint for "same response".
+  const existing = await prisma.feedbackRecord.findMany({
+    select: { businessUnit: true, trainingTitle: true, month: true, confidenceRating: true },
+  })
+  const seen = new Set(
+    existing.map((r) => `${r.businessUnit.trim().toLowerCase()}|${r.trainingTitle.trim().toLowerCase()}|${r.month ?? ''}|${r.confidenceRating ?? ''}`)
+  )
+  return rows.filter(
+    (r) => !seen.has(`${r.businessUnit.trim().toLowerCase()}|${r.trainingTitle.trim().toLowerCase()}|${r.month || ''}|${r.confidenceRating > 0 ? r.confidenceRating : ''}`)
+  )
+}
+
+async function dedupeSubscription(rows: SubscriptionRow[]): Promise<SubscriptionRow[]> {
+  const existing = await prisma.subscriptionRecord.findMany({ select: { staffId: true, membershipOrg: true, amount: true } })
+  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.membershipOrg.trim().toLowerCase()}|${r.amount}`))
+  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.membershipOrg.trim().toLowerCase()}|${r.amount}`))
+}
+
+async function dedupeKSS(rows: KSSRow[]): Promise<KSSRow[]> {
+  const existing = await prisma.kSSRecord.findMany({ select: { staffId: true, durationMinutes: true, month: true } })
+  const seen = new Set(existing.map((r) => `${r.staffId.toUpperCase()}|${r.durationMinutes}|${r.month ?? ''}`))
+  return rows.filter((r) => !seen.has(`${r.staffId.toUpperCase()}|${r.durationMinutes}|${r.month || ''}`))
+}
 
 // Pulls the full contents of a tab and reassembles it as an XLSX buffer so it can go through
 // the exact same parseXExcel() functions used for file uploads — the Sheets sync and the
@@ -78,25 +115,33 @@ export async function syncFromGoogleSheets(): Promise<SyncResult> {
         const { rows, errors: parseErrors, warnings } = parseTrainingExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const result = await importTrainingRows(rows, filename, null, warnings)
+        const newRows = await dedupeTraining(rows)
+        if (newRows.length === 0) { imported.training = 0; continue }
+        const result = await importTrainingRows(newRows, filename, null, warnings)
         imported.training = result.recordCount
       } else if (job.type === 'feedback') {
         const { rows, errors: parseErrors, warnings } = parseFeedbackExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const result = await importFeedbackRows(rows, filename, null, warnings)
+        const newRows = await dedupeFeedback(rows)
+        if (newRows.length === 0) { imported.feedback = 0; continue }
+        const result = await importFeedbackRows(newRows, filename, null, warnings)
         imported.feedback = result.recordCount
       } else if (job.type === 'subscription') {
         const { rows, errors: parseErrors, warnings } = parseSubscriptionExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const result = await importSubscriptionRows(rows, filename, null, warnings)
+        const newRows = await dedupeSubscription(rows)
+        if (newRows.length === 0) { imported.subscription = 0; continue }
+        const result = await importSubscriptionRows(newRows, filename, null, warnings)
         imported.subscription = result.recordCount
       } else if (job.type === 'kss') {
         const { rows, errors: parseErrors, warnings } = parseKSSExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const result = await importKSSRows(rows, filename, null, warnings)
+        const newRows = await dedupeKSS(rows)
+        if (newRows.length === 0) { imported.kss = 0; continue }
+        const result = await importKSSRows(newRows, filename, null, warnings)
         imported.kss = result.recordCount
       }
     } catch (err) {

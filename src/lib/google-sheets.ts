@@ -21,6 +21,28 @@ export function serviceAccountEmail(): string | null {
   return process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null
 }
 
+// Private keys pasted into web forms (like Vercel's env var UI) frequently lose their real
+// line breaks — collapsed onto one line, or with escaped "\n" text instead of actual newlines.
+// Node's crypto decoder rejects a PEM key that isn't formatted exactly right (the
+// "DECODER routines::unsupported" error), so rebuild it from scratch from whatever we're given.
+function normalizePrivateKey(raw: string): string {
+  let key = raw.trim()
+  // Strip surrounding quotes, in case the whole env var value was pasted including them.
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1)
+  }
+  key = key.replace(/\\n/g, '\n')
+
+  const match = key.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----([\s\S]*?)-----END (?:RSA )?PRIVATE KEY-----/)
+  if (match) {
+    const body = match[1].replace(/\s+/g, '')
+    const chunked = body.match(/.{1,64}/g)?.join('\n') ?? body
+    return `-----BEGIN PRIVATE KEY-----\n${chunked}\n-----END PRIVATE KEY-----\n`
+  }
+  // No recognisable header/footer at all — return as-is so the real error surfaces below.
+  return key
+}
+
 async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
@@ -31,11 +53,28 @@ async function getAccessToken(): Promise<string> {
         'service account email (Viewer access is enough).'
     )
   }
-  const key = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey
-  const client = new JWT({ email, key, scopes: [SHEETS_SCOPE] })
-  const token = await client.authorize()
-  if (!token.access_token) throw new Error('Failed to authenticate with Google — check the Service Account credentials.')
-  return token.access_token
+  const key = normalizePrivateKey(rawKey)
+  if (!key.includes('BEGIN PRIVATE KEY')) {
+    throw new Error(
+      'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY does not look like a valid private key (missing "-----BEGIN PRIVATE KEY-----"). ' +
+        'Re-copy the full "private_key" value from the downloaded JSON file, including the BEGIN/END lines.'
+    )
+  }
+  try {
+    const client = new JWT({ email, key, scopes: [SHEETS_SCOPE] })
+    const token = await client.authorize()
+    if (!token.access_token) throw new Error('Failed to authenticate with Google — check the Service Account credentials.')
+    return token.access_token
+  } catch (err) {
+    if (err instanceof Error && /DECODER|unsupported|PEM/i.test(err.message)) {
+      throw new Error(
+        'Could not parse GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY — it looks corrupted (a common issue when pasting into ' +
+          'Vercel\'s env var field). Re-copy the "private_key" value directly from the downloaded JSON file and paste ' +
+          'it in as one field value, then redeploy.'
+      )
+    }
+    throw err
+  }
 }
 
 export interface SheetsConnection {
