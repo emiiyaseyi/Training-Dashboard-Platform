@@ -233,6 +233,13 @@ model SurveySettings {
   reminderIntervalHours Int      @default(24)   // hours between reminder nudges for an unfilled, already-sent survey
   expiryEnabled         Boolean  @default(true) // whether an unfilled survey stops accepting responses after expiryDays
   expiryDays            Int      @default(7)    // days after the original send before an unfilled survey expires
+  // Last mirror-append outcome per stage — JSON: { success: boolean, message: string, at: string }.
+  // The submit route runs unauthenticated (public respondent-facing), so a mirror failure can't be
+  // surfaced to whoever just filled the form — this makes it visible to the admin instead, since it
+  // was previously only ever console.error'd server-side where nobody could see it.
+  preMirrorStatus   String?
+  post1MirrorStatus String?
+  post2MirrorStatus String?
   updatedAt             DateTime @updatedAt
 }
 
@@ -268,6 +275,13 @@ model SurveyResponse {
   stage       String
   answers     String // JSON: { [questionId]: string | string[] }
   submittedAt DateTime @default(now())
+
+  // Per-response Google Sheet mirror outcome — null mirrorSyncedAt means either mirroring isn't
+  // configured for this stage, or the last attempt failed (see mirrorError). Tracked per-response
+  // (not just per-stage) so a specific failed submission can be retried without re-submitting the
+  // form or double-creating its FeedbackRecord/ManagerReviewRecord.
+  mirrorSyncedAt DateTime?
+  mirrorError    String?
 
   attendee TrainingScheduleAttendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
 
