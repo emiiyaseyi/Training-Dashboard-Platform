@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Split, Loader2, AlertTriangle, CheckCircle, Plus, Trash2, History } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 interface TrainingOption { name: string; count: number }
 interface BreakdownRow { businessUnit: string; attendeeCount: number; share: number; perPersonAmount: number }
@@ -116,18 +117,12 @@ export function GroupCostDistribution() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-      <div className="flex items-center gap-3">
-        <Split className="w-5 h-5 text-slate-400" />
-        <div>
-          <p className="text-sm font-semibold text-slate-800">Other Investment Budget</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            For a group-wide training (e.g. a Summit or Leadership Cafe already uploaded with attendees but no per-person cost), enter the total amount spent —
-            it&apos;s distributed across Business Units proportional to each BU&apos;s attendee count for that training, and written back onto those records.
-          </p>
-        </div>
-      </div>
-
+    <SectionCard
+      icon={Split}
+      title="Other Investment Budget"
+      description="For a group-wide training (e.g. a Summit or Leadership Cafe already uploaded with attendees but no per-person cost), enter the total amount spent — it's distributed across Business Units proportional to each BU's attendee count for that training, and written back onto those records."
+    >
+      <div className="space-y-4">
       {!applied ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -294,6 +289,7 @@ export function GroupCostDistribution() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </SectionCard>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Sheet, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Undo2, History } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 interface ConfigState {
   spreadsheetUrl: string
@@ -234,18 +235,11 @@ export function GoogleSheetsPanel() {
   const totalNewRows = preview?.sheets.reduce((s, sh) => s + sh.newRows, 0) ?? 0
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-      <div className="flex items-start gap-3 mb-4">
-        <Sheet className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-slate-800">Live Data Source — Google Sheets</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Point the platform at a Google Sheet with one tab per data type. It will read the same columns as the
-            Excel upload templates.
-          </p>
-        </div>
-      </div>
-
+    <SectionCard
+      icon={Sheet}
+      title="Live Data Source — Google Sheets"
+      description="Point the platform at a Google Sheet with one tab per data type. It will read the same columns as the Excel upload templates."
+    >
       {loading ? (
         <p className="text-xs text-slate-400">Loading…</p>
       ) : (
@@ -580,6 +574,6 @@ export function GoogleSheetsPanel() {
           </div>
         </div>
       )}
-    </div>
+    </SectionCard>
   )
 }

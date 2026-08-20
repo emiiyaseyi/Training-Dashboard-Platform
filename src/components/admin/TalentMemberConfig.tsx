@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Users, Save } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 export function TalentMemberConfigPanel() {
   const currentYear = new Date().getFullYear()
@@ -38,17 +39,11 @@ export function TalentMemberConfigPanel() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-      <div className="flex items-center gap-3">
-        <Users className="w-5 h-5 text-slate-400" />
-        <div>
-          <p className="text-sm font-semibold text-slate-800">Talent Member (TM) Population</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Total headcount of staff classified as Talent Members, per year — used by the Talent Member Trainings report to calculate how many are trained vs. yet to be trained.
-          </p>
-        </div>
-      </div>
-
+    <SectionCard
+      icon={Users}
+      title="Talent Member (TM) Population"
+      description="Total headcount of staff classified as Talent Members, per year — used by the Talent Member Trainings report to calculate how many are trained vs. yet to be trained."
+    >
       <div className="flex items-end gap-4">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Year</label>
@@ -82,6 +77,6 @@ export function TalentMemberConfigPanel() {
         </button>
         {saved && <span className="text-xs text-green-600 font-medium">Saved</span>}
       </div>
-    </div>
+    </SectionCard>
   )
 }
