@@ -260,7 +260,8 @@ export function GoogleSheetsPanel() {
           )}
           {serverHasCredentials && serviceAccountEmail && (
             <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
-              Share your spreadsheet (Viewer access) with:{' '}
+              Share your spreadsheet with (in Google Sheets: <strong>Share</strong> → paste this email → set role to <strong>Editor</strong>, not Viewer —
+              survey forms and Training Schedule attendees write into this sheet, not just read from it):{' '}
               <span className="font-mono text-slate-700">{serviceAccountEmail}</span>
             </div>
           )}
