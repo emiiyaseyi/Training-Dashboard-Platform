@@ -24,7 +24,16 @@ export interface SendSurveyResult {
 // line manager instead (cc: employee + super admins), since that's the manager-authored
 // Post-Training Impact Score review, not a self-report. Marks each successfully-sent attendee's
 // stage timestamp so re-sending only targets who's left.
-export async function sendSurveyStage(scheduleId: string, stage: SurveyStage, attendeeIds?: string[]): Promise<SendSurveyResult> {
+//
+// onlyUnsent restricts to attendees who don't already have this stage's timestamp set — off by
+// default so a manual "send to all" click can deliberately resend as a reminder, but the
+// automated cron trigger always passes true so it never re-spams someone once they're sent.
+export async function sendSurveyStage(
+  scheduleId: string,
+  stage: SurveyStage,
+  attendeeIds?: string[],
+  onlyUnsent = false
+): Promise<SendSurveyResult> {
   if (!(await hasSmtpCredentials())) {
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
   }
@@ -50,7 +59,9 @@ export async function sendSurveyStage(scheduleId: string, stage: SurveyStage, at
   const recipientRole = surveyRecipientRole(stage)
   const result: SendSurveyResult = { sent: 0, skipped: [] }
 
-  for (const attendee of schedule.attendees) {
+  const targets = onlyUnsent ? schedule.attendees.filter((a) => !a[sentField]) : schedule.attendees
+
+  for (const attendee of targets) {
     const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
     const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
     const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail

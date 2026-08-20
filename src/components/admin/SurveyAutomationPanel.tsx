@@ -602,7 +602,8 @@ export function SurveyAutomationPanel() {
       </div>
 
       <p className="text-xs text-slate-400 px-1">
-        Automatic date-based triggering (Pre a week before, Post-1 a day after, Post-2 a month after) isn&apos;t built yet — use the send buttons above manually or in bulk for now.
+        A daily automated check also sends Pre (up to a week before start), Post-1 (from a day after end), and Post-2 (from a month after end) to
+        anyone who hasn&apos;t received that stage yet — the buttons above are for sending sooner or resending manually.
       </p>
     </div>
   )
