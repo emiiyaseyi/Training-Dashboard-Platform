@@ -16,6 +16,9 @@ interface SettingsState {
   preDaysBefore: number
   post1DaysAfter: number
   post2DaysAfter: number
+  reminderIntervalHours: number
+  expiryEnabled: boolean
+  expiryDays: number
 }
 
 interface Attendee {
@@ -98,6 +101,7 @@ export function SurveyAutomationPanel() {
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
+    reminderIntervalHours: 24, expiryEnabled: true, expiryDays: 7,
   })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -149,6 +153,9 @@ export function SurveyAutomationPanel() {
         preDaysBefore: data.preDaysBefore ?? 7,
         post1DaysAfter: data.post1DaysAfter ?? 1,
         post2DaysAfter: data.post2DaysAfter ?? 30,
+        reminderIntervalHours: data.reminderIntervalHours ?? 24,
+        expiryEnabled: data.expiryEnabled ?? true,
+        expiryDays: data.expiryDays ?? 7,
       })
     } finally {
       setLoadingSettings(false)
@@ -468,6 +475,43 @@ export function SurveyAutomationPanel() {
                     value={settings.post2DaysAfter}
                     onChange={(e) => setSettings({ ...settings, post2DaysAfter: Number(e.target.value) })}
                     className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Reminders</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                A daily nudge for anyone already sent a stage who hasn&apos;t responded yet. Stops once they respond or (if enabled) the survey expires.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-xs text-slate-500">
+                  Remind every (hours)
+                  <input
+                    type="number"
+                    min={1}
+                    value={settings.reminderIntervalHours}
+                    onChange={(e) => setSettings({ ...settings, reminderIntervalHours: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+                <label className="text-xs text-slate-500 flex flex-col">
+                  <span className="flex items-center gap-1.5 h-[18px]">
+                    <input
+                      type="checkbox"
+                      checked={settings.expiryEnabled}
+                      onChange={(e) => setSettings({ ...settings, expiryEnabled: e.target.checked })}
+                    />
+                    Expire unfilled surveys after (days)
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    disabled={!settings.expiryEnabled}
+                    value={settings.expiryDays}
+                    onChange={(e) => setSettings({ ...settings, expiryDays: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 disabled:opacity-50"
                   />
                 </label>
               </div>
@@ -864,11 +908,32 @@ export function SurveyAutomationPanel() {
                                     <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
-                                    {(['preSurveySentAt', 'post1SurveySentAt', 'post2SurveySentAt'] as const).map((f) => (
-                                      <td key={f} className="py-1.5 pr-3 text-center">
-                                        {a[f] ? <span className="text-emerald-600">✓</span> : <span className="text-slate-300">—</span>}
-                                      </td>
-                                    ))}
+                                    {([
+                                      ['preSurveySentAt', 'pre'],
+                                      ['post1SurveySentAt', 'post1'],
+                                      ['post2SurveySentAt', 'post2'],
+                                    ] as const).map(([f, stage]) => {
+                                      const cellKey = `${s.id}:${stage}:${a.id}`
+                                      return (
+                                        <td key={f} className="py-1.5 pr-3 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => sendStage(s.id, stage, [a.id])}
+                                            disabled={sendingKey === cellKey}
+                                            title={`${a[f] ? 'Resend' : 'Send'} ${STAGE_LABELS[stage]} to ${a.staffName}`}
+                                            className="hover:opacity-70 disabled:opacity-40"
+                                          >
+                                            {sendingKey === cellKey ? (
+                                              <Loader2 className="w-3 h-3 animate-spin text-slate-400 mx-auto" />
+                                            ) : a[f] ? (
+                                              <span className="text-emerald-600">✓</span>
+                                            ) : (
+                                              <span className="text-slate-300">—</span>
+                                            )}
+                                          </button>
+                                        </td>
+                                      )
+                                    })}
                                     <td className="py-1.5 text-right">
                                       <button onClick={() => removeAttendee(s.id, a.id)} className="text-slate-300 hover:text-red-600">
                                         <Trash2 className="w-3.5 h-3.5" />

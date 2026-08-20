@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { BookOpen, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 
 const STAGE_LABELS: Record<string, string> = {
   pre: 'Pre-Training Survey',
@@ -29,6 +29,7 @@ interface SurveyContext {
   trainingName: string
   businessUnit: string
   alreadyResponded: boolean
+  expired: boolean
   questions: Question[]
   autoFillValues: Record<string, string>
 }
@@ -177,6 +178,13 @@ export default function SurveyPage() {
               <AlertTriangle className="w-8 h-8 text-red-500 mb-3" />
               <p className="text-[18px] font-medium text-slate-800">{error}</p>
               <p className="text-[16px] text-slate-500 mt-1">If you think this is a mistake, contact your L&amp;D team.</p>
+            </div>
+          ) : !submitted && !context?.alreadyResponded && context?.expired ? (
+            <div className="flex flex-col items-center text-center py-6">
+              <Clock className="w-8 h-8 text-amber-500 mb-3" />
+              <p className="text-[18px] font-medium text-slate-800">This survey has expired.</p>
+              <p className="text-[16px] text-slate-500 mt-1">{context?.trainingName}</p>
+              <p className="text-[15px] text-slate-400 mt-2">If you still need to respond, contact your L&amp;D team.</p>
             </div>
           ) : submitted || context?.alreadyResponded ? (
             <div className="flex flex-col items-center text-center py-6">

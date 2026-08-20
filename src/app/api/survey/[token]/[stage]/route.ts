@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { surveyRecipientRole } from '@/lib/survey-email'
 import type { SurveyStage } from '@/lib/survey-email'
 import { getStageQuestions, type SurveyStageKey } from '@/lib/survey-questions'
+import { isSurveyExpired } from '@/lib/survey-expiry'
 
 const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
@@ -10,6 +11,12 @@ const RESPONDED_FIELD = {
   pre: 'preSurveyRespondedAt',
   post1: 'post1SurveyRespondedAt',
   post2: 'post2SurveyRespondedAt',
+} as const
+
+const SENT_FIELD = {
+  pre: 'preSurveySentAt',
+  post1: 'post1SurveySentAt',
+  post2: 'post2SurveySentAt',
 } as const
 
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control.
@@ -21,6 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     if (!VALID_STAGES.includes(stage as SurveyStage)) {
       return NextResponse.json({ error: 'Unknown survey stage.' }, { status: 400 })
     }
+    const stageKey = stage as SurveyStage
 
     const attendee = await prisma.trainingScheduleAttendee.findUnique({
       where: { surveyToken: token },
@@ -30,9 +38,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       return NextResponse.json({ error: 'This survey link is invalid or has expired.' }, { status: 404 })
     }
 
-    const recipientRole = surveyRecipientRole(stage as SurveyStage)
-    const alreadyResponded = !!attendee[RESPONDED_FIELD[stage as SurveyStage]]
-    const questions = alreadyResponded ? [] : await getStageQuestions(stage as SurveyStageKey)
+    const recipientRole = surveyRecipientRole(stageKey)
+    const alreadyResponded = !!attendee[RESPONDED_FIELD[stageKey]]
+    const expired = !alreadyResponded && (await isSurveyExpired(attendee[SENT_FIELD[stageKey]]))
+    const questions = alreadyResponded || expired ? [] : await getStageQuestions(stageKey as SurveyStageKey)
 
     const autoFillValues: Record<string, string> = {
       trainingName: attendee.schedule.trainingName,
@@ -51,6 +60,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       trainingName: attendee.schedule.trainingName,
       businessUnit: attendee.schedule.businessUnit,
       alreadyResponded,
+      expired,
       questions: questions.map((q) => ({
         id: q.id,
         section: q.section,

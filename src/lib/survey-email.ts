@@ -47,13 +47,15 @@ export function buildSurveyEmail(input: {
   startDate?: Date | string | null
   endDate?: Date | string | null
   trainingType?: string | null
+  isReminder?: boolean // prefixes the subject and adds a short nudge line — used by the daily reminder sweep
 }): { subject: string; html: string } {
-  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType } = input
+  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, isReminder } = input
   const firstName = firstNameOf(recipientName)
-  const subject = `${STAGE_LABELS[stage]}: ${trainingName}`
+  const subject = `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
 
   const wrap = (bodyHtml: string) => `
     <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1B1F3B; max-width: 560px;">
+      ${isReminder ? `<p style="color:#C9A24B;font-weight:600;">Reminder: we haven't received your response yet.</p>` : ''}
       ${bodyHtml}
     </div>
   `
