@@ -67,6 +67,7 @@ export function StaffDataQuality() {
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
   const [managerSearch, setManagerSearch] = useState('')
   const [rowQuery, setRowQuery] = useState('')
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -107,6 +108,7 @@ export function StaffDataQuality() {
   const startEdit = (r: StaffQualityRow) => {
     setEditingId(r.id)
     setManagerSearch('')
+    setSaveResult(null)
     setDraft({
       staffId: r.staffId, firstName: r.firstName, middleName: r.middleName || '', lastName: r.lastName,
       email: r.email || '', businessUnit: r.businessUnit, lineManagerStaffId: r.lineManagerStaffId || '',
@@ -116,20 +118,32 @@ export function StaffDataQuality() {
   const saveEdit = async () => {
     if (!editingId || !draft) return
     setSaving(true)
+    setSaveResult(null)
     try {
       const res = await fetch(`/api/admin/staff-quality/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
+        const sync = data.sheetSync as { attempted: boolean; success: boolean; reason?: string } | undefined
+        setSaveResult({
+          ok: true,
+          message: !sync?.attempted
+            ? 'Saved.'
+            : sync.success
+              ? 'Saved. Line Manager Name/Email updated in the comprehensive staff list sheet.'
+              : `Saved, but couldn't update the sheet: ${sync.reason || 'unknown reason'}`,
+        })
         setEditingId(null)
         setDraft(null)
         await load()
       } else {
-        const data = await res.json().catch(() => ({}))
-        alert(data.error || 'Failed to save.')
+        setSaveResult({ ok: false, message: data.error || 'Failed to save.' })
       }
+    } catch {
+      setSaveResult({ ok: false, message: 'Failed to save — network error.' })
     } finally {
       setSaving(false)
     }
@@ -185,6 +199,14 @@ export function StaffDataQuality() {
       {cleanResult !== null && (
         <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-emerald-700">
           Removed {cleanResult} duplicate record(s).
+        </div>
+      )}
+
+      {saveResult && (
+        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${
+          saveResult.ok ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
+        }`}>
+          {saveResult.message}
         </div>
       )}
 
