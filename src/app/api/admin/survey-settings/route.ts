@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { hasSmtpCredentials } from '@/lib/mailer'
 
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
@@ -9,11 +8,9 @@ export async function GET() {
 
   const settings = await prisma.surveySettings.findFirst()
   return NextResponse.json({
-    fromName: settings?.fromName || 'Meristem L&D',
     preSurveyFormUrl: settings?.preSurveyFormUrl || '',
     post1SurveyFormUrl: settings?.post1SurveyFormUrl || '',
     post2SurveyFormUrl: settings?.post2SurveyFormUrl || '',
-    smtpConfigured: hasSmtpCredentials(),
   })
 }
 
@@ -24,7 +21,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = {
-      fromName: body.fromName || 'Meristem L&D',
       preSurveyFormUrl: body.preSurveyFormUrl || null,
       post1SurveyFormUrl: body.post1SurveyFormUrl || null,
       post2SurveyFormUrl: body.post2SurveyFormUrl || null,

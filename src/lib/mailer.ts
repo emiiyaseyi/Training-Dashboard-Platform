@@ -1,23 +1,27 @@
 import nodemailer from 'nodemailer'
+import { prisma } from '@/lib/prisma'
 
-export function hasSmtpCredentials(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS)
+// SMTP is configured by the admin in-app (Admin Settings), not environment variables — it's a
+// platform-wide capability (surveys today, potentially other notifications later), and admins
+// need to be able to change/test it without a redeploy.
+
+export async function hasSmtpCredentials(): Promise<boolean> {
+  const s = await prisma.smtpSettings.findFirst()
+  return !!(s?.host && s?.port && s?.username && s?.password)
 }
 
-function getTransport() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
-  if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
-    throw new Error(
-      'SMTP is not configured on the server. Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS in environment variables, then redeploy.'
-    )
+async function getTransportAndSettings() {
+  const s = await prisma.smtpSettings.findFirst()
+  if (!s?.host || !s?.port || !s?.username || !s?.password) {
+    throw new Error('SMTP is not configured yet. Set it up in Admin Settings.')
   }
-  const port = parseInt(SMTP_PORT, 10)
-  return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port,
-    secure: port === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  const transport = nodemailer.createTransport({
+    host: s.host,
+    port: s.port,
+    secure: s.port === 465,
+    auth: { user: s.username, pass: s.password },
   })
+  return { transport, settings: s }
 }
 
 export interface SendMailInput {
@@ -29,9 +33,10 @@ export interface SendMailInput {
 }
 
 export async function sendMail({ to, cc, subject, html, fromName }: SendMailInput): Promise<void> {
-  const transport = getTransport()
-  const address = process.env.SMTP_FROM || process.env.SMTP_USER
-  const from = fromName ? `"${fromName}" <${address}>` : address
+  const { transport, settings } = await getTransportAndSettings()
+  const address = settings.fromAddress || settings.username || undefined
+  const name = fromName || settings.fromName
+  const from = name && address ? `"${name}" <${address}>` : address
   await transport.sendMail({
     from,
     to,

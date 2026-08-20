@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Mail, Loader2, CheckCircle2, AlertTriangle, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload,
 } from 'lucide-react'
 
 interface SettingsState {
-  fromName: string
   preSurveyFormUrl: string
   post1SurveyFormUrl: string
   post2SurveyFormUrl: string
@@ -38,6 +37,13 @@ interface Schedule {
   attendees: Attendee[]
 }
 
+interface RosterStaff {
+  staffId: string
+  name: string
+  email: string | null
+  lineManagerStaffId: string | null
+}
+
 const STAGE_LABELS: Record<'pre' | 'post1' | 'post2', string> = {
   pre: 'Pre-Training Survey',
   post1: 'Post-1 (Day 1, employee)',
@@ -48,15 +54,30 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString()
 }
 
+function csvEscape(val: string): string {
+  if (/[",\n]/.test(val)) return `"${val.replace(/"/g, '""')}"`
+  return val
+}
+
+function parseCSV(text: string): string[] {
+  // Accepts either a one-column file or a full export — just pulls every non-empty cell that
+  // isn't obviously a header label, so "Staff ID", "Email", or a plain list all work.
+  const lines = text.split(/\r\n|\n/).map((l) => l.trim()).filter(Boolean)
+  const values: string[] = []
+  for (const line of lines) {
+    const cell = line.split(',')[0].replace(/^"|"$/g, '').trim()
+    if (!cell) continue
+    if (/^staff ?id$|^email$|^identifier$/i.test(cell)) continue
+    values.push(cell)
+  }
+  return values
+}
+
 export function SurveyAutomationPanel() {
-  const [settings, setSettings] = useState<SettingsState>({ fromName: 'Meristem L&D', preSurveyFormUrl: '', post1SurveyFormUrl: '', post2SurveyFormUrl: '' })
-  const [smtpConfigured, setSmtpConfigured] = useState<boolean | null>(null)
+  const [settings, setSettings] = useState<SettingsState>({ preSurveyFormUrl: '', post1SurveyFormUrl: '', post2SurveyFormUrl: '' })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [testEmail, setTestEmail] = useState('')
-  const [sendingTest, setSendingTest] = useState(false)
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
@@ -64,9 +85,14 @@ export function SurveyAutomationPanel() {
   const [newSchedule, setNewSchedule] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '' })
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [attendeeInput, setAttendeeInput] = useState('')
+
+  const [roster, setRoster] = useState<RosterStaff[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [pending, setPending] = useState<RosterStaff[]>([])
   const [addingAttendees, setAddingAttendees] = useState(false)
   const [attendeeResult, setAttendeeResult] = useState<{ added: number; notFound: string[]; noEmail: string[] } | null>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
+
   const [sendingKey, setSendingKey] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
 
@@ -76,12 +102,10 @@ export function SurveyAutomationPanel() {
       const res = await fetch('/api/admin/survey-settings')
       const data = await res.json()
       setSettings({
-        fromName: data.fromName || 'Meristem L&D',
         preSurveyFormUrl: data.preSurveyFormUrl || '',
         post1SurveyFormUrl: data.post1SurveyFormUrl || '',
         post2SurveyFormUrl: data.post2SurveyFormUrl || '',
       })
-      setSmtpConfigured(!!data.smtpConfigured)
     } finally {
       setLoadingSettings(false)
     }
@@ -97,9 +121,15 @@ export function SurveyAutomationPanel() {
     }
   }
 
+  const loadRoster = async () => {
+    const res = await fetch('/api/admin/roster-directory')
+    setRoster(await res.json())
+  }
+
   useEffect(() => {
     loadSettings()
     loadSchedules()
+    loadRoster()
   }, [])
 
   const saveSettings = async () => {
@@ -115,23 +145,6 @@ export function SurveyAutomationPanel() {
       setTimeout(() => setSaved(false), 2000)
     } finally {
       setSavingSettings(false)
-    }
-  }
-
-  const sendTestEmail = async () => {
-    if (!testEmail.trim()) return
-    setSendingTest(true)
-    setTestResult(null)
-    try {
-      const res = await fetch('/api/admin/survey-settings/test-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: testEmail.trim() }),
-      })
-      const data = await res.json()
-      setTestResult({ success: res.ok, message: res.ok ? `Test email sent to ${testEmail.trim()}.` : data.error || 'Failed to send.' })
-    } finally {
-      setSendingTest(false)
     }
   }
 
@@ -162,8 +175,26 @@ export function SurveyAutomationPanel() {
     await loadSchedules()
   }
 
-  const addAttendees = async (scheduleId: string) => {
-    const identifiers = attendeeInput.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    const pendingIds = new Set(pending.map((p) => p.staffId))
+    return roster
+      .filter((r) => !pendingIds.has(r.staffId))
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [searchQuery, roster, pending])
+
+  const addToPending = (staff: RosterStaff) => {
+    setPending((prev) => [...prev, staff])
+    setSearchQuery('')
+  }
+
+  const removeFromPending = (staffId: string) => {
+    setPending((prev) => prev.filter((p) => p.staffId !== staffId))
+  }
+
+  const submitAttendees = async (scheduleId: string, identifiers: string[]) => {
     if (identifiers.length === 0) return
     setAddingAttendees(true)
     setAttendeeResult(null)
@@ -176,7 +207,7 @@ export function SurveyAutomationPanel() {
       const data = await res.json()
       if (res.ok) {
         setAttendeeResult(data)
-        setAttendeeInput('')
+        setPending([])
         await loadSchedules()
       } else {
         alert(data.error || 'Failed to add attendees.')
@@ -184,6 +215,27 @@ export function SurveyAutomationPanel() {
     } finally {
       setAddingAttendees(false)
     }
+  }
+
+  const downloadTemplate = () => {
+    const csv = 'Staff ID or Email\n' + [csvEscape('MSL-0123'), csvEscape('someone@meristem.com')].join('\n') + '\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'training_attendees_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleCSVUpload = async (scheduleId: string, file: File) => {
+    const text = await file.text()
+    const identifiers = parseCSV(text)
+    if (identifiers.length === 0) {
+      alert('No Staff IDs or emails found in that file.')
+      return
+    }
+    await submitAttendees(scheduleId, identifiers)
   }
 
   const removeAttendee = async (scheduleId: string, attendeeId: string) => {
@@ -216,14 +268,14 @@ export function SurveyAutomationPanel() {
 
   return (
     <div className="space-y-6">
-      {/* SMTP + form links */}
+      {/* Google Form links */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
         <div className="flex items-start gap-3 mb-4">
-          <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+          <Link2 className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-slate-800">Email &amp; Survey Links</p>
+            <p className="text-sm font-semibold text-slate-800">Survey Links</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              SMTP credentials live in environment variables (never here). Pre and Post-1 go to the employee; Post-2 goes to their line manager.
+              Pre and Post-1 go to the employee; Post-2 goes to their line manager. SMTP is configured in Admin Settings.
             </p>
           </div>
         </div>
@@ -232,28 +284,6 @@ export function SurveyAutomationPanel() {
           <p className="text-xs text-slate-400">Loading…</p>
         ) : (
           <div className="space-y-4">
-            {smtpConfigured === false && (
-              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
-                No SMTP server configured yet. Ask your developer to set <code className="mx-1 bg-amber-100 px-1 rounded">SMTP_HOST</code>,
-                <code className="mx-1 bg-amber-100 px-1 rounded">SMTP_PORT</code>, <code className="mx-1 bg-amber-100 px-1 rounded">SMTP_USER</code> and
-                <code className="mx-1 bg-amber-100 px-1 rounded">SMTP_PASS</code> in environment variables, then redeploy.
-              </div>
-            )}
-            {smtpConfigured && (
-              <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2.5">
-                SMTP is configured on the server.
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Sender display name</label>
-              <input
-                value={settings.fromName}
-                onChange={(e) => setSettings({ ...settings, fromName: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-              />
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Pre-Training Form link</label>
@@ -283,34 +313,14 @@ export function SurveyAutomationPanel() {
                 />
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={saveSettings}
-                disabled={savingSettings}
-                className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
-              >
-                {savingSettings && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {saved ? 'Saved' : 'Save Settings'}
-              </button>
-              <input
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-                placeholder="you@meristem.com"
-                className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48"
-              />
-              <button
-                onClick={sendTestEmail}
-                disabled={sendingTest || !testEmail.trim()}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {sendingTest && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Send Test Email
-              </button>
-            </div>
-            {testResult && (
-              <p className={`text-xs ${testResult.success ? 'text-emerald-700' : 'text-red-600'}`}>{testResult.message}</p>
-            )}
+            <button
+              onClick={saveSettings}
+              disabled={savingSettings}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+            >
+              {savingSettings && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {saved ? 'Saved' : 'Save Settings'}
+            </button>
           </div>
         )}
       </div>
@@ -401,7 +411,7 @@ export function SurveyAutomationPanel() {
               return (
                 <div key={s.id} className="border border-slate-200 rounded-lg">
                   <button
-                    onClick={() => { setExpandedId(isExpanded ? null : s.id); setAttendeeResult(null) }}
+                    onClick={() => { setExpandedId(isExpanded ? null : s.id); setAttendeeResult(null); setPending([]); setSearchQuery('') }}
                     className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
@@ -455,26 +465,83 @@ export function SurveyAutomationPanel() {
                         </div>
                       )}
 
-                      {/* Add attendees */}
+                      {/* Search-select attendee picker */}
                       <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                          Add attendees — one Staff ID or email per line
-                        </label>
-                        <textarea
-                          value={attendeeInput}
-                          onChange={(e) => setAttendeeInput(e.target.value)}
-                          rows={3}
-                          placeholder={'MSL-0123\nMSL-0456\nsomeone@meristem.com'}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
-                        />
-                        <button
-                          onClick={() => addAttendees(s.id)}
-                          disabled={addingAttendees || !attendeeInput.trim()}
-                          className="mt-2 flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
-                        >
-                          {addingAttendees && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          Add Attendees
-                        </button>
+                        <label className="block text-xs font-medium text-slate-600 mb-1.5">Add attendees — search by name, email, or Staff ID</label>
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Type a name, email, or Staff ID…"
+                            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                          />
+                          {searchResults.length > 0 && (
+                            <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {searchResults.map((r) => (
+                                <button
+                                  key={r.staffId}
+                                  onClick={() => addToPending(r)}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                                >
+                                  <span className="text-slate-700">{r.name}</span>
+                                  <span className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {pending.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {pending.map((p) => (
+                              <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                                {p.name}
+                                <button onClick={() => removeFromPending(p.staffId)} className="hover:text-red-600">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => submitAttendees(s.id, pending.map((p) => p.staffId))}
+                            disabled={addingAttendees || pending.length === 0}
+                            className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+                          >
+                            {addingAttendees && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            Add {pending.length > 0 ? `${pending.length} ` : ''}Selected
+                          </button>
+                          <span className="text-xs text-slate-300">or</span>
+                          <button
+                            onClick={downloadTemplate}
+                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            Download CSV Template
+                          </button>
+                          <button
+                            onClick={() => csvInputRef.current?.click()}
+                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload CSV
+                          </button>
+                          <input
+                            ref={csvInputRef}
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleCSVUpload(s.id, file)
+                              e.target.value = ''
+                            }}
+                          />
+                        </div>
+
                         {attendeeResult && (
                           <div className="mt-2 text-xs space-y-0.5">
                             <p className="text-emerald-700">{attendeeResult.added} added.</p>
@@ -511,7 +578,7 @@ export function SurveyAutomationPanel() {
                                   <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
                                   {(['preSurveySentAt', 'post1SurveySentAt', 'post2SurveySentAt'] as const).map((f) => (
                                     <td key={f} className="py-1.5 pr-3 text-center">
-                                      {a[f] ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline" /> : <span className="text-slate-300">—</span>}
+                                      {a[f] ? <span className="text-emerald-600">✓</span> : <span className="text-slate-300">—</span>}
                                     </td>
                                   ))}
                                   <td className="py-1.5 text-right">
@@ -534,13 +601,9 @@ export function SurveyAutomationPanel() {
         )}
       </div>
 
-      <div className="flex items-start gap-2 text-xs text-slate-400 rounded-lg px-1">
-        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-        <p>
-          Automatic date-based triggering (send Pre a week before, Post-1 a day after, Post-2 a month after — without a manual click) isn&apos;t built yet.
-          For now, use the &quot;Send … to all&quot; buttons above manually or in bulk.
-        </p>
-      </div>
+      <p className="text-xs text-slate-400 px-1">
+        Automatic date-based triggering (Pre a week before, Post-1 a day after, Post-2 a month after) isn&apos;t built yet — use the send buttons above manually or in bulk for now.
+      </p>
     </div>
   )
 }

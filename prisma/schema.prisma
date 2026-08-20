@@ -219,11 +219,25 @@ model StaffRosterRecord {
 // SMTP credentials themselves live in environment variables, never here.
 model SurveySettings {
   id                 String   @id @default(cuid())
-  fromName           String   @default("Meristem L&D")
   preSurveyFormUrl   String?
   post1SurveyFormUrl String?
   post2SurveyFormUrl String?
   updatedAt          DateTime @updatedAt
+}
+
+// Platform-wide SMTP config — admin-editable (not env vars), since email is used beyond just
+// surveys. Single-row settings, same pattern as GoogleSheetsConfig/BudgetSettings. The password
+// is stored as entered (no separate encryption layer beyond the DB's own security) and is never
+// returned by the GET endpoint — only a "configured" flag — so it can't leak back to the client.
+model SmtpSettings {
+  id          String   @id @default(cuid())
+  host        String?
+  port        Int?
+  username    String?
+  password    String?
+  fromName    String   @default("Meristem L&D")
+  fromAddress String?
+  updatedAt   DateTime @updatedAt
 }
 
 // An "upcoming training" — distinct from TrainingRecord (actual cost, uploaded after the fact)
