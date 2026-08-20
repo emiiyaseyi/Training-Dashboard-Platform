@@ -354,6 +354,12 @@ model TrainingScheduleAttendee {
   // etc.), since only the person who received the email knows it.
   surveyToken String @unique @default(cuid())
 
+  // Outcome of mirroring this attendee into the Training Data sheet (Admin -> Live Data Source ->
+  // Training Cost tab) — null trainingDataSyncedAt means it hasn't been confirmed synced yet,
+  // whether because it was never attempted, or the last attempt failed (see trainingDataSyncError).
+  trainingDataSyncedAt DateTime?
+  trainingDataSyncError String?
+
   createdAt DateTime @default(now())
 
   schedule  TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
