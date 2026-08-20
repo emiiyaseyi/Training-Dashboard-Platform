@@ -8,9 +8,9 @@ export async function GET() {
 
   const settings = await prisma.surveySettings.findFirst()
   return NextResponse.json({
-    preSurveyFormUrl: settings?.preSurveyFormUrl || '',
-    post1SurveyFormUrl: settings?.post1SurveyFormUrl || '',
-    post2SurveyFormUrl: settings?.post2SurveyFormUrl || '',
+    post1MirrorSheetName: settings?.post1MirrorSheetName || '',
+    post2MirrorSheetName: settings?.post2MirrorSheetName || '',
+    preMirrorSheetName: settings?.preMirrorSheetName || '',
   })
 }
 
@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const data = {
-      preSurveyFormUrl: body.preSurveyFormUrl || null,
-      post1SurveyFormUrl: body.post1SurveyFormUrl || null,
-      post2SurveyFormUrl: body.post2SurveyFormUrl || null,
+      post1MirrorSheetName: body.post1MirrorSheetName || null,
+      post2MirrorSheetName: body.post2MirrorSheetName || null,
+      preMirrorSheetName: body.preMirrorSheetName || null,
     }
     const existing = await prisma.surveySettings.findFirst()
     const updated = existing

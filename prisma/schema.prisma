@@ -217,12 +217,16 @@ model StaffRosterRecord {
 
 // Survey automation — single-row settings: the 3 Google Form links and sender display name.
 // SMTP credentials themselves live in environment variables, never here.
+// Forms are native to the platform (no Google Forms involved) — a submission writes to the
+// database and, if a tab name is set below, also appends a mirror row to that tab in the same
+// spreadsheet already configured under Live Data Source (GoogleSheetsConfig.spreadsheetUrl).
+// Mirroring is optional per stage — leave a tab name blank to skip it for that stage.
 model SurveySettings {
-  id                 String   @id @default(cuid())
-  preSurveyFormUrl   String?
-  post1SurveyFormUrl String?
-  post2SurveyFormUrl String?
-  updatedAt          DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  post1MirrorSheetName  String?
+  post2MirrorSheetName  String?
+  preMirrorSheetName    String?
+  updatedAt             DateTime @updatedAt
 }
 
 // Platform-wide SMTP config — admin-editable (not env vars), since email is used beyond just
@@ -270,6 +274,16 @@ model TrainingScheduleAttendee {
   preSurveySentAt   DateTime?
   post1SurveySentAt DateTime?
   post2SurveySentAt DateTime?
+
+  // Set when the attendee actually submits the form (distinct from *SentAt — response rate is
+  // sent vs. responded, not sent vs. not-sent).
+  preSurveyRespondedAt   DateTime?
+  post1SurveyRespondedAt DateTime?
+  post2SurveyRespondedAt DateTime?
+
+  // Unguessable per-attendee link token — one token covers all 3 stages (/survey/{token}/pre
+  // etc.), since only the person who received the email knows it.
+  surveyToken String @unique @default(cuid())
 
   createdAt DateTime @default(now())
 
