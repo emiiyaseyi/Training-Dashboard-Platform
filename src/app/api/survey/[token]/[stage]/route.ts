@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { surveyRecipientRole } from '@/lib/survey-email'
 import type { SurveyStage } from '@/lib/survey-email'
+import { getStageQuestions, type SurveyStageKey } from '@/lib/survey-questions'
 
 const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
@@ -31,6 +32,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
     const recipientRole = surveyRecipientRole(stage as SurveyStage)
     const alreadyResponded = !!attendee[RESPONDED_FIELD[stage as SurveyStage]]
+    const questions = alreadyResponded ? [] : await getStageQuestions(stage as SurveyStageKey)
+
+    const autoFillValues: Record<string, string> = {
+      trainingName: attendee.schedule.trainingName,
+      businessUnit: attendee.schedule.businessUnit,
+      employeeName: attendee.staffName,
+      role: '',
+      recipientName: recipientRole === 'manager' ? attendee.lineManagerName || '' : attendee.staffName,
+    }
 
     return NextResponse.json({
       valid: true,
@@ -41,6 +51,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       trainingName: attendee.schedule.trainingName,
       businessUnit: attendee.schedule.businessUnit,
       alreadyResponded,
+      questions: questions.map((q) => ({
+        id: q.id,
+        section: q.section,
+        label: q.label,
+        type: q.type,
+        options: q.options ? JSON.parse(q.options) : null,
+        required: q.required,
+        autoFill: q.autoFill,
+      })),
+      autoFillValues,
     })
   } catch (err) {
     console.error('[survey GET]', err)
