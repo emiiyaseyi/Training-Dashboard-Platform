@@ -31,6 +31,9 @@ interface Attendee {
   preSurveySentAt: string | null
   post1SurveySentAt: string | null
   post2SurveySentAt: string | null
+  preSurveyRespondedAt: string | null
+  post1SurveyRespondedAt: string | null
+  post2SurveyRespondedAt: string | null
 }
 
 interface Schedule {
@@ -47,8 +50,28 @@ interface Schedule {
   preSent: number
   post1Sent: number
   post2Sent: number
+  preFilled: number
+  post1Filled: number
+  post2Filled: number
   attendees: Attendee[]
 }
+
+type TickState = 'unsent' | 'sent' | 'filled' | 'expired'
+
+function tickState(sentAt: string | null, respondedAt: string | null, expiryEnabled: boolean, expiryDays: number): TickState {
+  if (!sentAt) return 'unsent'
+  if (respondedAt) return 'filled'
+  if (expiryEnabled && Date.now() - new Date(sentAt).getTime() >= expiryDays * 86400000) return 'expired'
+  return 'sent'
+}
+
+const TICK_STYLE: Record<TickState, string> = {
+  unsent: 'text-slate-300',
+  sent: 'text-emerald-600',
+  filled: 'text-blue-600',
+  expired: 'text-red-600',
+}
+const TICK_SYMBOL: Record<TickState, string> = { unsent: '—', sent: '✓', filled: '✓', expired: '✕' }
 
 interface RosterStaff {
   staffId: string
@@ -548,6 +571,39 @@ export function SurveyAutomationPanel() {
           </button>
         </div>
 
+        {schedules.length > 0 && (
+          <div className="mb-5 overflow-x-auto">
+            <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500">
+                  <th className="text-left font-medium py-2 px-3">Stage</th>
+                  <th className="text-center font-medium py-2 px-3">Sent</th>
+                  <th className="text-center font-medium py-2 px-3">Filled</th>
+                  <th className="text-center font-medium py-2 px-3">Yet to Fill</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ['pre', 'Pre-Training', 'preSent', 'preFilled'],
+                  ['post1', 'Post-1', 'post1Sent', 'post1Filled'],
+                  ['post2', 'Post-2', 'post2Sent', 'post2Filled'],
+                ] as const).map(([key, label, sentKey, filledKey]) => {
+                  const sent = schedules.reduce((sum, s) => sum + s[sentKey], 0)
+                  const filled = schedules.reduce((sum, s) => sum + s[filledKey], 0)
+                  return (
+                    <tr key={key} className="border-t border-slate-100">
+                      <td className="py-2 px-3 text-slate-700">{label}</td>
+                      <td className="py-2 px-3 text-center text-emerald-700">{sent}</td>
+                      <td className="py-2 px-3 text-center text-blue-700">{filled}</td>
+                      <td className="py-2 px-3 text-center text-amber-700">{sent - filled}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {showAddSchedule && (
           <div className="mb-5 border border-dashed border-slate-300 rounded-lg p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -909,26 +965,25 @@ export function SurveyAutomationPanel() {
                                     <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
                                     {([
-                                      ['preSurveySentAt', 'pre'],
-                                      ['post1SurveySentAt', 'post1'],
-                                      ['post2SurveySentAt', 'post2'],
-                                    ] as const).map(([f, stage]) => {
+                                      ['preSurveySentAt', 'preSurveyRespondedAt', 'pre'],
+                                      ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
+                                      ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
+                                    ] as const).map(([sentField, respondedField, stage]) => {
                                       const cellKey = `${s.id}:${stage}:${a.id}`
+                                      const state = tickState(a[sentField], a[respondedField], settings.expiryEnabled, settings.expiryDays)
                                       return (
-                                        <td key={f} className="py-1.5 pr-3 text-center">
+                                        <td key={sentField} className="py-1.5 pr-3 text-center">
                                           <button
                                             type="button"
                                             onClick={() => sendStage(s.id, stage, [a.id])}
                                             disabled={sendingKey === cellKey}
-                                            title={`${a[f] ? 'Resend' : 'Send'} ${STAGE_LABELS[stage]} to ${a.staffName}`}
+                                            title={`${state === 'unsent' ? 'Send' : 'Resend'} ${STAGE_LABELS[stage]} to ${a.staffName} (${state}${state !== 'unsent' ? ' — resending resets the expiry clock' : ''})`}
                                             className="hover:opacity-70 disabled:opacity-40"
                                           >
                                             {sendingKey === cellKey ? (
                                               <Loader2 className="w-3 h-3 animate-spin text-slate-400 mx-auto" />
-                                            ) : a[f] ? (
-                                              <span className="text-emerald-600">✓</span>
                                             ) : (
-                                              <span className="text-slate-300">—</span>
+                                              <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
                                             )}
                                           </button>
                                         </td>

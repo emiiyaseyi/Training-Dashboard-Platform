@@ -27,6 +27,9 @@ export async function GET() {
       preSent: s.attendees.filter((a) => a.preSurveySentAt).length,
       post1Sent: s.attendees.filter((a) => a.post1SurveySentAt).length,
       post2Sent: s.attendees.filter((a) => a.post2SurveySentAt).length,
+      preFilled: s.attendees.filter((a) => a.preSurveyRespondedAt).length,
+      post1Filled: s.attendees.filter((a) => a.post1SurveyRespondedAt).length,
+      post2Filled: s.attendees.filter((a) => a.post2SurveyRespondedAt).length,
       attendees: s.attendees.map((a) => ({
         id: a.id,
         staffId: a.staffId,
@@ -37,6 +40,9 @@ export async function GET() {
         preSurveySentAt: a.preSurveySentAt,
         post1SurveySentAt: a.post1SurveySentAt,
         post2SurveySentAt: a.post2SurveySentAt,
+        preSurveyRespondedAt: a.preSurveyRespondedAt,
+        post1SurveyRespondedAt: a.post1SurveyRespondedAt,
+        post2SurveyRespondedAt: a.post2SurveyRespondedAt,
       })),
     }))
   )
