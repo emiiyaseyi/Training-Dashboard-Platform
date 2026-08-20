@@ -6,6 +6,11 @@ import * as XLSX from 'xlsx'
 // (Post-1/Post-2/Pre-Training), which needs write access. The spreadsheet must be shared with
 // the service account as Editor, not just Viewer, for the append calls to succeed.
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
+// drive.file (not the broader "drive" scope) — only grants access to files/folders the service
+// account creates or that have been explicitly shared with it, which is exactly the Drive folders
+// an admin shares for survey file-upload questions. Requested alongside Sheets so one token/JWT
+// client covers both APIs.
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 
 export function extractSpreadsheetId(input: string): string | null {
   const trimmed = input.trim()
@@ -90,7 +95,7 @@ export function privateKeyDiagnostics(): {
   }
 }
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
   if (!email || !rawKey) {
@@ -120,7 +125,7 @@ async function getAccessToken(): Promise<string> {
     )
   }
   try {
-    const client = new JWT({ email, key, scopes: [SHEETS_SCOPE] })
+    const client = new JWT({ email, key, scopes: [SHEETS_SCOPE, DRIVE_SCOPE] })
     const token = await client.authorize()
     if (!token.access_token) throw new Error('Failed to authenticate with Google — check the Service Account credentials.')
     return token.access_token

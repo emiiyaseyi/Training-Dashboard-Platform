@@ -19,6 +19,7 @@ interface SettingsState {
   reminderIntervalHours: number
   expiryEnabled: boolean
   expiryDays: number
+  maxFileUploadMB: number
 }
 
 interface Attendee {
@@ -124,7 +125,7 @@ export function SurveyAutomationPanel() {
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
-    reminderIntervalHours: 24, expiryEnabled: true, expiryDays: 7,
+    reminderIntervalHours: 24, expiryEnabled: true, expiryDays: 7, maxFileUploadMB: 20,
   })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -179,6 +180,7 @@ export function SurveyAutomationPanel() {
         reminderIntervalHours: data.reminderIntervalHours ?? 24,
         expiryEnabled: data.expiryEnabled ?? true,
         expiryDays: data.expiryDays ?? 7,
+        maxFileUploadMB: data.maxFileUploadMB ?? 20,
       })
     } finally {
       setLoadingSettings(false)
@@ -538,6 +540,20 @@ export function SurveyAutomationPanel() {
                   />
                 </label>
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">File Uploads</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Per-file size limit for &quot;file&quot; type questions (e.g. Learning Resources/Materials, Certification Issued).
+              </p>
+              <select
+                value={settings.maxFileUploadMB}
+                onChange={(e) => setSettings({ ...settings, maxFileUploadMB: Number(e.target.value) })}
+                className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+              >
+                {[5, 10, 20, 50, 100].map((mb) => <option key={mb} value={mb}>{mb} MB</option>)}
+              </select>
             </div>
 
             <button
