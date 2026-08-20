@@ -27,16 +27,22 @@ function articleFor(word: string): string {
   return /^[aeiou]/i.test(word) ? 'an' : 'a'
 }
 
+// Outlook (the client these went out through) ignores CSS margin collapsing and browser default
+// <p> spacing almost entirely — without an explicit margin here, paragraphs render pressed
+// together with barely any gap, which read as the email "breaking"/cramped rather than reaching
+// a clean end. Every paragraph in this file goes through P() so spacing stays consistent.
+const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${extraStyle}">${html}</p>`
+
+// Survey CTA green — sampled visually from the shade the admin specified; adjust SURVEY_BUTTON_GREEN
+// if it doesn't match exactly (a hex code would let us match it precisely).
+const SURVEY_BUTTON_GREEN = '#1E7145'
+
 const BUTTON = (href: string, label: string) => `
-  <p>
-    <a href="${href}" style="display:inline-block;background:#1E2761;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">
-      ${label}
-    </a>
-  </p>
-  <p style="font-size:13px;color:#6B7280;">If the button doesn't work, copy this link into your browser:<br/>${href}</p>
+  ${P(`<a href="${href}" style="display:inline-block;background:${SURVEY_BUTTON_GREEN};color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-family:Tahoma,Geneva,sans-serif;">${label}</a>`)}
+  ${P(`If the button doesn't work, copy this link into your browser:<br/>${href}`, 'font-size:12px;color:#6B7280;')}
 `
 
-const SIGNOFF = `<p>Best Regards,<br/>Meristem Learning &amp; Development Team</p>`
+const SIGNOFF = P('Best Regards,<br/>Meristem Learning &amp; Development Team')
 
 export function buildSurveyEmail(input: {
   stage: SurveyStage
@@ -51,11 +57,13 @@ export function buildSurveyEmail(input: {
 }): { subject: string; html: string } {
   const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, isReminder } = input
   const firstName = firstNameOf(recipientName)
-  const subject = `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
+  const subject = stage === 'pre'
+    ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
+    : `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
 
   const wrap = (bodyHtml: string) => `
-    <div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1B1F3B; max-width: 560px;">
-      ${isReminder ? `<p style="color:#C9A24B;font-weight:600;">Reminder: we haven't received your response yet.</p>` : ''}
+    <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 560px;">
+      ${isReminder ? P('Reminder: we haven\'t received your response yet.', 'color:#C9A24B;font-weight:600;') : ''}
       ${bodyHtml}
     </div>
   `
@@ -68,12 +76,12 @@ export function buildSurveyEmail(input: {
     return {
       subject,
       html: wrap(`
-        <p>Dear ${firstName},</p>
-        <p>You have been nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.</p>
-        <p>As part of your preparation, kindly complete the pre-training survey using the link below:</p>
+        ${P(`Dear ${firstName},`)}
+        ${P(`You have been nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
+        ${P('As part of your preparation, kindly complete the pre-training survey using the link below:')}
         ${BUTTON(formUrl, 'Pre-Training Survey')}
-        <p>Kindly note that the training provider will communicate further details, including venue and time, in due course.</p>
-        <p>We trust this will be a valuable learning experience.</p>
+        ${P('Kindly note that the training provider will communicate further details, including venue and time, in due course.')}
+        ${P('We trust this will be a valuable learning experience.')}
         ${SIGNOFF}
       `),
     }
@@ -83,13 +91,13 @@ export function buildSurveyEmail(input: {
     return {
       subject,
       html: wrap(`
-        <p>Dear ${firstName},</p>
-        <p>Thank you for participating in the ${trainingName}.</p>
-        <p>As part of our learning evaluation process, kindly complete the post-training survey using the link below:</p>
+        ${P(`Dear ${firstName},`)}
+        ${P(`Thank you for participating in the ${trainingName}.`)}
+        ${P('As part of our learning evaluation process, kindly complete the post-training survey using the link below:')}
         ${BUTTON(formUrl, 'Post-Training Survey')}
-        <p>In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team as soon as possible.</p>
-        <p>Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.</p>
-        <p>Thank you for your participation, and we look forward to receiving your feedback.</p>
+        ${P('In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team as soon as possible.')}
+        ${P('Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.')}
+        ${P('Thank you for your participation, and we look forward to receiving your feedback.')}
         ${SIGNOFF}
       `),
     }
@@ -99,12 +107,12 @@ export function buildSurveyEmail(input: {
   return {
     subject,
     html: wrap(`
-      <p>Dear ${firstName},</p>
-      <p>${firstNameOf(employeeName)} recently attended the ${trainingName} programme.</p>
-      <p>Kindly complete the Training Impact Survey using the link below to provide your assessment of the participant's application of the knowledge and skills gained from the training.</p>
+      ${P(`Dear ${firstName},`)}
+      ${P(`${firstNameOf(employeeName)} recently attended the ${trainingName} programme.`)}
+      ${P('Kindly complete the Training Impact Survey using the link below to provide your assessment of the participant\'s application of the knowledge and skills gained from the training.')}
       ${BUTTON(formUrl, 'Training Impact Survey')}
-      <p>Your feedback will help us understand the value the training has delivered and identify areas for further development.</p>
-      <p>Thank you for your support.</p>
+      ${P('Your feedback will help us understand the value the training has delivered and identify areas for further development.')}
+      ${P('Thank you for your support.')}
       ${SIGNOFF}
     `),
   }
