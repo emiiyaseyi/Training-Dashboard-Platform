@@ -97,7 +97,7 @@ async function getAccessToken(): Promise<string> {
     throw new Error(
       'Google Service Account not configured on the server. Add GOOGLE_SERVICE_ACCOUNT_EMAIL and ' +
         'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY to environment variables, then share the spreadsheet with that ' +
-        'service account email (Viewer access is enough).'
+        'service account email as Editor (not just Viewer — survey forms and Training Schedule attendees write into the sheet).'
     )
   }
   const key = normalizePrivateKey(rawKey)
