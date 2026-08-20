@@ -73,6 +73,9 @@ export async function sendSurveyStage(
       employeeName: attendee.staffName,
       trainingName: schedule.trainingName,
       formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
+      startDate: schedule.startDate,
+      endDate: schedule.endDate,
+      trainingType: schedule.trainingType,
     })
     try {
       await sendMail({ to: toAddress, cc, subject, html })
