@@ -226,6 +226,9 @@ model SurveySettings {
   post1MirrorSheetName  String?
   post2MirrorSheetName  String?
   preMirrorSheetName    String?
+  preDaysBefore         Int      @default(7)  // Pre-Training survey sent this many days before startDate
+  post1DaysAfter        Int      @default(1)  // Post-1 survey sent this many days after endDate
+  post2DaysAfter        Int      @default(30) // Post-2 survey sent this many days after endDate
   updatedAt             DateTime @updatedAt
 }
 
@@ -285,14 +288,17 @@ model SmtpSettings {
 // An "upcoming training" — distinct from TrainingRecord (actual cost, uploaded after the fact)
 // so nothing double-counts. Drives the 3-stage survey email lifecycle for its attendees.
 model TrainingSchedule {
-  id           String   @id @default(cuid())
-  trainingName String
-  businessUnit String
-  startDate    DateTime
-  endDate      DateTime
-  hours        Float?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  trainingName    String
+  businessUnit    String
+  startDate       DateTime
+  endDate         DateTime
+  hours           Float?
+  costPerAttendee Float? // applied uniformly to every attendee's mirrored Training Data row
+  trainingType    String? // references TrainingType.name
+  capability      String? // references DifferentiatingCapability.name
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   attendees TrainingScheduleAttendee[]
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
@@ -13,6 +13,9 @@ interface SettingsState {
   post1MirrorSheetName: string
   post2MirrorSheetName: string
   preMirrorSheetName: string
+  preDaysBefore: number
+  post1DaysAfter: number
+  post2DaysAfter: number
 }
 
 interface Attendee {
@@ -84,7 +87,10 @@ function parseCSV(text: string): string[] {
 }
 
 export function SurveyAutomationPanel() {
-  const [settings, setSettings] = useState<SettingsState>({ post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '' })
+  const [settings, setSettings] = useState<SettingsState>({
+    post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
+    preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
+  })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -113,6 +119,9 @@ export function SurveyAutomationPanel() {
   const [sendingKey, setSendingKey] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
 
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
+  const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
+
   const loadSettings = async () => {
     setLoadingSettings(true)
     try {
@@ -122,6 +131,9 @@ export function SurveyAutomationPanel() {
         post1MirrorSheetName: data.post1MirrorSheetName || '',
         post2MirrorSheetName: data.post2MirrorSheetName || '',
         preMirrorSheetName: data.preMirrorSheetName || '',
+        preDaysBefore: data.preDaysBefore ?? 7,
+        post1DaysAfter: data.post1DaysAfter ?? 1,
+        post2DaysAfter: data.post2DaysAfter ?? 30,
       })
     } finally {
       setLoadingSettings(false)
@@ -322,6 +334,23 @@ export function SurveyAutomationPanel() {
     }
   }
 
+  const refreshAttendees = async (scheduleId: string) => {
+    setRefreshingId(scheduleId)
+    setRefreshResult(null)
+    try {
+      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/refresh`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRefreshResult({ scheduleId, ...data })
+        await loadSchedules()
+      } else {
+        alert(data.error || 'Failed to refresh attendees.')
+      }
+    } finally {
+      setRefreshingId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Survey forms are native to the platform — no Google Form links needed. Submissions
@@ -373,6 +402,46 @@ export function SurveyAutomationPanel() {
                 />
               </div>
             </div>
+
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Send Timing</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                The daily automated check uses these to decide when each stage is due. Manual &quot;Send to all&quot; buttons ignore timing entirely.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="text-xs text-slate-500">
+                  Pre-Training — days before start
+                  <input
+                    type="number"
+                    min={0}
+                    value={settings.preDaysBefore}
+                    onChange={(e) => setSettings({ ...settings, preDaysBefore: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Post-1 — days after end
+                  <input
+                    type="number"
+                    min={0}
+                    value={settings.post1DaysAfter}
+                    onChange={(e) => setSettings({ ...settings, post1DaysAfter: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Post-2 — days after end
+                  <input
+                    type="number"
+                    min={0}
+                    value={settings.post2DaysAfter}
+                    onChange={(e) => setSettings({ ...settings, post2DaysAfter: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+              </div>
+            </div>
+
             <button
               onClick={saveSettings}
               disabled={savingSettings}
@@ -549,6 +618,15 @@ export function SurveyAutomationPanel() {
                           )
                         })}
                         <button
+                          onClick={() => refreshAttendees(s.id)}
+                          disabled={refreshingId === s.id || s.attendeeCount === 0}
+                          title="Re-pulls email and line manager info from the current roster — fixes attendees added before their email was on file"
+                          className="flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {refreshingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                          Refresh from Roster
+                        </button>
+                        <button
                           onClick={() => deleteSchedule(s.id)}
                           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-600 ml-auto"
                         >
@@ -556,6 +634,14 @@ export function SurveyAutomationPanel() {
                           Delete schedule
                         </button>
                       </div>
+                      {refreshResult && refreshResult.scheduleId === s.id && (
+                        <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
+                          <p className="text-emerald-700">Refreshed {refreshResult.updated} of {refreshResult.total} attendee(s) from the roster.</p>
+                          {refreshResult.stillMissing.length > 0 && (
+                            <p className="text-amber-700">Still missing an email in the roster: {refreshResult.stillMissing.join(', ')}</p>
+                          )}
+                        </div>
+                      )}
                       {sendResult && sendResult.key.startsWith(`${s.id}:`) && (
                         <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
                           <p className="text-emerald-700">{sendResult.sent} email{sendResult.sent === 1 ? '' : 's'} sent.</p>

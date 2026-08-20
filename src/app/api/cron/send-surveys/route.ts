@@ -6,9 +6,10 @@ import type { SurveyStage } from '@/lib/survey-email'
 const DAY_MS = 86400000
 
 // Runs daily (see vercel.json). For each training schedule, works out which stages are due —
-// Pre: from 7 days before start through 3 days after (grace window in case a run is missed).
-// Post-1: from 1 day after the end date onward.
-// Post-2: from 30 days after the end date onward.
+// timing is admin-configurable (Admin → Survey Automation → Send Timing), defaulting to:
+// Pre: from N days before start through 3 days after (grace window in case a run is missed).
+// Post-1: from N days after the end date onward.
+// Post-2: from N days after the end date onward.
 // sendSurveyStage(..., onlyUnsent: true) makes this idempotent — attendees who already have a
 // stage's timestamp set are skipped, so running this every day never re-sends to anyone, and a
 // newly-added attendee on an already-due schedule gets caught up automatically next run.
@@ -22,7 +23,13 @@ export async function GET(req: NextRequest) {
   }
 
   const now = Date.now()
-  const schedules = await prisma.trainingSchedule.findMany({ include: { attendees: true } })
+  const [schedules, settings] = await Promise.all([
+    prisma.trainingSchedule.findMany({ include: { attendees: true } }),
+    prisma.surveySettings.findFirst(),
+  ])
+  const preDaysBefore = settings?.preDaysBefore ?? 7
+  const post1DaysAfter = settings?.post1DaysAfter ?? 1
+  const post2DaysAfter = settings?.post2DaysAfter ?? 30
 
   const results: { scheduleId: string; trainingName: string; stage: SurveyStage; sent: number; skipped: number }[] = []
   const errors: { scheduleId: string; stage: SurveyStage; message: string }[] = []
@@ -32,9 +39,9 @@ export async function GET(req: NextRequest) {
     const daysSinceEnd = (now - schedule.endDate.getTime()) / DAY_MS
 
     const due: SurveyStage[] = []
-    if (daysUntilStart <= 7 && daysUntilStart >= -3) due.push('pre')
-    if (daysSinceEnd >= 1) due.push('post1')
-    if (daysSinceEnd >= 30) due.push('post2')
+    if (daysUntilStart <= preDaysBefore && daysUntilStart >= -3) due.push('pre')
+    if (daysSinceEnd >= post1DaysAfter) due.push('post1')
+    if (daysSinceEnd >= post2DaysAfter) due.push('post2')
 
     for (const stage of due) {
       const hasUnsent = schedule.attendees.some((a) => {
