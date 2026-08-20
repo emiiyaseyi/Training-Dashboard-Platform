@@ -42,6 +42,12 @@ interface RosterStaff {
   name: string
   email: string | null
   lineManagerStaffId: string | null
+  businessUnit: string
+}
+
+interface BusinessUnitOption {
+  id: string
+  name: string
 }
 
 const STAGE_LABELS: Record<'pre' | 'post1' | 'post2', string> = {
@@ -87,11 +93,16 @@ export function SurveyAutomationPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const [roster, setRoster] = useState<RosterStaff[]>([])
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [pending, setPending] = useState<RosterStaff[]>([])
   const [addingAttendees, setAddingAttendees] = useState(false)
   const [attendeeResult, setAttendeeResult] = useState<{ added: number; notFound: string[]; noEmail: string[] } | null>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
+
+  // Attendees picked before the schedule even exists yet — added right after creation succeeds.
+  const [newScheduleSearchQuery, setNewScheduleSearchQuery] = useState('')
+  const [newSchedulePending, setNewSchedulePending] = useState<RosterStaff[]>([])
 
   const [sendingKey, setSendingKey] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
@@ -126,10 +137,17 @@ export function SurveyAutomationPanel() {
     setRoster(await res.json())
   }
 
+  const loadBusinessUnits = async () => {
+    const res = await fetch('/api/business-units')
+    const data = await res.json()
+    setBusinessUnits(Array.isArray(data) ? data : [])
+  }
+
   useEffect(() => {
     loadSettings()
     loadSchedules()
     loadRoster()
+    loadBusinessUnits()
   }, [])
 
   const saveSettings = async () => {
@@ -157,7 +175,17 @@ export function SurveyAutomationPanel() {
         body: JSON.stringify({ ...newSchedule, hours: newSchedule.hours ? Number(newSchedule.hours) : undefined }),
       })
       if (res.ok) {
+        const created = await res.json()
+        if (newSchedulePending.length > 0) {
+          await fetch(`/api/admin/training-schedule/${created.id}/attendees`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifiers: newSchedulePending.map((p) => p.staffId) }),
+          })
+        }
         setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '' })
+        setNewSchedulePending([])
+        setNewScheduleSearchQuery('')
         setShowAddSchedule(false)
         await loadSchedules()
       } else {
@@ -167,6 +195,28 @@ export function SurveyAutomationPanel() {
     } finally {
       setCreatingSchedule(false)
     }
+  }
+
+  const newScheduleSearchResults = useMemo(() => {
+    const q = newScheduleSearchQuery.trim().toLowerCase()
+    if (!q) return []
+    const pendingIds = new Set(newSchedulePending.map((p) => p.staffId))
+    return roster
+      .filter((r) => !pendingIds.has(r.staffId))
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [newScheduleSearchQuery, roster, newSchedulePending])
+
+  const addToNewSchedulePending = (staff: RosterStaff) => {
+    setNewSchedulePending((prev) => [...prev, staff])
+    setNewScheduleSearchQuery('')
+    // First staff picked sets the schedule's Business Unit automatically — still editable via the
+    // dropdown below in case a training intentionally spans multiple BUs.
+    setNewSchedule((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: staff.businessUnit }))
+  }
+
+  const removeFromNewSchedulePending = (staffId: string) => {
+    setNewSchedulePending((prev) => prev.filter((p) => p.staffId !== staffId))
   }
 
   const deleteSchedule = async (id: string) => {
@@ -357,12 +407,56 @@ export function SurveyAutomationPanel() {
                 onChange={(e) => setNewSchedule({ ...newSchedule, trainingName: e.target.value })}
                 className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
               />
-              <input
-                placeholder="Business Unit"
+              <select
                 value={newSchedule.businessUnit}
                 onChange={(e) => setNewSchedule({ ...newSchedule, businessUnit: e.target.value })}
                 className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-              />
+              >
+                <option value="">Business Unit — auto-fills once you add an attendee below</option>
+                {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                Attendees — search by name, email, or Staff ID (add as many as are going)
+              </label>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={newScheduleSearchQuery}
+                  onChange={(e) => setNewScheduleSearchQuery(e.target.value)}
+                  placeholder="Type a name, email, or Staff ID…"
+                  className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                {newScheduleSearchResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {newScheduleSearchResults.map((r) => (
+                      <button
+                        key={r.staffId}
+                        type="button"
+                        onClick={() => addToNewSchedulePending(r)}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                      >
+                        <span className="text-slate-700">{r.name}</span>
+                        <span className="text-slate-400">{r.staffId}{r.businessUnit ? ` · ${r.businessUnit}` : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {newSchedulePending.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {newSchedulePending.map((p) => (
+                    <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                      {p.name}
+                      <button type="button" onClick={() => removeFromNewSchedulePending(p.staffId)} className="hover:text-red-600">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs text-slate-500">

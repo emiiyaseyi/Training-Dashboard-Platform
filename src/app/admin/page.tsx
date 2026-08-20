@@ -12,6 +12,7 @@ import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
+import { StaffDataQuality } from '@/components/admin/StaffDataQuality'
 import { SmtpSettingsPanel } from '@/components/admin/SmtpSettingsPanel'
 
 interface BU {
@@ -639,7 +640,7 @@ export default function AdminPage() {
             <div>
               <p className="text-sm font-semibold text-slate-800">Survey Automation</p>
               <p className="text-xs text-slate-500 mt-0.5">
-                SMTP settings, Google Form links, training schedules, and pre/post-training survey email triggers.
+                Training schedules, survey questions, and pre/post-training survey email triggers.
               </p>
             </div>
           </div>
@@ -651,6 +652,9 @@ export default function AdminPage() {
 
         {/* Data quality audit */}
         <DataQualityAudit />
+
+        {/* Staff roster quality: missing fields, duplicates, inline edit */}
+        <StaffDataQuality />
 
         {/* Live Google Sheets data source */}
         <GoogleSheetsPanel />

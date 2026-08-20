@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2 } from 'lucide-react'
 
 interface TableAudit {
   table: string
@@ -14,6 +14,8 @@ interface TableAudit {
 export function DataQualityAudit() {
   const [audit, setAudit] = useState<TableAudit[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [normalizing, setNormalizing] = useState(false)
+  const [normalizeResult, setNormalizeResult] = useState<{ table: string; updated: number }[] | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -29,6 +31,23 @@ export function DataQualityAudit() {
     load()
   }, [])
 
+  const normalizeBusinessUnits = async () => {
+    setNormalizing(true)
+    setNormalizeResult(null)
+    try {
+      const res = await fetch('/api/admin/normalize-business-units', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setNormalizeResult(data.results.filter((r: { updated: number }) => r.updated > 0))
+        await load()
+      } else {
+        alert(data.error || 'Failed to normalize Business Unit names.')
+      }
+    } finally {
+      setNormalizing(false)
+    }
+  }
+
   const totalIssues = audit?.reduce((s, t) => s + t.issueCount, 0) ?? 0
 
   return (
@@ -43,10 +62,33 @@ export function DataQualityAudit() {
             </p>
           </div>
         </div>
-        <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 shrink-0">
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={normalizeBusinessUnits}
+            disabled={normalizing}
+            title="Re-applies Business Unit aliases (e.g. NESI -> Meristem Wealth Management Limited) to every already-stored record — catches rows imported before an alias was added."
+            className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-50 disabled:opacity-50"
+          >
+            {normalizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+            Normalize Business Unit names
+          </button>
+          <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
       </div>
+
+      {normalizeResult && (
+        <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+          {normalizeResult.length === 0 ? (
+            <p className="text-emerald-700">No Business Unit values needed fixing — already consistent.</p>
+          ) : (
+            <p className="text-slate-700">
+              Fixed: {normalizeResult.map((r) => `${r.table} (${r.updated})`).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-xs text-slate-400">Loading…</p>

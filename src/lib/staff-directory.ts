@@ -6,6 +6,7 @@ export interface ResolvedStaff {
   name: string
   email: string | null
   lineManagerStaffId: string | null
+  businessUnit: string
 }
 
 // Roster uploads accumulate over time — always use each staffId's most recent record, same
@@ -20,6 +21,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       name: [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' '),
       email: r.email,
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
+      businessUnit: r.businessUnit,
     })
   }
   return map
