@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2 } from 'lucide-react'
+import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2, Search } from 'lucide-react'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface TableAudit {
   table: string
@@ -9,6 +10,65 @@ interface TableAudit {
   totalRecords: number
   issueCount: number
   samples: { summary: string; issues: string[] }[]
+}
+
+const PAGE_SIZE = 10
+
+function AuditTableSection({ t }: { t: TableAudit }) {
+  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
+
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? t.samples.filter((s) => s.summary.toLowerCase().includes(q) || s.issues.some((i) => i.toLowerCase().includes(q)))
+    : t.samples
+  const pageRows = paginate(filtered, page, PAGE_SIZE)
+  const showSearch = t.samples.length > PAGE_SIZE
+
+  useEffect(() => {
+    setPage(1)
+  }, [query])
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm font-medium text-slate-700">{t.label}</p>
+        <p className="text-xs text-amber-700">
+          {t.issueCount} of {t.totalRecords} record{t.totalRecords === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      {showSearch && (
+        <div className="relative mt-2">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search…"
+            className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+          />
+        </div>
+      )}
+
+      <div className="mt-2 space-y-1.5">
+        {pageRows.length === 0 ? (
+          <p className="text-xs text-slate-400">No matches for that search.</p>
+        ) : (
+          pageRows.map((s, i) => (
+            <div key={i} className="text-xs bg-slate-50 rounded-md px-2.5 py-1.5">
+              <p className="text-slate-700 font-medium">{s.summary}</p>
+              <p className="text-amber-700">{s.issues.join(' · ')}</p>
+            </div>
+          ))
+        )}
+        {t.issueCount > t.samples.length && (
+          <p className="text-[11px] text-slate-400">+ {t.issueCount - t.samples.length} more not shown (showing the first {t.samples.length})</p>
+        )}
+      </div>
+
+      <Pagination page={page} totalItems={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+    </div>
+  )
 }
 
 export function DataQualityAudit() {
@@ -58,7 +118,7 @@ export function DataQualityAudit() {
           <div>
             <p className="text-sm font-semibold text-slate-800">Data Quality Audit</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              A sample of records per table missing key fields — Staff ID, Business Unit, cost/amount, etc.
+              Records per table missing key fields — Staff ID, Business Unit, cost/amount, etc.
             </p>
           </div>
         </div>
@@ -105,29 +165,7 @@ export function DataQualityAudit() {
             {totalIssues === 0 ? 'No data quality issues found across any table.' : `${totalIssues} record(s) with missing fields across all tables.`}
           </div>
 
-          {audit
-            .filter((t) => t.issueCount > 0)
-            .map((t) => (
-              <div key={t.table} className="border border-slate-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-slate-700">{t.label}</p>
-                  <p className="text-xs text-amber-700">
-                    {t.issueCount} of {t.totalRecords} record{t.totalRecords === 1 ? '' : 's'}
-                  </p>
-                </div>
-                <div className="mt-2 space-y-1.5">
-                  {t.samples.map((s, i) => (
-                    <div key={i} className="text-xs bg-slate-50 rounded-md px-2.5 py-1.5">
-                      <p className="text-slate-700 font-medium">{s.summary}</p>
-                      <p className="text-amber-700">{s.issues.join(' · ')}</p>
-                    </div>
-                  ))}
-                  {t.issueCount > t.samples.length && (
-                    <p className="text-[11px] text-slate-400">+ {t.issueCount - t.samples.length} more not shown</p>
-                  )}
-                </div>
-              </div>
-            ))}
+          {audit.filter((t) => t.issueCount > 0).map((t) => <AuditTableSection key={t.table} t={t} />)}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { JWT } from 'google-auth-library'
 import { createPrivateKey } from 'crypto'
+import * as XLSX from 'xlsx'
 
 // Read+write — the sync engine only ever reads, but native survey form submissions append rows
 // (Post-1/Post-2/Pre-Training), which needs write access. The spreadsheet must be shared with
@@ -218,6 +219,26 @@ export async function appendRowToSheet(spreadsheetId: string, sheetName: string,
     }
     throw new Error(`Could not write to tab "${sheetName}" (${res.status}): ${body.slice(0, 200)}`)
   }
+}
+
+// Pulls the full contents of a tab and reassembles it as an XLSX buffer so it can go through the
+// exact same parseXExcel() functions used for file uploads — every reader of a sheet (bulk sync,
+// the comprehensive staff list supplement) interprets columns identically to a manual upload.
+export async function fetchSheetAsBuffer(spreadsheetId: string, sheetName: string, accessToken: string): Promise<Buffer> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Could not read tab "${sheetName}" (${res.status}): ${body.slice(0, 150)}`)
+  }
+  const data = (await res.json()) as { values?: unknown[][] }
+  const values = data.values || []
+  const ws = XLSX.utils.aoa_to_sheet(values)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
 function normaliseHeader(h: string): string {

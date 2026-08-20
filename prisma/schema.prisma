@@ -30,18 +30,19 @@ model BudgetSettings {
 // themselves live in environment variables (never in the DB) — this just tracks which
 // spreadsheet/tabs to read and the sync schedule, plus the outcome of the last sync attempt.
 model GoogleSheetsConfig {
-  id                     String    @id @default(cuid())
-  spreadsheetUrl         String?
-  trainingSheetName      String    @default("Training Cost")
-  feedbackSheetName      String    @default("Feedback")
-  subscriptionSheetName  String    @default("Subscriptions")
-  kssSheetName           String    @default("KSS")
-  autoSyncEnabled        Boolean   @default(false)
-  syncFrequencyMinutes   Int       @default(60)
-  lastSyncedAt           DateTime?
-  lastSyncStatus         String? // "success" | "error"
-  lastSyncErrors         String? // JSON: { sheet: string, message: string }[]
-  updatedAt              DateTime  @updatedAt
+  id                               String    @id @default(cuid())
+  spreadsheetUrl                   String?
+  trainingSheetName                String    @default("Training Cost")
+  feedbackSheetName                String    @default("Feedback")
+  subscriptionSheetName            String    @default("Subscriptions")
+  kssSheetName                     String    @default("KSS")
+  comprehensiveStaffListSheetName  String? // optional secondary staff source (e.g. "MERISTEM COMPREHENSIVE STAFF LIST") — read-only supplement to the uploaded roster, fills in gaps like missing email/line manager
+  autoSyncEnabled                  Boolean   @default(false)
+  syncFrequencyMinutes             Int       @default(60)
+  lastSyncedAt                     DateTime?
+  lastSyncStatus                   String? // "success" | "error"
+  lastSyncErrors                   String? // JSON: { sheet: string, message: string }[]
+  updatedAt                        DateTime  @updatedAt
 }
 
 // One row per completed sync run (manual "Sync Now" or scheduled) — only the 5 most recent are

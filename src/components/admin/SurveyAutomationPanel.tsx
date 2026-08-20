@@ -115,6 +115,8 @@ export function SurveyAutomationPanel() {
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [schedulePage, setSchedulePage] = useState(1)
+  const [scheduleQuery, setScheduleQuery] = useState('')
+  const [attendeeTableQuery, setAttendeeTableQuery] = useState('')
   const [attendeePage, setAttendeePage] = useState(1)
 
   const [roster, setRoster] = useState<RosterStaff[]>([])
@@ -374,6 +376,11 @@ export function SurveyAutomationPanel() {
       setRefreshingId(null)
     }
   }
+
+  const filteredSchedules = schedules.filter((s) => {
+    const sq = scheduleQuery.trim().toLowerCase()
+    return !sq || s.trainingName.toLowerCase().includes(sq) || s.businessUnit.toLowerCase().includes(sq)
+  })
 
   return (
     <div className="space-y-6">
@@ -641,7 +648,18 @@ export function SurveyAutomationPanel() {
           <p className="text-xs text-slate-400">No training schedules yet.</p>
         ) : (
           <div className="space-y-2">
-            {paginate(schedules, schedulePage, SCHEDULE_PAGE_SIZE).map((s) => {
+            {schedules.length > SCHEDULE_PAGE_SIZE && (
+              <div className="relative mb-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={scheduleQuery}
+                  onChange={(e) => { setScheduleQuery(e.target.value); setSchedulePage(1) }}
+                  placeholder="Search schedules by training name or Business Unit…"
+                  className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+            )}
+            {paginate(filteredSchedules, schedulePage, SCHEDULE_PAGE_SIZE).map((s) => {
               const isExpanded = expandedId === s.id
               return (
                 <div key={s.id} className="border border-slate-200 rounded-lg">
@@ -810,43 +828,60 @@ export function SurveyAutomationPanel() {
                       </div>
 
                       {/* Attendee list */}
-                      {s.attendees.length > 0 && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-slate-400 border-b border-slate-100">
-                                <th className="text-left font-medium py-1.5 pr-3">Name</th>
-                                <th className="text-left font-medium py-1.5 pr-3">Email</th>
-                                <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
-                                <th className="text-center font-medium py-1.5 pr-3">Pre</th>
-                                <th className="text-center font-medium py-1.5 pr-3">Post-1</th>
-                                <th className="text-center font-medium py-1.5 pr-3">Post-2</th>
-                                <th className="py-1.5"></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {paginate(s.attendees, attendeePage, ATTENDEE_PAGE_SIZE).map((a) => (
-                                <tr key={a.id} className="border-b border-slate-50">
-                                  <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
-                                  <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
-                                  <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
-                                  {(['preSurveySentAt', 'post1SurveySentAt', 'post2SurveySentAt'] as const).map((f) => (
-                                    <td key={f} className="py-1.5 pr-3 text-center">
-                                      {a[f] ? <span className="text-emerald-600">✓</span> : <span className="text-slate-300">—</span>}
-                                    </td>
-                                  ))}
-                                  <td className="py-1.5 text-right">
-                                    <button onClick={() => removeAttendee(s.id, a.id)} className="text-slate-300 hover:text-red-600">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
+                      {s.attendees.length > 0 && (() => {
+                        const aq = attendeeTableQuery.trim().toLowerCase()
+                        const filteredAttendees = s.attendees.filter((a) =>
+                          !aq || a.staffName.toLowerCase().includes(aq) || a.email?.toLowerCase().includes(aq) || a.lineManagerName?.toLowerCase().includes(aq)
+                        )
+                        return (
+                          <div className="overflow-x-auto">
+                            {s.attendees.length > ATTENDEE_PAGE_SIZE && (
+                              <div className="relative mb-2">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                <input
+                                  value={attendeeTableQuery}
+                                  onChange={(e) => { setAttendeeTableQuery(e.target.value); setAttendeePage(1) }}
+                                  placeholder="Search attendees by name, email, or line manager…"
+                                  className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                                />
+                              </div>
+                            )}
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-slate-400 border-b border-slate-100">
+                                  <th className="text-left font-medium py-1.5 pr-3">Name</th>
+                                  <th className="text-left font-medium py-1.5 pr-3">Email</th>
+                                  <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
+                                  <th className="text-center font-medium py-1.5 pr-3">Pre</th>
+                                  <th className="text-center font-medium py-1.5 pr-3">Post-1</th>
+                                  <th className="text-center font-medium py-1.5 pr-3">Post-2</th>
+                                  <th className="py-1.5"></th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          <Pagination page={attendeePage} totalItems={s.attendees.length} pageSize={ATTENDEE_PAGE_SIZE} onChange={setAttendeePage} />
-                        </div>
-                      )}
+                              </thead>
+                              <tbody>
+                                {paginate(filteredAttendees, attendeePage, ATTENDEE_PAGE_SIZE).map((a) => (
+                                  <tr key={a.id} className="border-b border-slate-50">
+                                    <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
+                                    <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
+                                    <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
+                                    {(['preSurveySentAt', 'post1SurveySentAt', 'post2SurveySentAt'] as const).map((f) => (
+                                      <td key={f} className="py-1.5 pr-3 text-center">
+                                        {a[f] ? <span className="text-emerald-600">✓</span> : <span className="text-slate-300">—</span>}
+                                      </td>
+                                    ))}
+                                    <td className="py-1.5 text-right">
+                                      <button onClick={() => removeAttendee(s.id, a.id)} className="text-slate-300 hover:text-red-600">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <Pagination page={attendeePage} totalItems={filteredAttendees.length} pageSize={ATTENDEE_PAGE_SIZE} onChange={setAttendeePage} />
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
@@ -855,7 +890,7 @@ export function SurveyAutomationPanel() {
           </div>
         )}
         {!loadingSchedules && schedules.length > 0 && (
-          <Pagination page={schedulePage} totalItems={schedules.length} pageSize={SCHEDULE_PAGE_SIZE} onChange={setSchedulePage} />
+          <Pagination page={schedulePage} totalItems={filteredSchedules.length} pageSize={SCHEDULE_PAGE_SIZE} onChange={setSchedulePage} />
         )}
       </div>
 

@@ -11,6 +11,8 @@ export interface TableAudit {
 // Flags the specific, common failure patterns this app is known to produce when a source file
 // is missing a column or has blank cells: a staffId that fell back to "UNKNOWN_N", a blank
 // Business Unit, a zero/blank amount, etc. One row can have several flags at once.
+// `samples` returns up to 200 flagged rows per table (searchable/paginated client-side) — beyond
+// that, issueCount still reports the true total so the UI can show "+N more not shown".
 export async function runDataQualityAudit(): Promise<TableAudit[]> {
   const [training, feedback, subscription, kss, roster, managerReview] = await Promise.all([
     auditTraining(),
@@ -28,7 +30,7 @@ async function auditTraining(): Promise<TableAudit> {
     prisma.trainingRecord.count(),
     prisma.trainingRecord.findMany({
       where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { training: '' }, { cost: { lte: 0 } }] },
-      take: 3,
+      take: 200,
       orderBy: { createdAt: 'desc' },
     }),
   ])
@@ -57,7 +59,7 @@ async function auditFeedback(): Promise<TableAudit> {
   const [total, issueCount, problems] = await Promise.all([
     prisma.feedbackRecord.count(),
     prisma.feedbackRecord.count({ where }),
-    prisma.feedbackRecord.findMany({ where, take: 3, orderBy: { createdAt: 'desc' } }),
+    prisma.feedbackRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
   return {
     table: 'feedback',
@@ -76,7 +78,7 @@ async function auditSubscription(): Promise<TableAudit> {
   const [total, issueCount, problems] = await Promise.all([
     prisma.subscriptionRecord.count(),
     prisma.subscriptionRecord.count({ where }),
-    prisma.subscriptionRecord.findMany({ where, take: 3, orderBy: { createdAt: 'desc' } }),
+    prisma.subscriptionRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
   return {
     table: 'subscription',
@@ -100,7 +102,7 @@ async function auditKSS(): Promise<TableAudit> {
   const [total, issueCount, problems] = await Promise.all([
     prisma.kSSRecord.count(),
     prisma.kSSRecord.count({ where }),
-    prisma.kSSRecord.findMany({ where, take: 3, orderBy: { createdAt: 'desc' } }),
+    prisma.kSSRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
   return {
     table: 'kss',
@@ -123,7 +125,7 @@ async function auditRoster(): Promise<TableAudit> {
   const [total, issueCount, problems] = await Promise.all([
     prisma.staffRosterRecord.count(),
     prisma.staffRosterRecord.count({ where }),
-    prisma.staffRosterRecord.findMany({ where, take: 3, orderBy: { createdAt: 'desc' } }),
+    prisma.staffRosterRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
   return {
     table: 'roster',
@@ -146,7 +148,7 @@ async function auditManagerReview(): Promise<TableAudit> {
   const [total, issueCount, problems] = await Promise.all([
     prisma.managerReviewRecord.count(),
     prisma.managerReviewRecord.count({ where }),
-    prisma.managerReviewRecord.findMany({ where, take: 3, orderBy: { createdAt: 'desc' } }),
+    prisma.managerReviewRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
   return {
     table: 'manager-review',
