@@ -11,6 +11,9 @@ export async function GET() {
     post1MirrorSheetName: settings?.post1MirrorSheetName || '',
     post2MirrorSheetName: settings?.post2MirrorSheetName || '',
     preMirrorSheetName: settings?.preMirrorSheetName || '',
+    preDaysBefore: settings?.preDaysBefore ?? 7,
+    post1DaysAfter: settings?.post1DaysAfter ?? 1,
+    post2DaysAfter: settings?.post2DaysAfter ?? 30,
   })
 }
 
@@ -24,6 +27,9 @@ export async function POST(req: NextRequest) {
       post1MirrorSheetName: body.post1MirrorSheetName || null,
       post2MirrorSheetName: body.post2MirrorSheetName || null,
       preMirrorSheetName: body.preMirrorSheetName || null,
+      preDaysBefore: Number.isFinite(Number(body.preDaysBefore)) ? Number(body.preDaysBefore) : 7,
+      post1DaysAfter: Number.isFinite(Number(body.post1DaysAfter)) ? Number(body.post1DaysAfter) : 1,
+      post2DaysAfter: Number.isFinite(Number(body.post2DaysAfter)) ? Number(body.post2DaysAfter) : 30,
     }
     const existing = await prisma.surveySettings.findFirst()
     const updated = existing
