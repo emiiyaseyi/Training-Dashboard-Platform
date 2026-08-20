@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { MONTHS } from '@/lib/filter-types'
 import { connectToSpreadsheet, appendMirrorRow, type MirrorField } from '@/lib/google-sheets'
 import type { SurveyStageKey } from '@/lib/survey-questions'
+import { isSurveyExpired } from '@/lib/survey-expiry'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -10,6 +11,12 @@ const RESPONDED_FIELD = {
   pre: 'preSurveyRespondedAt',
   post1: 'post1SurveyRespondedAt',
   post2: 'post2SurveyRespondedAt',
+} as const
+
+const SENT_FIELD = {
+  pre: 'preSurveySentAt',
+  post1: 'post1SurveySentAt',
+  post2: 'post2SurveySentAt',
 } as const
 
 const MIRROR_SHEET_FIELD = {
@@ -43,6 +50,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     if (!attendee) return NextResponse.json({ error: 'This survey link is invalid or has expired.' }, { status: 404 })
     if (attendee[RESPONDED_FIELD[stageKey]]) {
       return NextResponse.json({ error: 'This survey has already been submitted.' }, { status: 400 })
+    }
+    if (await isSurveyExpired(attendee[SENT_FIELD[stageKey]])) {
+      return NextResponse.json({ error: 'This survey has expired and can no longer accept responses.' }, { status: 400 })
     }
 
     const { answers } = (await req.json()) as { answers: Record<string, string | string[]> }

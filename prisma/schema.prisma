@@ -230,6 +230,9 @@ model SurveySettings {
   preDaysBefore         Int      @default(7)  // Pre-Training survey sent this many days before startDate
   post1DaysAfter        Int      @default(1)  // Post-1 survey sent this many days after endDate
   post2DaysAfter        Int      @default(30) // Post-2 survey sent this many days after endDate
+  reminderIntervalHours Int      @default(24)   // hours between reminder nudges for an unfilled, already-sent survey
+  expiryEnabled         Boolean  @default(true) // whether an unfilled survey stops accepting responses after expiryDays
+  expiryDays            Int      @default(7)    // days after the original send before an unfilled survey expires
   updatedAt             DateTime @updatedAt
 }
 
@@ -325,6 +328,13 @@ model TrainingScheduleAttendee {
   preSurveyRespondedAt   DateTime?
   post1SurveyRespondedAt DateTime?
   post2SurveyRespondedAt DateTime?
+
+  // Last reminder nudge (or the original send, whichever is later) — gates the reminder cron's
+  // "has it been at least SurveySettings.reminderIntervalHours since we last nudged this person"
+  // check. *SurveySentAt itself stays fixed at the original send time (used for expiry).
+  preReminderAt   DateTime?
+  post1ReminderAt DateTime?
+  post2ReminderAt DateTime?
 
   // Unguessable per-attendee link token — one token covers all 3 stages (/survey/{token}/pre
   // etc.), since only the person who received the email knows it.

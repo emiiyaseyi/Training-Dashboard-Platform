@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import type { TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
 import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
@@ -7,6 +8,18 @@ const STAGE_SENT_FIELD = {
   pre: 'preSurveySentAt',
   post1: 'post1SurveySentAt',
   post2: 'post2SurveySentAt',
+} as const
+
+const STAGE_RESPONDED_FIELD = {
+  pre: 'preSurveyRespondedAt',
+  post1: 'post1SurveyRespondedAt',
+  post2: 'post2SurveyRespondedAt',
+} as const
+
+const STAGE_REMINDER_FIELD = {
+  pre: 'preReminderAt',
+  post1: 'post1ReminderAt',
+  post2: 'post2ReminderAt',
 } as const
 
 export interface SendSurveyResult {
@@ -79,10 +92,79 @@ export async function sendSurveyStage(
     })
     try {
       await sendMail({ to: toAddress, cc, subject, html })
-      await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [sentField]: new Date() } })
+      // Also stamps the reminder baseline (STAGE_REMINDER_FIELD) to now, so the reminder sweep's
+      // "hours since last nudge" interval starts counting from this send, not from epoch/null.
+      await prisma.trainingScheduleAttendee.update({
+        where: { id: attendee.id },
+        data: { [sentField]: new Date(), [STAGE_REMINDER_FIELD[stage]]: new Date() },
+      })
       result.sent++
     } catch (err) {
       result.skipped.push({ staffName: attendee.staffName, reason: err instanceof Error ? err.message : 'Send failed.' })
+    }
+  }
+
+  return result
+}
+
+const HOUR_MS = 3600000
+const DAY_MS = 86400000
+
+// Nudges attendees who have been sent a stage but haven't responded yet — runs from the daily
+// cron, per schedule per stage, reusing the already-fetched schedule+attendees rather than
+// re-querying. Skips anyone whose survey has expired (per SurveySettings.expiryDays), since a
+// reminder pointing at a form that will refuse the submission is worse than no reminder.
+export async function sendSurveyReminders(
+  schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
+  stage: SurveyStage,
+  settings: { reminderIntervalHours: number; expiryEnabled: boolean; expiryDays: number }
+): Promise<SendSurveyResult> {
+  const result: SendSurveyResult = { sent: 0, skipped: [] }
+  if (!(await hasSmtpCredentials())) return result
+
+  const sentField = STAGE_SENT_FIELD[stage]
+  const respondedField = STAGE_RESPONDED_FIELD[stage]
+  const reminderField = STAGE_REMINDER_FIELD[stage]
+  const now = Date.now()
+
+  const due = schedule.attendees.filter((a) => {
+    const sentAt = a[sentField]
+    if (!sentAt || a[respondedField]) return false
+    if (settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS) return false
+    const lastNudge = (a[reminderField] || sentAt).getTime()
+    return now - lastNudge >= settings.reminderIntervalHours * HOUR_MS
+  })
+  if (due.length === 0) return result
+
+  const baseUrl = getAppBaseUrl()
+  const recipientRole = surveyRecipientRole(stage)
+  const superAdmins = await prisma.user.findMany({ where: { isSuperAdmin: true, isActive: true }, select: { email: true } })
+  const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
+
+  for (const attendee of due) {
+    const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
+    const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
+    const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
+    if (!toAddress) continue // already reported as skipped by the original send
+
+    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails]
+    const { subject, html } = buildSurveyEmail({
+      stage,
+      recipientName: recipientName || 'there',
+      employeeName: attendee.staffName,
+      trainingName: schedule.trainingName,
+      formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
+      startDate: schedule.startDate,
+      endDate: schedule.endDate,
+      trainingType: schedule.trainingType,
+      isReminder: true,
+    })
+    try {
+      await sendMail({ to: toAddress, cc, subject, html })
+      await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
+      result.sent++
+    } catch (err) {
+      result.skipped.push({ staffName: attendee.staffName, reason: err instanceof Error ? err.message : 'Reminder send failed.' })
     }
   }
 

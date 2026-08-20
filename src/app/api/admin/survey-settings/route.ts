@@ -14,6 +14,9 @@ export async function GET() {
     preDaysBefore: settings?.preDaysBefore ?? 7,
     post1DaysAfter: settings?.post1DaysAfter ?? 1,
     post2DaysAfter: settings?.post2DaysAfter ?? 30,
+    reminderIntervalHours: settings?.reminderIntervalHours ?? 24,
+    expiryEnabled: settings?.expiryEnabled ?? true,
+    expiryDays: settings?.expiryDays ?? 7,
   })
 }
 
@@ -30,6 +33,9 @@ export async function POST(req: NextRequest) {
       preDaysBefore: Number.isFinite(Number(body.preDaysBefore)) ? Number(body.preDaysBefore) : 7,
       post1DaysAfter: Number.isFinite(Number(body.post1DaysAfter)) ? Number(body.post1DaysAfter) : 1,
       post2DaysAfter: Number.isFinite(Number(body.post2DaysAfter)) ? Number(body.post2DaysAfter) : 30,
+      reminderIntervalHours: Number.isFinite(Number(body.reminderIntervalHours)) ? Number(body.reminderIntervalHours) : 24,
+      expiryEnabled: !!body.expiryEnabled,
+      expiryDays: Number.isFinite(Number(body.expiryDays)) ? Number(body.expiryDays) : 7,
     }
     const existing = await prisma.surveySettings.findFirst()
     const updated = existing
