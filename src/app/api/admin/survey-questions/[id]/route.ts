@@ -9,9 +9,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { section, label, type, options, required, autoFill, fieldKey } = body as {
+    const { section, label, type, options, required, autoFill, fieldKey, driveFolderId } = body as {
       section?: string; label?: string; type?: string
-      options?: string[]; required?: boolean; autoFill?: string; fieldKey?: string
+      options?: string[]; required?: boolean; autoFill?: string; fieldKey?: string; driveFolderId?: string
     }
     if (label !== undefined && !label.trim()) {
       return NextResponse.json({ error: 'Question label cannot be empty.' }, { status: 400 })
@@ -27,6 +27,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(required !== undefined && { required }),
         ...(autoFill !== undefined && { autoFill: autoFill || null }),
         ...(fieldKey !== undefined && { fieldKey: fieldKey.trim() || null }),
+        ...(driveFolderId !== undefined && { driveFolderId: driveFolderId.trim() || null }),
       },
     })
     return NextResponse.json({ ...question, options: question.options ? JSON.parse(question.options) : null })

@@ -233,6 +233,7 @@ model SurveySettings {
   reminderIntervalHours Int      @default(24)   // hours between reminder nudges for an unfilled, already-sent survey
   expiryEnabled         Boolean  @default(true) // whether an unfilled survey stops accepting responses after expiryDays
   expiryDays            Int      @default(7)    // days after the original send before an unfilled survey expires
+  maxFileUploadMB       Int      @default(20)    // per-file cap for "file" question uploads — one of 5/10/20/50/100
   // Last mirror-append outcome per stage — JSON: { success: boolean, message: string, at: string }.
   // The submit route runs unauthenticated (public respondent-facing), so a mirror failure can't be
   // surfaced to whoever just filled the form — this makes it visible to the admin instead, since it
@@ -256,11 +257,12 @@ model SurveyQuestion {
   order     Int
   section   String?
   label     String
-  type      String // "text" | "textarea" | "select" | "multiselect" | "rating" | "date" | "yesno"
+  type      String // "text" | "textarea" | "select" | "multiselect" | "rating" | "date" | "yesno" | "file"
   options   String? // JSON array of strings — for select/multiselect
   required  Boolean  @default(false)
   autoFill  String?
   fieldKey  String?
+  driveFolderId String? // for type "file" — the Google Drive folder the uploaded file is saved into
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

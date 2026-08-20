@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock, Search, Pencil, ArrowLeft } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock, Search, Pencil, ArrowLeft, Paperclip, Upload, X as XIcon } from 'lucide-react'
 
 const STAGE_LABELS: Record<string, string> = {
   pre: 'Pre-Training Survey',
@@ -14,10 +14,65 @@ interface Question {
   id: string
   section: string | null
   label: string
-  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno'
+  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
   options: string[] | null
   required: boolean
   autoFill: string | null
+}
+
+interface UploadedFile { fileName: string; webViewLink: string }
+
+// The answer VALUE for a file question is a JSON array of { fileName, webViewLink } — one or more
+// files — stored and submitted exactly like any other text answer, so the submit route needs no
+// special-casing.
+function FileQuestionInput({ questionId, value, onChange }: { questionId: string; value: string; onChange: (v: string) => void }) {
+  const params = useParams<{ token: string; stage: string }>()
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const files: UploadedFile[] = value ? (JSON.parse(value) as UploadedFile[]) : []
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return
+    setError('')
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('questionId', questionId)
+      const res = await fetch(`/api/survey/${params.token}/${params.stage}/upload`, { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed.')
+      onChange(JSON.stringify([...files, { fileName: data.fileName, webViewLink: data.webViewLink }]))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeFile = (i: number) => onChange(JSON.stringify(files.filter((_, idx) => idx !== i)))
+
+  return (
+    <div className="space-y-2">
+      {files.map((f, i) => (
+        <div key={i} className="flex items-center gap-2 border border-slate-300 rounded-lg px-4 py-2.5 text-[18px]">
+          <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
+          <a href={f.webViewLink} target="_blank" rel="noreferrer" className="text-navy-600 hover:underline truncate flex-1">
+            {f.fileName}
+          </a>
+          <button type="button" onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-600 shrink-0">
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+      <label className="flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-4 py-2.5 text-[18px] text-slate-500 cursor-pointer hover:bg-slate-50">
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        {uploading ? 'Uploading…' : files.length > 0 ? 'Add another file' : 'Choose a file to upload'}
+        <input type="file" className="hidden" disabled={uploading} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
+      </label>
+      {error && <p className="text-[14px] text-red-600 mt-1">{error}</p>}
+    </div>
+  )
 }
 
 interface SurveyContext {
@@ -132,6 +187,8 @@ function QuestionInput({ q, value, onChange }: { q: Question; value: string | st
       return <textarea value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} rows={3} className={base} />
     case 'select':
       return <SearchableSelect options={q.options || []} value={(value as string) || ''} onChange={onChange} />
+    case 'file':
+      return <FileQuestionInput questionId={q.id} value={(value as string) || ''} onChange={onChange} />
     case 'multiselect': {
       const selected = Array.isArray(value) ? value : []
       return (

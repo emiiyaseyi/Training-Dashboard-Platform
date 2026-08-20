@@ -5,11 +5,12 @@
 export interface DefaultQuestion {
   section?: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno'
+  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
   options?: string[]
   required: boolean
   autoFill?: 'trainingName' | 'businessUnit' | 'employeeName' | 'role' | 'recipientName'
   fieldKey?: string
+  driveFolderId?: string
 }
 
 const VENDOR_OPTIONS = [
@@ -59,6 +60,9 @@ export const DEFAULT_QUESTIONS: Record<'pre' | 'post1' | 'post2', DefaultQuestio
     { section: 'Final Reflections', label: 'Training Provider/Facilitator', type: 'select', options: VENDOR_OPTIONS, required: false, fieldKey: 'vendorName' },
     { section: 'Final Reflections', label: 'Would you recommend this training to others in the business?', type: 'select', options: ['Yes', 'No', 'Maybe'], required: false },
     { section: 'Final Reflections', label: 'Any additional comments or recommendations?', type: 'textarea', required: false, fieldKey: 'qualitativeResponse' },
+
+    { section: 'Attachments', label: 'Learning Resources/Materials', type: 'file', required: false, driveFolderId: '1rjUEVvDYI93SQORpwWDo0ke9pjT1JND6' },
+    { section: 'Attachments', label: 'Certification Issued', type: 'file', required: false, driveFolderId: '1fvzO4r3ASNV0FKMtPhXkliUqAvTEvduP' },
   ],
   post2: [
     { section: 'General Information', label: 'Name', type: 'text', required: false, autoFill: 'recipientName' },

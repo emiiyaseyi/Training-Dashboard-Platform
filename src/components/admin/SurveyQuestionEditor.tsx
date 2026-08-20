@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ListChecks, Loader2, Plus, Trash2, ChevronUp, ChevronDown, Pencil } from 'lucide-react'
 
-type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno'
+type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
 
 interface Question {
   id: string
@@ -16,6 +16,14 @@ interface Question {
   required: boolean
   autoFill: string | null
   fieldKey: string | null
+  driveFolderId: string | null
+}
+
+// Accepts either a bare folder ID or a full Drive URL (https://drive.google.com/drive/folders/<id>...).
+function extractDriveFolderId(input: string): string {
+  const trimmed = input.trim()
+  const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/)
+  return match ? match[1] : trimmed
 }
 
 const STAGE_TABS: { key: 'pre' | 'post1' | 'post2'; label: string }[] = [
@@ -36,7 +44,7 @@ const AUTOFILL_OPTIONS = [
 ]
 
 const emptyDraft = {
-  section: '', label: '', type: 'text' as QuestionType, optionsText: '', required: false, autoFill: '', fieldKey: '',
+  section: '', label: '', type: 'text' as QuestionType, optionsText: '', required: false, autoFill: '', fieldKey: '', driveFolderId: '',
 }
 
 function QuestionForm({
@@ -78,6 +86,14 @@ function QuestionForm({
           placeholder="Options, comma-separated (e.g. Yes, No, Maybe)"
           value={draft.optionsText}
           onChange={(e) => onChange({ ...draft, optionsText: e.target.value })}
+          className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+        />
+      )}
+      {draft.type === 'file' && (
+        <input
+          placeholder="Google Drive folder — paste the folder link or just its ID"
+          value={draft.driveFolderId}
+          onChange={(e) => onChange({ ...draft, driveFolderId: extractDriveFolderId(e.target.value) })}
           className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
         />
       )}
@@ -151,7 +167,7 @@ export function SurveyQuestionEditor() {
     setEditDraft({
       section: q.section || '', label: q.label, type: q.type,
       optionsText: (q.options || []).join(', '), required: q.required,
-      autoFill: q.autoFill || '', fieldKey: q.fieldKey || '',
+      autoFill: q.autoFill || '', fieldKey: q.fieldKey || '', driveFolderId: q.driveFolderId || '',
     })
   }
 
@@ -165,7 +181,7 @@ export function SurveyQuestionEditor() {
         body: JSON.stringify({
           section: editDraft.section, label: editDraft.label, type: editDraft.type,
           options: toOptionsArray(editDraft.optionsText), required: editDraft.required,
-          autoFill: editDraft.autoFill, fieldKey: editDraft.fieldKey,
+          autoFill: editDraft.autoFill, fieldKey: editDraft.fieldKey, driveFolderId: editDraft.driveFolderId,
         }),
       })
       setEditingId(null)
@@ -184,7 +200,7 @@ export function SurveyQuestionEditor() {
         body: JSON.stringify({
           stage, section: addDraft.section, label: addDraft.label, type: addDraft.type,
           options: toOptionsArray(addDraft.optionsText), required: addDraft.required,
-          autoFill: addDraft.autoFill, fieldKey: addDraft.fieldKey,
+          autoFill: addDraft.autoFill, fieldKey: addDraft.fieldKey, driveFolderId: addDraft.driveFolderId,
         }),
       })
       if (res.ok) {
@@ -278,6 +294,11 @@ export function SurveyQuestionEditor() {
                     {q.required && <span className="text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5">required</span>}
                     {q.autoFill && <span className="text-[10px] bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">auto-filled: {q.autoFill}</span>}
                     {q.fieldKey && <span className="text-[10px] bg-emerald-50 text-emerald-700 rounded px-1.5 py-0.5">feeds: {q.fieldKey}</span>}
+                    {q.type === 'file' && (
+                      <span className={`text-[10px] rounded px-1.5 py-0.5 ${q.driveFolderId ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {q.driveFolderId ? 'Drive folder set' : 'No Drive folder configured'}
+                      </span>
+                    )}
                     {q.options && q.options.length > 0 && (
                       <span className="text-[10px] text-slate-400">options: {q.options.join(', ')}</span>
                     )}
