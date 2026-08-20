@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload,
 } from 'lucide-react'
+import { Pagination, paginate } from '@/components/ui/Pagination'
+
+const SCHEDULE_PAGE_SIZE = 10
+const ATTENDEE_PAGE_SIZE = 15
 
 interface SettingsState {
   post1MirrorSheetName: string
@@ -91,6 +95,8 @@ export function SurveyAutomationPanel() {
   const [newSchedule, setNewSchedule] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '' })
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [schedulePage, setSchedulePage] = useState(1)
+  const [attendeePage, setAttendeePage] = useState(1)
 
   const [roster, setRoster] = useState<RosterStaff[]>([])
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
@@ -504,12 +510,12 @@ export function SurveyAutomationPanel() {
           <p className="text-xs text-slate-400">No training schedules yet.</p>
         ) : (
           <div className="space-y-2">
-            {schedules.map((s) => {
+            {paginate(schedules, schedulePage, SCHEDULE_PAGE_SIZE).map((s) => {
               const isExpanded = expandedId === s.id
               return (
                 <div key={s.id} className="border border-slate-200 rounded-lg">
                   <button
-                    onClick={() => { setExpandedId(isExpanded ? null : s.id); setAttendeeResult(null); setPending([]); setSearchQuery('') }}
+                    onClick={() => { setExpandedId(isExpanded ? null : s.id); setAttendeeResult(null); setPending([]); setSearchQuery(''); setAttendeePage(1) }}
                     className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
@@ -669,7 +675,7 @@ export function SurveyAutomationPanel() {
                               </tr>
                             </thead>
                             <tbody>
-                              {s.attendees.map((a) => (
+                              {paginate(s.attendees, attendeePage, ATTENDEE_PAGE_SIZE).map((a) => (
                                 <tr key={a.id} className="border-b border-slate-50">
                                   <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
                                   <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
@@ -688,6 +694,7 @@ export function SurveyAutomationPanel() {
                               ))}
                             </tbody>
                           </table>
+                          <Pagination page={attendeePage} totalItems={s.attendees.length} pageSize={ATTENDEE_PAGE_SIZE} onChange={setAttendeePage} />
                         </div>
                       )}
                     </div>
@@ -696,6 +703,9 @@ export function SurveyAutomationPanel() {
               )
             })}
           </div>
+        )}
+        {!loadingSchedules && schedules.length > 0 && (
+          <Pagination page={schedulePage} totalItems={schedules.length} pageSize={SCHEDULE_PAGE_SIZE} onChange={setSchedulePage} />
         )}
       </div>
 

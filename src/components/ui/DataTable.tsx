@@ -1,3 +1,8 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Pagination, paginate } from '@/components/ui/Pagination'
+
 interface Column<T> {
   key: keyof T | string
   header: string
@@ -10,6 +15,7 @@ interface DataTableProps<T extends Record<string, unknown>> {
   data: T[] | unknown
   emptyMessage?: string
   caption?: string
+  pageSize?: number // set to 0 to disable pagination
 }
 
 export function DataTable<T extends Record<string, unknown>>({
@@ -17,8 +23,18 @@ export function DataTable<T extends Record<string, unknown>>({
   data,
   emptyMessage = 'No data available.',
   caption,
+  pageSize = 25,
 }: DataTableProps<T>) {
+  const [page, setPage] = useState(1)
   const rows: T[] = Array.isArray(data) ? data : []
+  const pageRows = pageSize > 0 ? paginate(rows, page, pageSize) : rows
+
+  // Filters/re-fetches change the row count out from under us — snap back to page 1 rather than
+  // stranding the user on a now-empty page past the new last page.
+  useEffect(() => {
+    setPage(1)
+  }, [rows.length])
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {caption && (
@@ -43,14 +59,14 @@ export function DataTable<T extends Record<string, unknown>>({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 ? (
+            {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400 text-sm">
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              rows.map((row, i) => (
+              pageRows.map((row, i) => (
                 <tr key={i} className="hover:bg-slate-50 transition-colors">
                   {columns.map((col, colIdx) => (
                     <td
@@ -71,6 +87,11 @@ export function DataTable<T extends Record<string, unknown>>({
           </tbody>
         </table>
       </div>
+      {pageSize > 0 && (
+        <div className="px-4 border-t border-slate-100">
+          <Pagination page={page} totalItems={rows.length} pageSize={pageSize} onChange={setPage} />
+        </div>
+      )}
     </div>
   )
 }
