@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, Pencil, X, Copy } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search } from 'lucide-react'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface StaffQualityRow {
   id: string
@@ -33,10 +34,24 @@ interface Audit {
   duplicateNameGroups: { name: string; staffIds: string[] }[]
 }
 
+interface RosterStaff {
+  staffId: string
+  name: string
+  email: string | null
+  businessUnit: string
+}
+
+interface BusinessUnitOption {
+  id: string
+  name: string
+}
+
 type Draft = {
   staffId: string; firstName: string; middleName: string; lastName: string
   email: string; businessUnit: string; lineManagerStaffId: string
 }
+
+const PAGE_SIZE = 20
 
 export function StaffDataQuality() {
   const [audit, setAudit] = useState<Audit | null>(null)
@@ -46,6 +61,11 @@ export function StaffDataQuality() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(1)
+
+  const [roster, setRoster] = useState<RosterStaff[]>([])
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
+  const [managerSearch, setManagerSearch] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -59,7 +79,13 @@ export function StaffDataQuality() {
 
   useEffect(() => {
     load()
+    fetch('/api/admin/roster-directory').then((r) => r.json()).then(setRoster)
+    fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : []))
   }, [])
+
+  useEffect(() => {
+    setPage(1)
+  }, [audit?.rows.length])
 
   const clean = async () => {
     const total = audit?.duplicateIdGroups.reduce((s, g) => s + g.shadowed.length, 0) || 0
@@ -79,6 +105,7 @@ export function StaffDataQuality() {
 
   const startEdit = (r: StaffQualityRow) => {
     setEditingId(r.id)
+    setManagerSearch('')
     setDraft({
       staffId: r.staffId, firstName: r.firstName, middleName: r.middleName || '', lastName: r.lastName,
       email: r.email || '', businessUnit: r.businessUnit, lineManagerStaffId: r.lineManagerStaffId || '',
@@ -107,7 +134,19 @@ export function StaffDataQuality() {
     }
   }
 
+  const managerResults = useMemo(() => {
+    const q = managerSearch.trim().toLowerCase()
+    if (!q || !draft) return []
+    return roster
+      .filter((r) => r.staffId !== draft.staffId)
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [managerSearch, roster, draft])
+
+  const currentManager = draft ? roster.find((r) => r.staffId.toUpperCase() === draft.lineManagerStaffId.toUpperCase()) : undefined
+
   const duplicateShadowedTotal = audit?.duplicateIdGroups.reduce((s, g) => s + g.shadowed.length, 0) || 0
+  const pageRows = audit ? paginate(audit.rows, page, PAGE_SIZE) : []
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
@@ -117,8 +156,7 @@ export function StaffDataQuality() {
           <div>
             <p className="text-sm font-semibold text-slate-800">Staff Data Quality</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names, across the uploaded roster.
-              Edit a record inline to fix it directly.
+              Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names. Click any record to fix it.
             </p>
           </div>
         </div>
@@ -177,7 +215,7 @@ export function StaffDataQuality() {
           )}
 
           <div className="space-y-2">
-            {audit.rows.map((r) =>
+            {pageRows.map((r) =>
               editingId === r.id && draft ? (
                 <div key={r.id} className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -185,11 +223,50 @@ export function StaffDataQuality() {
                     <input placeholder="First name" value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs" />
                     <input placeholder="Last name" value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <input placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs" />
-                    <input placeholder="Business Unit" value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs" />
-                    <input placeholder="Line Manager Staff ID" value={draft.lineManagerStaffId} onChange={(e) => setDraft({ ...draft, lineManagerStaffId: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs" />
+                    <select value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs">
+                      <option value="">Select Business Unit…</option>
+                      {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+                    </select>
                   </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Line Manager</label>
+                    {draft.lineManagerStaffId && (
+                      <span className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1 mb-1.5">
+                        {currentManager?.name || draft.lineManagerStaffId}
+                        <button type="button" onClick={() => setDraft({ ...draft, lineManagerStaffId: '' })} className="hover:text-red-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={managerSearch}
+                        onChange={(e) => setManagerSearch(e.target.value)}
+                        placeholder="Search by name or Staff ID to set/change…"
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+                      />
+                      {managerResults.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                          {managerResults.map((m) => (
+                            <button
+                              key={m.staffId}
+                              type="button"
+                              onClick={() => { setDraft({ ...draft, lineManagerStaffId: m.staffId }); setManagerSearch('') }}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                            >
+                              <span className="text-slate-700">{m.name}</span>
+                              <span className="text-slate-400">{m.staffId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                       {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -201,19 +278,22 @@ export function StaffDataQuality() {
                   </div>
                 </div>
               ) : (
-                <div key={r.id} className="flex items-start justify-between gap-3 border border-slate-200 rounded-lg px-3 py-2.5">
+                <button
+                  key={r.id}
+                  onClick={() => startEdit(r)}
+                  className="w-full flex items-start justify-between gap-3 border border-slate-200 rounded-lg px-3 py-2.5 text-left hover:border-navy-300 hover:bg-navy-50/30 transition-colors"
+                >
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-slate-800">{r.name || <span className="text-red-500">(no name)</span>} <span className="text-slate-400 font-normal">· {r.staffId || '(no Staff ID)'}</span></p>
                     <p className="text-[11px] text-slate-500 mt-0.5">{r.email || '—'} · {r.businessUnit || '—'}</p>
                     <p className="text-[11px] text-amber-700 mt-1">{r.issues.join(' · ')}</p>
                   </div>
-                  <button onClick={() => startEdit(r)} className="text-slate-300 hover:text-navy-600 p-1 shrink-0">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                </button>
               )
             )}
           </div>
+
+          <Pagination page={page} totalItems={audit.rows.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       )}
     </div>
