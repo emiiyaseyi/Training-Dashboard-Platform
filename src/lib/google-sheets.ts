@@ -224,6 +224,60 @@ function normaliseHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+export interface MirrorField {
+  label: string
+  candidates: string[]
+  value: string | number
+}
+
+// Appends one row to a tab, self-aligning to whatever header row already exists there instead of
+// assuming a fixed column order. This matters because a mirror tab (e.g. a native survey form's
+// Google Sheet mirror) can be the SAME tab an admin already uses for bulk Excel uploads, with its
+// own pre-existing header row — blindly appending values in our own fixed order would land them
+// under the wrong headers. Matching mirrors the two-pass "exact, then loose substring (>=4 chars)"
+// strategy used by findHeader() in excel-parser.ts, so behaviour stays consistent across the app.
+// If the tab has no header row yet, writes one (from `label`s) before the data row.
+export async function appendMirrorRow(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  fields: MirrorField[]
+): Promise<void> {
+  const existingHeaders = await fetchSheetHeaderRow(spreadsheetId, sheetName, accessToken)
+  if (existingHeaders.length === 0) {
+    await appendRowToSheet(spreadsheetId, sheetName, accessToken, fields.map((f) => f.label))
+    await appendRowToSheet(spreadsheetId, sheetName, accessToken, fields.map((f) => f.value))
+    return
+  }
+
+  const normHeaders = existingHeaders.map(normaliseHeader)
+  const fieldCandidates = fields.map((f) => [normaliseHeader(f.label), ...f.candidates.map(normaliseHeader)].filter(Boolean))
+  const used = new Set<number>()
+
+  const matchFor = (h: string, allowSubstring: boolean): number => {
+    for (let i = 0; i < fields.length; i++) {
+      if (used.has(i)) continue
+      const cands = fieldCandidates[i]
+      if (cands.some((c) => c === h)) return i
+      if (allowSubstring && cands.some((c) => c.length >= 4 && (h.includes(c) || c.includes(h)))) return i
+    }
+    return -1
+  }
+
+  const row: (string | number)[] = new Array(existingHeaders.length).fill('')
+  normHeaders.forEach((h, idx) => {
+    const m = matchFor(h, false)
+    if (m >= 0) { row[idx] = fields[m].value; used.add(m) }
+  })
+  normHeaders.forEach((h, idx) => {
+    if (row[idx] !== '') return
+    const m = matchFor(h, true)
+    if (m >= 0) { row[idx] = fields[m].value; used.add(m) }
+  })
+
+  await appendRowToSheet(spreadsheetId, sheetName, accessToken, row)
+}
+
 // Checks that at least one of `candidates` appears (as substring, either direction) among `headers`.
 function hasMatchingColumn(headers: string[], candidates: string[]): boolean {
   const normHeaders = headers.map(normaliseHeader)
