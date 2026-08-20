@@ -8,9 +8,17 @@ import { normalizeBUName } from '@/lib/bu-normalizer'
 export interface ResolvedStaff {
   staffId: string
   name: string
+  firstName: string
+  lastName: string
   email: string | null
   lineManagerStaffId: string | null
   businessUnit: string
+}
+
+// "First Last" only, no middle name — used specifically for the Line Manager Name column written
+// back to the comprehensive staff list sheet, per the admin's stated format for that column.
+export function managerDisplayName(staff: ResolvedStaff): string {
+  return [staff.firstName, staff.lastName].filter(Boolean).join(' ') || staff.name
 }
 
 // Reads the optional "comprehensive staff list" sheet (Admin -> Live Data Source) as a lenient
@@ -55,14 +63,17 @@ async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>>
       const key = normalizeStaffIdKey(staffId)
       if (!key) continue
 
+      const firstName = col.firstName ? norm(r[col.firstName]) : ''
+      const lastName = col.lastName ? norm(r[col.lastName]) : ''
       const name = col.name
         ? norm(r[col.name])
-        : [col.firstName && r[col.firstName], col.middleName && r[col.middleName], col.lastName && r[col.lastName]]
-            .filter((v): v is unknown => !!v).map(norm).filter(Boolean).join(' ')
+        : [firstName, col.middleName && norm(r[col.middleName]), lastName].filter(Boolean).join(' ')
 
       map.set(key, {
         staffId: staffId.toUpperCase(),
         name: name || staffId.toUpperCase(),
+        firstName,
+        lastName,
         email: col.email ? norm(r[col.email]).toLowerCase() || null : null,
         lineManagerStaffId: col.lineManager ? norm(r[col.lineManager]).toUpperCase() || null : null,
         businessUnit: col.bu ? normalizeBUName(norm(r[col.bu])) : '',
@@ -89,6 +100,8 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
     map.set(normalizeStaffIdKey(r.staffId), {
       staffId: r.staffId.toUpperCase(),
       name: [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' '),
+      firstName: r.firstName,
+      lastName: r.lastName,
       email: r.email,
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
@@ -104,6 +117,8 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       map.set(key, {
         staffId: existing.staffId,
         name: existing.name || extra.name,
+        firstName: existing.firstName || extra.firstName,
+        lastName: existing.lastName || extra.lastName,
         email: existing.email || extra.email,
         lineManagerStaffId: existing.lineManagerStaffId || extra.lineManagerStaffId,
         businessUnit: existing.businessUnit || extra.businessUnit,
