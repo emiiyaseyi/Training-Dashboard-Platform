@@ -1,7 +1,10 @@
 import { JWT } from 'google-auth-library'
 import { createPrivateKey } from 'crypto'
 
-const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
+// Read+write — the sync engine only ever reads, but native survey form submissions append rows
+// (Post-1/Post-2/Pre-Training), which needs write access. The spreadsheet must be shared with
+// the service account as Editor, not just Viewer, for the append calls to succeed.
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 
 export function extractSpreadsheetId(input: string): string | null {
   const trimmed = input.trim()
@@ -193,6 +196,28 @@ export async function fetchSheetHeaderRow(spreadsheetId: string, sheetName: stri
   }
   const data = (await res.json()) as { values?: string[][] }
   return (data.values?.[0] || []).map((h) => String(h ?? '').trim())
+}
+
+// Appends one row to a named tab (after its last row) — used to mirror native survey form
+// submissions into a Google Sheet for the admin's own visibility, alongside the database write.
+// Requires the spreadsheet to be shared with the service account as Editor, not just Viewer.
+export async function appendRowToSheet(spreadsheetId: string, sheetName: string, accessToken: string, values: (string | number)[]): Promise<void> {
+  const range = `${sheetName}!A1`
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [values] }),
+    }
+  )
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    if (res.status === 403) {
+      throw new Error(`Cannot write to tab "${sheetName}" — the service account needs Editor access to the spreadsheet, not just Viewer.`)
+    }
+    throw new Error(`Could not write to tab "${sheetName}" (${res.status}): ${body.slice(0, 200)}`)
+  }
 }
 
 function normaliseHeader(h: string): string {

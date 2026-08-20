@@ -1,17 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
+import { getAppBaseUrl } from '@/lib/app-url'
 
 const STAGE_SENT_FIELD = {
   pre: 'preSurveySentAt',
   post1: 'post1SurveySentAt',
   post2: 'post2SurveySentAt',
-} as const
-
-const STAGE_URL_FIELD = {
-  pre: 'preSurveyFormUrl',
-  post1: 'post1SurveyFormUrl',
-  post2: 'post2SurveyFormUrl',
 } as const
 
 export interface SendSurveyResult {
@@ -38,22 +33,17 @@ export async function sendSurveyStage(
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
   }
 
-  const [schedule, settings, superAdmins] = await Promise.all([
+  const [schedule, superAdmins] = await Promise.all([
     prisma.trainingSchedule.findUnique({
       where: { id: scheduleId },
       include: { attendees: attendeeIds ? { where: { id: { in: attendeeIds } } } : true },
     }),
-    prisma.surveySettings.findFirst(),
     prisma.user.findMany({ where: { isSuperAdmin: true, isActive: true }, select: { email: true } }),
   ])
 
   if (!schedule) throw new Error('Training schedule not found.')
 
-  const formUrl = settings?.[STAGE_URL_FIELD[stage]]
-  if (!formUrl) {
-    throw new Error('No Google Form link configured for this survey stage yet — set it in Admin → Survey Automation.')
-  }
-
+  const baseUrl = getAppBaseUrl()
   const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
   const sentField = STAGE_SENT_FIELD[stage]
   const recipientRole = surveyRecipientRole(stage)
@@ -82,7 +72,7 @@ export async function sendSurveyStage(
       recipientName: recipientName || 'there',
       employeeName: attendee.staffName,
       trainingName: schedule.trainingName,
-      formUrl,
+      formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
     })
     try {
       await sendMail({ to: toAddress, cc, subject, html })

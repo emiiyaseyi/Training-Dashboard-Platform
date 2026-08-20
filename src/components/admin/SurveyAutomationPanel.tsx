@@ -6,9 +6,9 @@ import {
 } from 'lucide-react'
 
 interface SettingsState {
-  preSurveyFormUrl: string
-  post1SurveyFormUrl: string
-  post2SurveyFormUrl: string
+  post1MirrorSheetName: string
+  post2MirrorSheetName: string
+  preMirrorSheetName: string
 }
 
 interface Attendee {
@@ -74,7 +74,7 @@ function parseCSV(text: string): string[] {
 }
 
 export function SurveyAutomationPanel() {
-  const [settings, setSettings] = useState<SettingsState>({ preSurveyFormUrl: '', post1SurveyFormUrl: '', post2SurveyFormUrl: '' })
+  const [settings, setSettings] = useState<SettingsState>({ post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '' })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -102,9 +102,9 @@ export function SurveyAutomationPanel() {
       const res = await fetch('/api/admin/survey-settings')
       const data = await res.json()
       setSettings({
-        preSurveyFormUrl: data.preSurveyFormUrl || '',
-        post1SurveyFormUrl: data.post1SurveyFormUrl || '',
-        post2SurveyFormUrl: data.post2SurveyFormUrl || '',
+        post1MirrorSheetName: data.post1MirrorSheetName || '',
+        post2MirrorSheetName: data.post2MirrorSheetName || '',
+        preMirrorSheetName: data.preMirrorSheetName || '',
       })
     } finally {
       setLoadingSettings(false)
@@ -268,14 +268,18 @@ export function SurveyAutomationPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Google Form links */}
+      {/* Survey forms are native to the platform — no Google Form links needed. Submissions
+          write to the database and optionally mirror into a tab on the spreadsheet already
+          configured under Live Data Source. */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
         <div className="flex items-start gap-3 mb-4">
           <Link2 className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-slate-800">Survey Links</p>
+            <p className="text-sm font-semibold text-slate-800">Survey Mirror Sheets</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Pre and Post-1 go to the employee; Post-2 goes to their line manager. SMTP is configured in Admin Settings.
+              Forms are hosted in the platform — every submission is saved here. Set a tab name below to also mirror a copy into that
+              tab (in the spreadsheet configured under Live Data Source). Leave blank to skip mirroring for that stage. Pre and Post-1
+              are filled by the employee; Post-2 by their line manager.
             </p>
           </div>
         </div>
@@ -286,29 +290,29 @@ export function SurveyAutomationPanel() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Pre-Training Form link</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Pre-Training mirror tab name</label>
                 <input
-                  value={settings.preSurveyFormUrl}
-                  onChange={(e) => setSettings({ ...settings, preSurveyFormUrl: e.target.value })}
-                  placeholder="https://forms.gle/…"
+                  value={settings.preMirrorSheetName}
+                  onChange={(e) => setSettings({ ...settings, preMirrorSheetName: e.target.value })}
+                  placeholder="2026 Pre Training"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Post-1 Form link (employee)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Post-1 mirror tab name</label>
                 <input
-                  value={settings.post1SurveyFormUrl}
-                  onChange={(e) => setSettings({ ...settings, post1SurveyFormUrl: e.target.value })}
-                  placeholder="https://forms.gle/…"
+                  value={settings.post1MirrorSheetName}
+                  onChange={(e) => setSettings({ ...settings, post1MirrorSheetName: e.target.value })}
+                  placeholder="2026 Post Training 1"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Post-2 Form link (manager)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">Post-2 mirror tab name</label>
                 <input
-                  value={settings.post2SurveyFormUrl}
-                  onChange={(e) => setSettings({ ...settings, post2SurveyFormUrl: e.target.value })}
-                  placeholder="https://forms.gle/…"
+                  value={settings.post2MirrorSheetName}
+                  onChange={(e) => setSettings({ ...settings, post2MirrorSheetName: e.target.value })}
+                  placeholder="2026 Post Training 2"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                 />
               </div>
