@@ -34,7 +34,7 @@ interface SurveyContext {
 }
 
 function QuestionInput({ q, value, onChange }: { q: Question; value: string | string[]; onChange: (v: string | string[]) => void }) {
-  const base = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-navy-600'
+  const base = 'w-full px-4 py-2.5 border border-slate-300 rounded-lg text-[18px] focus:outline-none focus:ring-2 focus:ring-navy-600'
   switch (q.type) {
     case 'textarea':
       return <textarea value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} rows={3} className={base} />
@@ -48,9 +48,9 @@ function QuestionInput({ q, value, onChange }: { q: Question; value: string | st
     case 'multiselect': {
       const selected = Array.isArray(value) ? value : []
       return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {q.options?.map((o) => (
-            <label key={o} className="flex items-center gap-2 text-sm text-slate-600">
+            <label key={o} className="flex items-center gap-2 text-[18px] text-slate-600">
               <input
                 type="checkbox"
                 checked={selected.includes(o)}
@@ -64,13 +64,13 @@ function QuestionInput({ q, value, onChange }: { q: Question; value: string | st
     }
     case 'rating':
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               type="button"
               key={n}
               onClick={() => onChange(String(n))}
-              className={`w-9 h-9 rounded-full border text-sm font-medium ${
+              className={`w-11 h-11 rounded-full border text-[18px] font-medium ${
                 String(value) === String(n) ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -81,13 +81,13 @@ function QuestionInput({ q, value, onChange }: { q: Question; value: string | st
       )
     case 'yesno':
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {['Yes', 'No'].map((o) => (
             <button
               type="button"
               key={o}
               onClick={() => onChange(o)}
-              className={`px-4 py-1.5 rounded-lg border text-sm font-medium ${
+              className={`px-5 py-2 rounded-lg border text-[18px] font-medium ${
                 value === o ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -158,16 +158,16 @@ export default function SurveyPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-navy-700 px-4 py-10">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-3xl">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-lg bg-gold-400 flex items-center justify-center mb-4">
-            <BookOpen className="w-6 h-6 text-navy-800" />
+          <div className="w-14 h-14 rounded-lg bg-gold-400 flex items-center justify-center mb-4">
+            <BookOpen className="w-7 h-7 text-navy-800" />
           </div>
-          <p className="text-white font-semibold text-lg">Learning Intelligence</p>
-          <p className="text-slate-400 text-sm">{label}</p>
+          <p className="text-white font-semibold text-[23px]">Learning Intelligence</p>
+          <p className="text-slate-400 text-[18px]">{label}</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-xl p-6">
+        <div className="bg-white rounded-xl shadow-xl p-8">
           {loading ? (
             <div className="flex items-center justify-center py-10">
               <Loader2 className="w-6 h-6 animate-spin text-navy-600" />
@@ -175,31 +175,31 @@ export default function SurveyPage() {
           ) : error ? (
             <div className="flex flex-col items-center text-center py-6">
               <AlertTriangle className="w-8 h-8 text-red-500 mb-3" />
-              <p className="text-sm font-medium text-slate-800">{error}</p>
-              <p className="text-xs text-slate-500 mt-1">If you think this is a mistake, contact your L&amp;D team.</p>
+              <p className="text-[18px] font-medium text-slate-800">{error}</p>
+              <p className="text-[16px] text-slate-500 mt-1">If you think this is a mistake, contact your L&amp;D team.</p>
             </div>
           ) : submitted || context?.alreadyResponded ? (
             <div className="flex flex-col items-center text-center py-6">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-3" />
-              <p className="text-sm font-medium text-slate-800">
+              <p className="text-[18px] font-medium text-slate-800">
                 {submitted ? 'Thank you — your response has been submitted!' : 'You’ve already submitted this survey — thank you!'}
               </p>
-              <p className="text-xs text-slate-500 mt-1">{context?.trainingName}</p>
+              <p className="text-[16px] text-slate-500 mt-1">{context?.trainingName}</p>
             </div>
           ) : context ? (
             <form onSubmit={handleSubmit}>
-              <p className="text-sm text-slate-500">Hi {context.recipientName || 'there'},</p>
-              <p className="text-base font-semibold text-slate-800 mt-1">{context.trainingName}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{context.businessUnit}</p>
+              <p className="text-[18px] text-slate-500">Hi {context.recipientName || 'there'},</p>
+              <p className="text-[21px] font-semibold text-slate-800 mt-1">{context.trainingName}</p>
+              <p className="text-[16px] text-slate-400 mt-0.5">{context.businessUnit}</p>
 
               <div className="mt-6 space-y-6">
                 {sections.map((section) => (
                   <div key={section}>
-                    {section && <p className="text-xs font-semibold text-navy-600 uppercase tracking-wide mb-3">{section}</p>}
+                    {section && <p className="text-[16px] font-semibold text-navy-600 uppercase tracking-wide mb-3">{section}</p>}
                     <div className="space-y-4">
                       {visibleQuestions.filter((q) => (q.section || '') === section).map((q) => (
                         <div key={q.id}>
-                          <label className="block text-sm text-slate-700 mb-1.5">
+                          <label className="block text-[18px] text-slate-700 mb-1.5">
                             {q.label}
                             {q.required && <span className="text-red-500 ml-0.5">*</span>}
                           </label>
@@ -216,13 +216,13 @@ export default function SurveyPage() {
               </div>
 
               {submitError && (
-                <p className="mt-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{submitError}</p>
+                <p className="mt-4 text-[16px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{submitError}</p>
               )}
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="mt-6 w-full flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-60"
+                className="mt-6 w-full flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-[18px] font-medium rounded-lg py-3 transition-colors disabled:opacity-60"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Submit
