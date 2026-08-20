@@ -263,6 +263,64 @@ function columnLetter(index: number): string {
   return s
 }
 
+// Reads every row of a tab as plain string values (header row included, at index 0) — used for
+// row lookups where the XLSX buffer round-trip (fetchSheetAsBuffer) isn't needed.
+async function fetchSheetValues(spreadsheetId: string, sheetName: string, accessToken: string): Promise<string[][]> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Could not read tab "${sheetName}" (${res.status}): ${body.slice(0, 150)}`)
+  }
+  const data = (await res.json()) as { values?: unknown[][] }
+  return (data.values || []).map((row) => row.map((c) => String(c ?? '')))
+}
+
+// Finds the row whose `keyColumnCandidates` cell matches `keyValue` (case/punctuation-insensitive)
+// and overwrites specific OTHER cells on that same row — unlike appendMirrorRow (which only ever
+// adds new rows), this edits an existing row in place, so it's used for narrowly-scoped updates
+// only (e.g. filling in a derived Line Manager Name/Email once a Line Manager ID is set) where the
+// key match is unambiguous. Columns that don't exist are reported back rather than created, since
+// blindly extending a row-update's target columns is riskier than doing so for a fresh append.
+export async function updateRowByKey(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  keyColumnCandidates: string[],
+  keyValue: string,
+  updates: { columnCandidates: string[]; value: string }[]
+): Promise<{ rowFound: boolean; missingColumns: string[] }> {
+  const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
+  if (rows.length === 0) return { rowFound: false, missingColumns: [] }
+
+  const headers = rows[0]
+  const normHeaders = headers.map(normaliseHeader)
+  const normKeyCandidates = keyColumnCandidates.map(normaliseHeader)
+  const keyColIdx = normHeaders.findIndex((h) => normKeyCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+  if (keyColIdx === -1) return { rowFound: false, missingColumns: updates.map((u) => u.columnCandidates[0]) }
+
+  const normKeyValue = normaliseHeader(keyValue)
+  const rowIdx = rows.slice(1).findIndex((r) => normaliseHeader(r[keyColIdx] || '') === normKeyValue)
+  if (rowIdx === -1) return { rowFound: false, missingColumns: [] }
+  const sheetRowNumber = rowIdx + 2 // +1 for header row, +1 for 1-based indexing
+
+  const missingColumns: string[] = []
+  for (const update of updates) {
+    const normCandidates = update.columnCandidates.map(normaliseHeader)
+    const colIdx = normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    if (colIdx === -1) {
+      missingColumns.push(update.columnCandidates[0])
+      continue
+    }
+    const cell = `${columnLetter(colIdx)}${sheetRowNumber}`
+    await updateSheetRange(spreadsheetId, sheetName, accessToken, `${sheetName}!${cell}`, [[update.value]])
+  }
+
+  return { rowFound: true, missingColumns }
+}
+
 // Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the
 // header row in place when a field has no existing column to land in.
 async function updateSheetRange(
