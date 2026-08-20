@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Save, Plus, Trash2, Tag } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 export interface TaxonomyItem {
   id: string
@@ -110,12 +111,8 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-      <div>
-        <p className="text-sm font-semibold text-slate-800">{title}</p>
-        <p className="text-xs text-slate-500 mt-1">{description}</p>
-      </div>
-
+    <SectionCard icon={Tag} title={title} description={description}>
+      <div className="space-y-4">
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-slate-400">
           <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
@@ -221,6 +218,7 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
           )}
         </div>
       )}
-    </div>
+      </div>
+    </SectionCard>
   )
 }

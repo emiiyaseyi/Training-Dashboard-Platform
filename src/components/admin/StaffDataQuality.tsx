@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 interface StaffQualityRow {
   id: string
@@ -167,21 +168,15 @@ export function StaffDataQuality() {
   const showSearch = !!audit && audit.rows.length > PAGE_SIZE
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-3">
-          <Users className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Staff Data Quality</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names. Click any record to fix it.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+    <SectionCard
+      icon={Users}
+      title="Staff Data Quality"
+      description="Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names. Click any record to fix it."
+      headerActions={
+        <>
           {duplicateShadowedTotal > 0 && (
             <button
-              onClick={clean}
+              onClick={(e) => { e.stopPropagation(); clean() }}
               disabled={cleaning}
               title="Deletes older duplicate roster rows for the same Staff ID, keeping only the most recent upload's row"
               className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-50 disabled:opacity-50"
@@ -190,11 +185,12 @@ export function StaffDataQuality() {
               Clean {duplicateShadowedTotal} Duplicate Record{duplicateShadowedTotal === 1 ? '' : 's'}
             </button>
           )}
-          <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
+          <button onClick={(e) => { e.stopPropagation(); load() }} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-        </div>
-      </div>
+        </>
+      }
+    >
 
       {cleanResult !== null && (
         <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-emerald-700">
@@ -338,6 +334,6 @@ export function StaffDataQuality() {
           <Pagination page={page} totalItems={filteredRows.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       )}
-    </div>
+    </SectionCard>
   )
 }

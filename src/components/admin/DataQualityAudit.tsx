@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2, Search } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 interface TableAudit {
   table: string
@@ -111,20 +112,14 @@ export function DataQualityAudit() {
   const totalIssues = audit?.reduce((s, t) => s + t.issueCount, 0) ?? 0
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-3">
-          <ClipboardCheck className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Data Quality Audit</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Records per table missing key fields — Staff ID, Business Unit, cost/amount, etc.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+    <SectionCard
+      icon={ClipboardCheck}
+      title="Data Quality Audit"
+      description="Records per table missing key fields — Staff ID, Business Unit, cost/amount, etc."
+      headerActions={
+        <>
           <button
-            onClick={normalizeBusinessUnits}
+            onClick={(e) => { e.stopPropagation(); normalizeBusinessUnits() }}
             disabled={normalizing}
             title="Re-applies Business Unit aliases (e.g. NESI -> Meristem Wealth Management Limited) to every already-stored record — catches rows imported before an alias was added."
             className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-50 disabled:opacity-50"
@@ -132,12 +127,12 @@ export function DataQualityAudit() {
             {normalizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
             Normalize Business Unit names
           </button>
-          <button onClick={load} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
+          <button onClick={(e) => { e.stopPropagation(); load() }} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
       {normalizeResult && (
         <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
           {normalizeResult.length === 0 ? (
@@ -168,6 +163,6 @@ export function DataQualityAudit() {
           {audit.filter((t) => t.issueCount > 0).map((t) => <AuditTableSection key={t.table} t={t} />)}
         </div>
       )}
-    </div>
+    </SectionCard>
   )
 }

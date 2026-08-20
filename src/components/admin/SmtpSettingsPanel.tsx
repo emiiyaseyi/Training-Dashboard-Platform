@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 interface SmtpState {
   host: string
@@ -86,17 +87,7 @@ export function SmtpSettingsPanel() {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-      <div className="flex items-start gap-3 mb-4">
-        <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-slate-800">Email (SMTP)</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Platform-wide email sending — used by Survey Automation today, and any future notifications.
-          </p>
-        </div>
-      </div>
-
+    <SectionCard icon={Mail} title="Email (SMTP)" description="Platform-wide email sending — used by Survey Automation today, and any future notifications.">
       {loading ? (
         <p className="text-xs text-slate-400">Loading…</p>
       ) : (
@@ -198,6 +189,6 @@ export function SmtpSettingsPanel() {
           {testResult && <p className={`text-xs ${testResult.success ? 'text-emerald-700' : 'text-red-600'}`}>{testResult.message}</p>}
         </div>
       )}
-    </div>
+    </SectionCard>
   )
 }

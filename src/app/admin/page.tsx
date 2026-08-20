@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SectionCard } from '@/components/ui/SectionCard'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
@@ -265,13 +266,12 @@ export default function AdminPage() {
             Loading…
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Annual Budget & Headcount by Year</p>
-                <p className="text-xs text-slate-500 mt-0.5">Set budget and staff count per year for historical accuracy and multi-year analytics.</p>
-              </div>
-              <div className="flex items-center gap-2">
+          <SectionCard
+            icon={Building2}
+            title="Annual Budget & Headcount by Year"
+            description="Set budget and staff count per year for historical accuracy and multi-year analytics."
+            headerActions={
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <label className="text-xs font-medium text-slate-600">Year:</label>
                 <select
                   value={selectedYear}
@@ -283,8 +283,9 @@ export default function AdminPage() {
                   ))}
                 </select>
               </div>
-            </div>
-
+            }
+          >
+          <div className="space-y-4">
             {units.length === 0 && (
               <AlertBadge
                 variant="info"
@@ -442,20 +443,19 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+          </SectionCard>
         )}
 
         {/* CSV bulk upload */}
-        <div className="rounded-xl border border-blue-100 bg-blue-50 p-5 space-y-4">
-          <div className="flex items-start gap-3">
-            <Upload className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-900">Bulk Import via CSV / Excel</p>
-              <p className="text-xs text-blue-700 mt-0.5">
-                Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong>.
-                Select the year this data applies to — values will be saved to the year-specific config.
-              </p>
-            </div>
-          </div>
+        <SectionCard
+          icon={Upload}
+          title="Bulk Import via CSV / Excel"
+          accentClassName="border-blue-100 bg-blue-50"
+          description={
+            <>Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong>. Select the year this data applies to — values will be saved to the year-specific config.</>
+          }
+        >
+          <div className="space-y-4">
 
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
@@ -517,18 +517,18 @@ export default function AdminPage() {
               {csvResult.errors.map((e, i) => <p key={i} className="text-xs text-red-700 ml-6">• {e}</p>)}
             </div>
           )}
-        </div>
+          </div>
+        </SectionCard>
 
         {/* ── Export BU data ── */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-3">
-          <div className="flex items-start gap-3">
-            <Download className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800">Export Business Unit Data</p>
-              <p className="text-xs text-slate-500 mt-0.5">Download all configured business units with their budgets and staff counts as a CSV file.</p>
-            </div>
+        <SectionCard
+          icon={Download}
+          title="Export Business Unit Data"
+          description="Download all configured business units with their budgets and staff counts as a CSV file."
+          headerActions={
             <button
-              onClick={async () => {
+              onClick={async (e) => {
+                e.stopPropagation()
                 const XLSXmod = await import('xlsx')
                 const XLSX = XLSXmod.default ?? XLSXmod
                 const rows = units.map((u) => ({
@@ -548,16 +548,18 @@ export default function AdminPage() {
               <Download className="w-3.5 h-3.5" />
               Export CSV
             </button>
-          </div>
-        </div>
+          }
+        >
+          <p className="text-xs text-slate-400">{units.length === 0 ? 'No business units configured yet.' : `${units.length} business unit${units.length === 1 ? '' : 's'} ready to export.`}</p>
+        </SectionCard>
 
         {/* ── Signature Settings ── */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-          <div className="flex items-center gap-3 mb-1">
-            <PenLine className="w-5 h-5 text-slate-400" />
-            <p className="text-sm font-semibold text-slate-800">PDF Signature Block</p>
-          </div>
-          <p className="text-xs text-slate-500">These names and titles appear at the bottom of every exported Business Unit PDF report.</p>
+        <SectionCard
+          icon={PenLine}
+          title="PDF Signature Block"
+          description="These names and titles appear at the bottom of every exported Business Unit PDF report."
+        >
+          <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Title</label>
@@ -594,7 +596,8 @@ export default function AdminPage() {
             </button>
             {sigSaved && <span className="text-xs text-green-600 font-medium">Saved — will appear on next PDF export.</span>}
           </div>
-        </div>
+          </div>
+        </SectionCard>
 
         {/* Training Type & Differentiating Capability taxonomies */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
