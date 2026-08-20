@@ -66,6 +66,7 @@ export function StaffDataQuality() {
   const [roster, setRoster] = useState<RosterStaff[]>([])
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
   const [managerSearch, setManagerSearch] = useState('')
+  const [rowQuery, setRowQuery] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -85,7 +86,7 @@ export function StaffDataQuality() {
 
   useEffect(() => {
     setPage(1)
-  }, [audit?.rows.length])
+  }, [audit?.rows.length, rowQuery])
 
   const clean = async () => {
     const total = audit?.duplicateIdGroups.reduce((s, g) => s + g.shadowed.length, 0) || 0
@@ -146,7 +147,10 @@ export function StaffDataQuality() {
   const currentManager = draft ? roster.find((r) => r.staffId.toUpperCase() === draft.lineManagerStaffId.toUpperCase()) : undefined
 
   const duplicateShadowedTotal = audit?.duplicateIdGroups.reduce((s, g) => s + g.shadowed.length, 0) || 0
-  const pageRows = audit ? paginate(audit.rows, page, PAGE_SIZE) : []
+  const q = rowQuery.trim().toLowerCase()
+  const filteredRows = audit ? (q ? audit.rows.filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q)) : audit.rows) : []
+  const pageRows = paginate(filteredRows, page, PAGE_SIZE)
+  const showSearch = !!audit && audit.rows.length > PAGE_SIZE
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
@@ -201,6 +205,18 @@ export function StaffDataQuality() {
               : `${audit.flaggedCount} of ${audit.totalStaff} staff record(s) flagged.`}
           </div>
 
+          {showSearch && (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={rowQuery}
+                onChange={(e) => setRowQuery(e.target.value)}
+                placeholder="Search by name, Staff ID, or email…"
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs"
+              />
+            </div>
+          )}
+
           {audit.duplicateNameGroups.length > 0 && (
             <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
               <p className="text-xs font-medium text-amber-800 flex items-center gap-1.5">
@@ -212,6 +228,10 @@ export function StaffDataQuality() {
                 ))}
               </div>
             </div>
+          )}
+
+          {q && filteredRows.length === 0 && (
+            <p className="text-xs text-slate-400 px-1">No flagged records match that search.</p>
           )}
 
           <div className="space-y-2">
@@ -293,7 +313,7 @@ export function StaffDataQuality() {
             )}
           </div>
 
-          <Pagination page={page} totalItems={audit.rows.length} pageSize={PAGE_SIZE} onChange={setPage} />
+          <Pagination page={page} totalItems={filteredRows.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       )}
     </div>

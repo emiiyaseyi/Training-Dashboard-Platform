@@ -9,6 +9,7 @@ interface ConfigState {
   feedbackSheetName: string
   subscriptionSheetName: string
   kssSheetName: string
+  comprehensiveStaffListSheetName: string
   autoSyncEnabled: boolean
   syncFrequencyMinutes: number
 }
@@ -65,6 +66,7 @@ const DEFAULT_STATE: ConfigState = {
   feedbackSheetName: 'Feedback',
   subscriptionSheetName: 'Subscriptions',
   kssSheetName: 'KSS',
+  comprehensiveStaffListSheetName: '',
   autoSyncEnabled: false,
   syncFrequencyMinutes: 60,
 }
@@ -101,6 +103,7 @@ export function GoogleSheetsPanel() {
         feedbackSheetName: data.feedbackSheetName || DEFAULT_STATE.feedbackSheetName,
         subscriptionSheetName: data.subscriptionSheetName || DEFAULT_STATE.subscriptionSheetName,
         kssSheetName: data.kssSheetName || DEFAULT_STATE.kssSheetName,
+        comprehensiveStaffListSheetName: data.comprehensiveStaffListSheetName || '',
         autoSyncEnabled: !!data.autoSyncEnabled,
         syncFrequencyMinutes: data.syncFrequencyMinutes || 60,
       })
@@ -307,6 +310,22 @@ export function GoogleSheetsPanel() {
                 />
               </div>
             ))}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              Comprehensive Staff List tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.comprehensiveStaffListSheetName}
+              onChange={(e) => setState({ ...state, comprehensiveStaffListSheetName: e.target.value })}
+              placeholder="MERISTEM COMPREHENSIVE STAFF LIST"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Not part of Sync Now/Preview — read live, on demand, as a supplement to the uploaded Staff Roster wherever a Staff ID, email,
+              name, line manager, or Business Unit is missing there (e.g. resolving attendees for Survey Automation).
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">

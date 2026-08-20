@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Search } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface Column<T> {
@@ -26,20 +27,42 @@ export function DataTable<T extends Record<string, unknown>>({
   pageSize = 25,
 }: DataTableProps<T>) {
   const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
   const rows: T[] = Array.isArray(data) ? data : []
-  const pageRows = pageSize > 0 ? paginate(rows, page, pageSize) : rows
 
-  // Filters/re-fetches change the row count out from under us — snap back to page 1 rather than
-  // stranding the user on a now-empty page past the new last page.
+  // Searches every field of every row (not just what's displayed), so it still finds a match
+  // even when the visible column uses a custom render() that reformats the underlying value.
+  const q = query.trim().toLowerCase()
+  const filteredRows = q
+    ? rows.filter((row) => Object.values(row).some((v) => String(v ?? '').toLowerCase().includes(q)))
+    : rows
+  const pageRows = pageSize > 0 ? paginate(filteredRows, page, pageSize) : filteredRows
+  // Based on the UNFILTERED count, not filteredRows — otherwise the search box would disappear
+  // mid-typing as soon as a query narrows the results down to a single page.
+  const showSearch = pageSize > 0 && rows.length > pageSize
+
+  // Filters/re-fetches/searches change the row count out from under us — snap back to page 1
+  // rather than stranding the user on a now-empty page past the new last page.
   useEffect(() => {
     setPage(1)
-  }, [rows.length])
+  }, [filteredRows.length])
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      {caption && (
-        <div className="px-5 py-3.5 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-800">{caption}</p>
+      {(caption || showSearch) && (
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          {caption && <p className="text-sm font-semibold text-slate-800">{caption}</p>}
+          {showSearch && (
+            <div className="relative ml-auto">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48"
+              />
+            </div>
+          )}
         </div>
       )}
       <div className="overflow-x-auto">
@@ -62,7 +85,7 @@ export function DataTable<T extends Record<string, unknown>>({
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400 text-sm">
-                  {emptyMessage}
+                  {q ? 'No matches for that search.' : emptyMessage}
                 </td>
               </tr>
             ) : (
@@ -89,7 +112,7 @@ export function DataTable<T extends Record<string, unknown>>({
       </div>
       {pageSize > 0 && (
         <div className="px-4 border-t border-slate-100">
-          <Pagination page={page} totalItems={rows.length} pageSize={pageSize} onChange={setPage} />
+          <Pagination page={page} totalItems={filteredRows.length} pageSize={pageSize} onChange={setPage} />
         </div>
       )}
     </div>

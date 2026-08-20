@@ -105,7 +105,7 @@ function parseConfirmed(val: unknown): boolean {
   return !['no', 'false', 'unconfirmed', 'not confirmed', '0', 'n', 'n/a', 'na'].includes(s)
 }
 
-function findHeader(headers: string[], candidates: string[]): string | undefined {
+export function findHeader(headers: string[], candidates: string[]): string | undefined {
   const lower = headers.map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ''))
   const normCandidates = candidates.map((c) => c.toLowerCase().replace(/[^a-z0-9]/g, ''))
 

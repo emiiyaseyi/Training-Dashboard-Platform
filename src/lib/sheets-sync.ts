@@ -1,6 +1,5 @@
-import * as XLSX from 'xlsx'
 import { prisma } from '@/lib/prisma'
-import { connectToSpreadsheet, type SheetsConnection } from '@/lib/google-sheets'
+import { connectToSpreadsheet, fetchSheetAsBuffer, type SheetsConnection } from '@/lib/google-sheets'
 import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
 import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
@@ -54,26 +53,6 @@ async function dedupeKSS(rows: KSSRow[]): Promise<KSSRow[]> {
   const key = (staffId: string, duration: number, month: string | null) => `${normalizeStaffIdKey(staffId)}|${roundNum(duration, 1)}|${month || ''}`
   const seen = new Set(existing.map((r) => key(r.staffId, r.durationMinutes, r.month)))
   return rows.filter((r) => !seen.has(key(r.staffId, r.durationMinutes, r.month)))
-}
-
-// Pulls the full contents of a tab and reassembles it as an XLSX buffer so it can go through
-// the exact same parseXExcel() functions used for file uploads — the Sheets sync and the
-// manual upload path can never drift apart in how they interpret columns.
-async function fetchSheetAsBuffer(spreadsheetId: string, sheetName: string, accessToken: string): Promise<Buffer> {
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  )
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Could not read tab "${sheetName}" (${res.status}): ${body.slice(0, 150)}`)
-  }
-  const data = (await res.json()) as { values?: unknown[][] }
-  const values = data.values || []
-  const ws = XLSX.utils.aoa_to_sheet(values)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
 type JobType = 'training' | 'feedback' | 'subscription' | 'kss'
