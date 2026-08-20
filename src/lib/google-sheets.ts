@@ -230,13 +230,53 @@ export interface MirrorField {
   value: string | number
 }
 
+// 0-based column index -> A1 letter(s): 0 -> A, 25 -> Z, 26 -> AA, ...
+function columnLetter(index: number): string {
+  let n = index + 1
+  let s = ''
+  while (n > 0) {
+    const rem = (n - 1) % 26
+    s = String.fromCharCode(65 + rem) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
+
+// Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the
+// header row in place when a field has no existing column to land in.
+async function updateSheetRange(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  range: string,
+  values: (string | number)[][]
+): Promise<void> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    }
+  )
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Could not update headers on tab "${sheetName}" (${res.status}): ${body.slice(0, 200)}`)
+  }
+}
+
 // Appends one row to a tab, self-aligning to whatever header row already exists there instead of
 // assuming a fixed column order. This matters because a mirror tab (e.g. a native survey form's
 // Google Sheet mirror) can be the SAME tab an admin already uses for bulk Excel uploads, with its
 // own pre-existing header row — blindly appending values in our own fixed order would land them
 // under the wrong headers. Matching mirrors the two-pass "exact, then loose substring (>=4 chars)"
 // strategy used by findHeader() in excel-parser.ts, so behaviour stays consistent across the app.
-// If the tab has no header row yet, writes one (from `label`s) before the data row.
+// Any field with no matching existing column gets its own new header appended (rather than being
+// silently dropped) — this also covers a completely blank tab, where every field is "unmatched"
+// and the whole header row gets created from scratch.
+// Note: concurrent submissions racing on the same never-before-seen field could each add their own
+// copy of that column; with survey response volumes this is rare and self-heals (later submissions
+// match the first copy they find), so it isn't worth a locking scheme.
 export async function appendMirrorRow(
   spreadsheetId: string,
   sheetName: string,
@@ -244,12 +284,6 @@ export async function appendMirrorRow(
   fields: MirrorField[]
 ): Promise<void> {
   const existingHeaders = await fetchSheetHeaderRow(spreadsheetId, sheetName, accessToken)
-  if (existingHeaders.length === 0) {
-    await appendRowToSheet(spreadsheetId, sheetName, accessToken, fields.map((f) => f.label))
-    await appendRowToSheet(spreadsheetId, sheetName, accessToken, fields.map((f) => f.value))
-    return
-  }
-
   const normHeaders = existingHeaders.map(normaliseHeader)
   const fieldCandidates = fields.map((f) => [normaliseHeader(f.label), ...f.candidates.map(normaliseHeader)].filter(Boolean))
   const used = new Set<number>()
@@ -274,6 +308,18 @@ export async function appendMirrorRow(
     const m = matchFor(h, true)
     if (m >= 0) { row[idx] = fields[m].value; used.add(m) }
   })
+
+  const unmatchedFields = fields.filter((_, i) => !used.has(i))
+  if (unmatchedFields.length > 0) {
+    const startCol = columnLetter(existingHeaders.length)
+    const endCol = columnLetter(existingHeaders.length + unmatchedFields.length - 1)
+    await updateSheetRange(
+      spreadsheetId, sheetName, accessToken,
+      `${sheetName}!${startCol}1:${endCol}1`,
+      [unmatchedFields.map((f) => f.label)]
+    )
+    row.push(...unmatchedFields.map((f) => f.value))
+  }
 
   await appendRowToSheet(spreadsheetId, sheetName, accessToken, row)
 }
