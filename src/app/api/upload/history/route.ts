@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 export async function GET() {
+  const gate = await requirePermission('upload-data', 'view')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const batches = await prisma.uploadBatch.findMany({
       orderBy: { createdAt: 'desc' },
@@ -15,6 +19,9 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
+  const gate = await requirePermission('upload-data', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

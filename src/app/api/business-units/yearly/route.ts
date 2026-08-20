@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 export async function GET(req: NextRequest) {
   const year = req.nextUrl.searchParams.get('year')
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { buName, year, budget, staffCount } = body as {

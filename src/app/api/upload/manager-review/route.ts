@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseManagerReviewExcel } from '@/lib/excel-parser'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { requirePermission } from '@/lib/session-guard'
 
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('upload-data', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null

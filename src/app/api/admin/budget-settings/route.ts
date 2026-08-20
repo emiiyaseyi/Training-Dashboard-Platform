@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 // Single global toggle: whether Subscription Spend counts against a Business Unit's budget.
 // Off by default — subscriptions (professional memberships) are a separate cost category from
@@ -15,6 +16,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const { countSubscriptionsInBudget } = await req.json() as { countSubscriptionsInBudget: boolean }
     const existing = await prisma.budgetSettings.findFirst()

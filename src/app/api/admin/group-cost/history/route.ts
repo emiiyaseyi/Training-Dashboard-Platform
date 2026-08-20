@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 export async function GET() {
+  const gate = await requirePermission('admin-settings', 'view')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const history = await prisma.groupCostDistribution.findMany({ orderBy: { appliedAt: 'desc' } })
     return NextResponse.json(history.map((h) => ({
@@ -18,6 +22,9 @@ export async function GET() {
 }
 
 export async function DELETE(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const { id } = await req.json() as { id: string }
     if (!id) return NextResponse.json({ error: 'ID is required.' }, { status: 400 })

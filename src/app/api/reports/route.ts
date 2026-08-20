@@ -4,10 +4,14 @@ import { computeBUAnalytics, computeGroupAnalytics } from '@/lib/analytics'
 import { generateExecutiveNarrative } from '@/lib/narrative'
 import type { PeriodFilter } from '@/lib/filter-types'
 import { MONTHS } from '@/lib/filter-types'
+import { requirePermission } from '@/lib/session-guard'
 
 // GET /api/reports — list all generated reports
 // GET /api/reports?bu=X&year=2024 — filter
 export async function GET(req: NextRequest) {
+  const gate = await requirePermission('report-generation', 'view')
+  if (gate instanceof NextResponse) return gate
+
   const sp = req.nextUrl.searchParams
   const bu = sp.get('bu')
   const year = sp.get('year') ? parseInt(sp.get('year')!) : undefined
@@ -28,6 +32,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/reports — generate a monthly report snapshot
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('report-generation', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { businessUnit, year, month, generatedBy } = body as {
@@ -82,6 +89,9 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/reports?id=xxx
 export async function DELETE(req: NextRequest) {
+  const gate = await requirePermission('report-generation', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id.' }, { status: 400 })
   try {
