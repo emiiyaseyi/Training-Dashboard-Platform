@@ -12,18 +12,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { data: session, status } = useSession()
   const isLoginPage = pathname === '/login'
+  // Public, token-secured survey forms — no platform account exists for the respondent, so this
+  // must never redirect to login (mirrors middleware.ts's matcher, which already skips auth for
+  // these paths server-side; this is the client-side equivalent for AppShell's own session check).
+  const isPublicPage = isLoginPage || pathname.startsWith('/survey/')
 
   // Defense in depth: middleware normally redirects unauthenticated requests to /login before
   // this ever renders, but a stale/undecryptable session cookie (e.g. left over from before
   // AUTH_SECRET was set) can leave the client stuck "logged out" without a server redirect.
   // Push to /login ourselves rather than rendering a permanently empty page.
   useEffect(() => {
-    if (!isLoginPage && status === 'unauthenticated') {
+    if (!isPublicPage && status === 'unauthenticated') {
       router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`)
     }
-  }, [status, isLoginPage, pathname, router])
+  }, [status, isPublicPage, pathname, router])
 
-  if (isLoginPage) {
+  if (isPublicPage) {
     return <main className="w-full min-h-screen overflow-y-auto">{children}</main>
   }
 
