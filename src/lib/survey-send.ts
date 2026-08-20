@@ -25,8 +25,8 @@ export interface SendSurveyResult {
 // Post-Training Impact Score review, not a self-report. Marks each successfully-sent attendee's
 // stage timestamp so re-sending only targets who's left.
 export async function sendSurveyStage(scheduleId: string, stage: SurveyStage, attendeeIds?: string[]): Promise<SendSurveyResult> {
-  if (!hasSmtpCredentials()) {
-    throw new Error('SMTP is not configured on the server. Set SMTP_HOST/PORT/USER/PASS in environment variables first.')
+  if (!(await hasSmtpCredentials())) {
+    throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
   }
 
   const [schedule, settings, superAdmins] = await Promise.all([
@@ -74,7 +74,7 @@ export async function sendSurveyStage(scheduleId: string, stage: SurveyStage, at
       formUrl,
     })
     try {
-      await sendMail({ to: toAddress, cc, subject, html, fromName: settings?.fromName })
+      await sendMail({ to: toAddress, cc, subject, html })
       await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [sentField]: new Date() } })
       result.sent++
     } catch (err) {
