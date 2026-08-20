@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock, Search, Pencil, ArrowLeft } from 'lucide-react'
 
 const STAGE_LABELS: Record<string, string> = {
   pre: 'Pre-Training Survey',
@@ -34,18 +34,104 @@ interface SurveyContext {
   autoFillValues: Record<string, string>
 }
 
+// Searchable in-place, always (long lists like vendor names are painful to scroll through as a
+// native <select>). If the question's options include "Other", that entry is replaced with a
+// "Type if not found" free-text mode — and if what's typed already matches an existing option
+// (case-insensitive), that's flagged and the existing option is used instead of creating a
+// near-duplicate value (e.g. "PwC" vs "Pwc Nigeria Academy").
+function SearchableSelect({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  const allowCustom = options.some((o) => o.trim().toLowerCase() === 'other')
+  const listOptions = options.filter((o) => o.trim().toLowerCase() !== 'other')
+  const [query, setQuery] = useState(value || '')
+  const [open, setOpen] = useState(false)
+  const [customMode, setCustomMode] = useState(false)
+
+  useEffect(() => { setQuery(value || '') }, [value])
+
+  const q = query.trim().toLowerCase()
+  const filtered = q ? listOptions.filter((o) => o.toLowerCase().includes(q)) : listOptions
+  const exactMatch = listOptions.find((o) => o.toLowerCase() === query.trim().toLowerCase())
+
+  const selectOption = (o: string) => {
+    onChange(o)
+    setQuery(o)
+    setOpen(false)
+    setCustomMode(false)
+  }
+
+  const base = 'w-full px-4 py-2.5 border border-slate-300 rounded-lg text-[18px] focus:outline-none focus:ring-2 focus:ring-navy-600'
+
+  if (customMode) {
+    return (
+      <div>
+        <input
+          type="text"
+          autoFocus
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); onChange(exactMatch || e.target.value) }}
+          placeholder="Type here…"
+          className={base}
+        />
+        {exactMatch ? (
+          <p className="text-[14px] text-amber-600 mt-1">&quot;{exactMatch}&quot; is already in the list — using that instead of adding a duplicate.</p>
+        ) : (
+          <button type="button" onClick={() => { setCustomMode(false); setQuery(value || '') }} className="text-[14px] text-navy-600 mt-1 flex items-center gap-1 hover:underline">
+            <ArrowLeft className="w-3 h-3" /> Back to the list
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search…"
+          className={`${base} pl-10`}
+        />
+      </div>
+      {open && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {filtered.length === 0 && <p className="px-4 py-2.5 text-[16px] text-slate-400">No matches.</p>}
+          {filtered.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); selectOption(o) }}
+              className={`w-full text-left px-4 py-2.5 text-[16px] hover:bg-slate-50 ${o === value ? 'bg-navy-50 text-navy-700 font-medium' : 'text-slate-700'}`}
+            >
+              {o}
+            </button>
+          ))}
+          {allowCustom && (
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setCustomMode(true); setQuery(''); setOpen(false) }}
+              className="w-full text-left px-4 py-2.5 text-[16px] text-navy-600 border-t border-slate-100 flex items-center gap-1.5 hover:bg-slate-50"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Type if not found
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function QuestionInput({ q, value, onChange }: { q: Question; value: string | string[]; onChange: (v: string | string[]) => void }) {
   const base = 'w-full px-4 py-2.5 border border-slate-300 rounded-lg text-[18px] focus:outline-none focus:ring-2 focus:ring-navy-600'
   switch (q.type) {
     case 'textarea':
       return <textarea value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} rows={3} className={base} />
     case 'select':
-      return (
-        <select value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} className={base}>
-          <option value="">Select…</option>
-          {q.options?.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
-      )
+      return <SearchableSelect options={q.options || []} value={(value as string) || ''} onChange={onChange} />
     case 'multiselect': {
       const selected = Array.isArray(value) ? value : []
       return (
