@@ -37,6 +37,9 @@ interface Schedule {
   startDate: string
   endDate: string
   hours: number | null
+  costPerAttendee: number | null
+  trainingType: string | null
+  capability: string | null
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -53,6 +56,11 @@ interface RosterStaff {
 }
 
 interface BusinessUnitOption {
+  id: string
+  name: string
+}
+
+interface NamedOption {
   id: string
   name: string
 }
@@ -98,7 +106,12 @@ export function SurveyAutomationPanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [showAddSchedule, setShowAddSchedule] = useState(false)
-  const [newSchedule, setNewSchedule] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '' })
+  const [newSchedule, setNewSchedule] = useState({
+    trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
+    costPerAttendee: '', trainingType: '', capability: '',
+  })
+  const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
+  const [capabilities, setCapabilities] = useState<NamedOption[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [schedulePage, setSchedulePage] = useState(1)
@@ -161,11 +174,18 @@ export function SurveyAutomationPanel() {
     setBusinessUnits(Array.isArray(data) ? data : [])
   }
 
+  const loadTaxonomies = async () => {
+    const [typesRes, capsRes] = await Promise.all([fetch('/api/training-types'), fetch('/api/capabilities')])
+    setTrainingTypes(await typesRes.json())
+    setCapabilities(await capsRes.json())
+  }
+
   useEffect(() => {
     loadSettings()
     loadSchedules()
     loadRoster()
     loadBusinessUnits()
+    loadTaxonomies()
   }, [])
 
   const saveSettings = async () => {
@@ -190,7 +210,11 @@ export function SurveyAutomationPanel() {
       const res = await fetch('/api/admin/training-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newSchedule, hours: newSchedule.hours ? Number(newSchedule.hours) : undefined }),
+        body: JSON.stringify({
+          ...newSchedule,
+          hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
+          costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
+        }),
       })
       if (res.ok) {
         const created = await res.json()
@@ -201,7 +225,7 @@ export function SurveyAutomationPanel() {
             body: JSON.stringify({ identifiers: newSchedulePending.map((p) => p.staffId) }),
           })
         }
-        setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '' })
+        setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '' })
         setNewSchedulePending([])
         setNewScheduleSearchQuery('')
         setShowAddSchedule(false)
@@ -562,6 +586,44 @@ export function SurveyAutomationPanel() {
                 />
               </label>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label className="text-xs text-slate-500">
+                Cost per attendee
+                <input
+                  type="number"
+                  value={newSchedule.costPerAttendee}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, costPerAttendee: e.target.value })}
+                  placeholder="Applied to every attendee's row"
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                />
+              </label>
+              <label className="text-xs text-slate-500">
+                Training Type
+                <select
+                  value={newSchedule.trainingType}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, trainingType: e.target.value })}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                >
+                  <option value="">Select…</option>
+                  {trainingTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-slate-500">
+                Differentiating Capability
+                <select
+                  value={newSchedule.capability}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, capability: e.target.value })}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                >
+                  <option value="">Select…</option>
+                  {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              These feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added — cost, type, and
+              capability are set once here and apply to the whole schedule.
+            </p>
             <button
               onClick={createSchedule}
               disabled={creatingSchedule || !newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate}
@@ -590,7 +652,9 @@ export function SurveyAutomationPanel() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{s.trainingName}</p>
                       <p className="text-xs text-slate-500">
-                        {s.businessUnit} · {fmtDate(s.startDate)}–{fmtDate(s.endDate)} · {s.hours ? `${s.hours}h` : 'no hours set'} · {s.attendeeCount} attendee{s.attendeeCount === 1 ? '' : 's'}
+                        {s.businessUnit} · {fmtDate(s.startDate)}–{fmtDate(s.endDate)} · {s.hours ? `${s.hours}h` : 'no hours set'} ·{' '}
+                        {s.costPerAttendee ? `₦${s.costPerAttendee.toLocaleString()}/attendee` : 'no cost set'} · {s.attendeeCount} attendee{s.attendeeCount === 1 ? '' : 's'}
+                        {s.trainingType ? ` · ${s.trainingType}` : ''}{s.capability ? ` · ${s.capability}` : ''}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         Pre: {s.preSent}/{s.attendeeCount} · Post-1: {s.post1Sent}/{s.attendeeCount} · Post-2: {s.post2Sent}/{s.attendeeCount}
