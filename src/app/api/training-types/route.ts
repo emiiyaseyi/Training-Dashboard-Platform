@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 const DEFAULT_TYPES = [
   { name: 'Internal Training', classification: 'formal', order: 0 },
@@ -25,6 +26,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { name, classification, order } = body as { name: string; classification: string; order?: number }
@@ -48,6 +52,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { id, name, classification, order } = body as { id: string; name: string; classification: string; order?: number }
@@ -70,6 +77,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { id } = body as { id: string }

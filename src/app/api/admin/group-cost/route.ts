@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 // Lists distinct training names already uploaded, with attendee counts, so the admin can pick
 // from what's actually in the data rather than free-typing a name that might not match anything.
 export async function GET() {
+  const gate = await requirePermission('admin-settings', 'view')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const records = await prisma.trainingRecord.findMany({ select: { training: true } })
     const counts = new Map<string, number>()
@@ -27,6 +31,9 @@ export async function GET() {
 // that per-BU share back onto the individual TrainingRecord rows' cost field, split evenly among
 // that BU's own attendees, so it flows through the existing Strategic Learning Initiatives totals.
 export async function POST(req: NextRequest) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const body = await req.json()
     const { training, totalAmount, apply, confirmDuplicate } = body as {

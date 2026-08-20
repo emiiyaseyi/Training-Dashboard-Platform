@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/session-guard'
 
 // Returns a batch's records reshaped back into the original upload column names, so the
 // Upload History page can offer a "download what was uploaded" button per batch.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await requirePermission('upload-data', 'view')
+  if (gate instanceof NextResponse) return gate
+
   try {
     const { id } = await params
     const batch = await prisma.uploadBatch.findUnique({ where: { id } })
