@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SurveyAutomationPanel } from '@/components/admin/SurveyAutomationPanel'
 import { SurveyQuestionEditor } from '@/components/admin/SurveyQuestionEditor'
+import { SurveyResponseMirrorPanel } from '@/components/admin/SurveyResponseMirrorPanel'
 
 export default function AdminSurveysPage() {
   return (
@@ -20,6 +21,7 @@ export default function AdminSurveysPage() {
         }
       />
       <div className="p-8 space-y-6">
+        <SurveyResponseMirrorPanel />
         <SurveyAutomationPanel />
         <SurveyQuestionEditor />
       </div>

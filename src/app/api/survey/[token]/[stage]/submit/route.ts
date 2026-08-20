@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { MONTHS } from '@/lib/filter-types'
-import { connectToSpreadsheet, appendMirrorRow, type MirrorField } from '@/lib/google-sheets'
 import type { SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
+import { mirrorSurveyResponse } from '@/lib/survey-mirror'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -17,12 +17,6 @@ const SENT_FIELD = {
   pre: 'preSurveySentAt',
   post1: 'post1SurveySentAt',
   post2: 'post2SurveySentAt',
-} as const
-
-const MIRROR_SHEET_FIELD = {
-  pre: 'preMirrorSheetName',
-  post1: 'post1MirrorSheetName',
-  post2: 'post2MirrorSheetName',
 } as const
 
 function currentMonthName(): string {
@@ -76,7 +70,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     }
 
     // Save the raw, full-fidelity answer set regardless of stage.
-    await prisma.surveyResponse.create({
+    const response = await prisma.surveyResponse.create({
       data: { attendeeId: attendee.id, stage: stageKey, answers: JSON.stringify(answers) },
     })
     await prisma.trainingScheduleAttendee.update({
@@ -123,61 +117,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
       await prisma.uploadBatch.update({ where: { id: batch.id }, data: { recordCount: { increment: 1 } } })
     }
 
-    // Optionally mirror the full answer set into a Google Sheet tab. The mirror tab may be one an
-    // admin already uses for bulk Excel uploads (its own pre-existing header row), so we build a
-    // field list with the SAME header candidates the bulk parsers (excel-parser.ts) look for, and
-    // let appendMirrorRow() align values to whatever headers are actually there — see its comment
-    // for why a fixed column order would be unsafe here.
-    try {
-      const settings = await prisma.surveySettings.findFirst()
-      const config = await prisma.googleSheetsConfig.findFirst()
-      const sheetName = settings?.[MIRROR_SHEET_FIELD[stageKey]]
-      if (sheetName && config?.spreadsheetUrl) {
-        const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-
-        let fields: MirrorField[]
-        if (stageKey === 'post1') {
-          fields = [
-            { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
-            { label: 'Training Title', candidates: ['trainingtitle', 'training', 'course', 'programme'], value: attendee.schedule.trainingName },
-            { label: 'Role', candidates: ['role', 'jobtitle', 'position'], value: '' },
-            { label: 'Application response', candidates: ['applicationresponse', 'application', 'applied'], value: asText(fieldAnswer('applicationResponse')) },
-            { label: 'Impact alignment', candidates: ['impactalignment', 'impact', 'alignment', 'strategicalignment'], value: asText(fieldAnswer('impactAlignment')) },
-            { label: 'Confidence rating', candidates: ['confidencerating', 'confidencelevel', 'basedonconfidence', 'confidence'], value: asNumber(fieldAnswer('confidenceRating')) },
-            { label: 'Role Relevance', candidates: ['rolerelevance', 'trainingrelevance', 'relevanttorole', 'howrelevant', 'rolesuitability'], value: asNumber(fieldAnswer('roleRelevance')) },
-            { label: 'Expectations Met', candidates: ['expectationsmet', 'expectationmet', 'metexpectations', 'extentmet', 'towhichextent'], value: asNumber(fieldAnswer('expectationsMet')) },
-            { label: 'Vendor Rating', candidates: ['vendorrating', 'facilitatorrating', 'providerrating', 'trainerrating', 'facilitatorevaluation', 'instructorrating'], value: asNumber(fieldAnswer('vendorRating')) },
-            { label: 'Vendor Name', candidates: ['vendorname', 'facilitatorname', 'providername', 'trainername', 'facilitator', 'trainer', 'provider'], value: asText(fieldAnswer('vendorName')) },
-            { label: 'Qualitative responses', candidates: ['qualitativeresponse', 'qualitative', 'comments', 'feedback'], value: asText(fieldAnswer('qualitativeResponse')) },
-            { label: 'Month', candidates: ['month', 'trainingmonth', 'period', 'feedbackmonth'], value: currentMonthName() },
-          ]
-        } else if (stageKey === 'post2') {
-          fields = [
-            { label: 'Staff ID', candidates: ['staffid', 'staffno', 'employeeid', 'employeeno'], value: attendee.staffId },
-            { label: 'Name', candidates: ['name', 'staffname', 'employeename', 'fullname'], value: attendee.staffName },
-            { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
-            { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: attendee.schedule.trainingName },
-            { label: 'Manager Name', candidates: ['linemanager', 'reviewedby', 'manager', 'supervisor'], value: attendee.lineManagerName || '' },
-            { label: 'Impact Score', candidates: ['posttrainingimpactscore', 'impactscore', 'impactrating', 'managerrating'], value: asNumber(fieldAnswer('impactScore')) },
-            { label: 'Comments', candidates: ['remarks', 'notes', 'observation'], value: asText(fieldAnswer('comments')) },
-            { label: 'Month', candidates: ['reviewmonth', 'period'], value: currentMonthName() },
-          ]
-        } else {
-          fields = [
-            { label: 'Submitted At', candidates: [], value: new Date().toISOString() },
-            { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
-            { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: attendee.schedule.trainingName },
-            { label: 'Business Unit', candidates: ['businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
-            ...questions.filter((q) => !q.autoFill).map((q) => ({ label: q.label, candidates: [] as string[], value: asText(answers[q.id]) })),
-          ]
-        }
-
-        await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
-      }
-    } catch (mirrorErr) {
-      // Mirroring is best-effort — the database write above already succeeded, so log and move on
-      // rather than failing the whole submission over a sheet-side issue.
-      console.error('[survey submit] sheet mirror failed', mirrorErr)
+    // Best-effort: mirror into the Google Sheet tab. Outcome is persisted on the response itself
+    // (not just logged) so a failure is visible to the admin and individually retryable, rather
+    // than silently disappearing into server logs nobody sees.
+    const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions)
+    if (mirrorResult.attempted) {
+      await prisma.surveyResponse.update({
+        where: { id: response.id },
+        data: { mirrorSyncedAt: mirrorResult.success ? new Date() : null, mirrorError: mirrorResult.success ? null : mirrorResult.message },
+      })
     }
 
     return NextResponse.json({ success: true })
