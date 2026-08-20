@@ -27,19 +27,33 @@ function articleFor(word: string): string {
   return /^[aeiou]/i.test(word) ? 'an' : 'a'
 }
 
-// Outlook (the client these went out through) ignores CSS margin collapsing and browser default
-// <p> spacing almost entirely — without an explicit margin here, paragraphs render pressed
-// together with barely any gap, which read as the email "breaking"/cramped rather than reaching
-// a clean end. Every paragraph in this file goes through P() so spacing stays consistent.
-const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${extraStyle}">${html}</p>`
+// N working days (Mon-Fri) after a given date, skipping weekends entirely.
+function addWorkingDays(date: Date, days: number): Date {
+  const result = new Date(date)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    const day = result.getDay()
+    if (day !== 0 && day !== 6) added++
+  }
+  return result
+}
+
+// Outlook (the client these went out through) ignores CSS margin collapsing AND font inheritance
+// from a parent element almost entirely — its Word rendering engine falls back to its own default
+// font/size on any element that doesn't carry its own explicit style, which is why the body read
+// as smaller than a normal Outlook-composed email despite the wrapping <div> saying Tahoma 12px.
+// Every paragraph goes through P() so font, size, and spacing are all repeated on every element.
+const FONT = 'font-family:Tahoma,Geneva,sans-serif;font-size:12px;'
+const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${FONT}${extraStyle}">${html}</p>`
 
 // Survey CTA green — sampled visually from the shade the admin specified; adjust SURVEY_BUTTON_GREEN
 // if it doesn't match exactly (a hex code would let us match it precisely).
 const SURVEY_BUTTON_GREEN = '#1E7145'
 
 const BUTTON = (href: string, label: string) => `
-  ${P(`<a href="${href}" style="display:inline-block;background:${SURVEY_BUTTON_GREEN};color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-family:Tahoma,Geneva,sans-serif;">${label}</a>`)}
-  ${P(`If the button doesn't work, copy this link into your browser:<br/>${href}`, 'font-size:12px;color:#6B7280;')}
+  ${P(`<a href="${href}" style="display:inline-block;background:${SURVEY_BUTTON_GREEN};color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;${FONT}">${label}</a>`)}
+  ${P(`If the button doesn't work, copy this link into your browser:<br/>${href}`, 'color:#6B7280;')}
 `
 
 const SIGNOFF = P('Best Regards,<br/>Meristem Learning &amp; Development Team')
@@ -88,6 +102,10 @@ export function buildSurveyEmail(input: {
   }
 
   if (stage === 'post1') {
+    // KSS is due within 10 working days of the training ending — computed from endDate so the
+    // email states a real date instead of a vague "as soon as possible".
+    const kssDeadline = endDate ? fmtDate(addWorkingDays(new Date(endDate), 10)) : null
+    const kssDeadlineText = kssDeadline ? `on or before ${kssDeadline}` : 'within 10 working days of the training ending'
     return {
       subject,
       html: wrap(`
@@ -95,7 +113,7 @@ export function buildSurveyEmail(input: {
         ${P(`Thank you for participating in the ${trainingName}.`)}
         ${P('As part of our learning evaluation process, kindly complete the post-training survey using the link below:')}
         ${BUTTON(formUrl, 'Post-Training Survey')}
-        ${P('In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team as soon as possible.')}
+        ${P(`In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team ${kssDeadlineText}.`)}
         ${P('Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.')}
         ${P('Thank you for your participation, and we look forward to receiving your feedback.')}
         ${SIGNOFF}
