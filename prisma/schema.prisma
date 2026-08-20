@@ -229,6 +229,44 @@ model SurveySettings {
   updatedAt             DateTime @updatedAt
 }
 
+// Admin-editable question set per survey stage — self-seeds with the agreed default questions
+// the first time a stage is requested (same pattern as TrainingType/DifferentiatingCapability).
+// fieldKey, when set, means this answer feeds a specific structured column on FeedbackRecord
+// (post1) or ManagerReviewRecord (post2) — e.g. "confidenceRating", "impactScore". Questions
+// without a fieldKey are still captured (in SurveyResponse.answers and the sheet mirror) but
+// don't feed a dashboard metric. autoFill, when set, means the field is pre-populated from the
+// training schedule/attendee record rather than asked (e.g. "trainingName", "employeeName").
+model SurveyQuestion {
+  id        String   @id @default(cuid())
+  stage     String // "pre" | "post1" | "post2"
+  order     Int
+  section   String?
+  label     String
+  type      String // "text" | "textarea" | "select" | "multiselect" | "rating" | "date" | "yesno"
+  options   String? // JSON array of strings — for select/multiselect
+  required  Boolean  @default(false)
+  autoFill  String?
+  fieldKey  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stage, order])
+}
+
+// One row per submitted form — the full raw answer set (by question id), independent of
+// whether individual answers also landed in a structured field elsewhere.
+model SurveyResponse {
+  id          String   @id @default(cuid())
+  attendeeId  String
+  stage       String
+  answers     String // JSON: { [questionId]: string | string[] }
+  submittedAt DateTime @default(now())
+
+  attendee TrainingScheduleAttendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  @@index([attendeeId, stage])
+}
+
 // Platform-wide SMTP config — admin-editable (not env vars), since email is used beyond just
 // surveys. Single-row settings, same pattern as GoogleSheetsConfig/BudgetSettings. The password
 // is stored as entered (no separate encryption layer beyond the DB's own security) and is never
@@ -287,7 +325,8 @@ model TrainingScheduleAttendee {
 
   createdAt DateTime @default(now())
 
-  schedule TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  schedule  TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  responses SurveyResponse[]
 
   @@index([scheduleId])
   @@index([staffId])
