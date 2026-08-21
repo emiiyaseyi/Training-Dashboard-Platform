@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import { prisma } from '@/lib/prisma'
+import { decryptSecret } from '@/lib/secret-crypto'
 
 // SMTP is configured by the admin in-app (Admin Settings), not environment variables — it's a
 // platform-wide capability (surveys today, potentially other notifications later), and admins
@@ -19,7 +20,7 @@ async function getTransportAndSettings() {
     host: s.host,
     port: s.port,
     secure: s.port === 465,
-    auth: { user: s.username, pass: s.password },
+    auth: { user: s.username, pass: decryptSecret(s.password) },
   })
   return { transport, settings: s }
 }

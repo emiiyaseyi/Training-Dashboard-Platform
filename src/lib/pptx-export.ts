@@ -344,23 +344,14 @@ function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
   const notTrainedPct = tm.totalHeadcount > 0 ? (tm.staffNotTrained / tm.totalHeadcount) * 100 : 0
 
   const tiles: Tile[] = [
-    { iconKey: 'users', title: 'Total Talent Members', value: tm.totalHeadcount.toLocaleString() },
-    { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No TM headcount configured', valueColor: C.green },
-    { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No TM headcount configured', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
+    { iconKey: 'users', title: 'Total Talent Members', value: tm.totalHeadcount.toLocaleString(), subtitle: 'Current TM roster' },
+    { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No Talent Members on roster', valueColor: C.green },
+    { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No Talent Members on roster', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
+    { iconKey: 'userMinus', title: 'Staff Exempted', value: tm.staffExempted.toLocaleString(), subtitle: "Excused from this year's requirement" },
     { iconKey: 'nairaSign', title: 'Total Spend', value: fmt(tm.totalSpend), subtitle: 'Counts toward Formal Training Spend', valueColor: C.gold },
+    { iconKey: 'gauge', title: 'TM Coverage', value: pct(tm.coveragePct), subtitle: 'Trained ÷ (Total − Exempted)', valueColor: tm.coveragePct >= 70 ? C.green : tm.coveragePct >= 40 ? C.gold : C.red },
   ]
-  addTileGrid(slide, tiles, icons, 4, CONTENT_TOP, CONTENT_TOP + 1.6)
-
-  const panelTop = CONTENT_TOP + 1.85
-  const panelH = FOOTER_Y - 0.25 - panelTop
-  const panelW = PAGE_W - MARGIN * 2
-  slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-  slide.addText('TM Training Coverage', { x: MARGIN + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
-
-  slide.addText(`Trained          ${tm.staffTrained.toLocaleString()} (${trainedPct.toFixed(1)}%)`, { x: MARGIN + 0.2, y: panelTop + 0.6, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
-  slide.addShape('rect', { x: MARGIN + 0.2, y: panelTop + 0.95, w: (panelW - 0.4) * Math.min(1, trainedPct / 100), h: 0.1, fill: { color: C.green }, line: { type: 'none' } })
-  slide.addText(`Yet to be Trained          ${tm.staffNotTrained.toLocaleString()} (${notTrainedPct.toFixed(1)}%)`, { x: MARGIN + 0.2, y: panelTop + 1.25, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
-  slide.addShape('rect', { x: MARGIN + 0.2, y: panelTop + 1.6, w: (panelW - 0.4) * Math.min(1, notTrainedPct / 100), h: 0.1, fill: { color: C.red }, line: { type: 'none' } })
+  addTileGrid(slide, tiles, icons, 3)
 
   addFooter(slide, 8, periodLabel)
   return slide

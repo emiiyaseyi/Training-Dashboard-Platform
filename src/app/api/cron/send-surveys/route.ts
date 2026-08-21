@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendSurveyStage, sendSurveyReminders } from '@/lib/survey-send'
 import type { SurveyStage } from '@/lib/survey-email'
+import { sendCronFailureAlert } from '@/lib/cron-alert'
 
 const DAY_MS = 86400000
 
@@ -81,6 +82,11 @@ export async function GET(req: NextRequest) {
       }
     }
   }
+
+  await sendCronFailureAlert(
+    'Survey send/reminder',
+    errors.map((e) => `Schedule ${e.scheduleId} (${e.stage}): ${e.message}`)
+  )
 
   return NextResponse.json({ success: errors.length === 0, results, errors })
 }

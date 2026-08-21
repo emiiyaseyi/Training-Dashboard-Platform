@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
@@ -47,6 +47,7 @@ interface Schedule {
   costPerAttendee: number | null
   trainingType: string | null
   capability: string | null
+  vendor: string | null
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -134,12 +135,14 @@ export function SurveyAutomationPanel() {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [showAddSchedule, setShowAddSchedule] = useState(false)
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
   const [newSchedule, setNewSchedule] = useState({
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
-    costPerAttendee: '', trainingType: '', capability: '',
+    costPerAttendee: '', trainingType: '', capability: '', vendor: '',
   })
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
+  const [vendors, setVendors] = useState<NamedOption[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [schedulePage, setSchedulePage] = useState(1)
@@ -209,9 +212,10 @@ export function SurveyAutomationPanel() {
   }
 
   const loadTaxonomies = async () => {
-    const [typesRes, capsRes] = await Promise.all([fetch('/api/training-types'), fetch('/api/capabilities')])
+    const [typesRes, capsRes, vendorsRes] = await Promise.all([fetch('/api/training-types'), fetch('/api/capabilities'), fetch('/api/vendors')])
     setTrainingTypes(await typesRes.json())
     setCapabilities(await capsRes.json())
+    setVendors(await vendorsRes.json())
   }
 
   useEffect(() => {
@@ -238,35 +242,59 @@ export function SurveyAutomationPanel() {
     }
   }
 
-  const createSchedule = async () => {
+  const resetScheduleForm = () => {
+    setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+    setNewSchedulePending([])
+    setNewScheduleSearchQuery('')
+    setEditingScheduleId(null)
+    setShowAddSchedule(false)
+  }
+
+  const startEditSchedule = (s: Schedule) => {
+    setNewSchedule({
+      trainingName: s.trainingName,
+      businessUnit: s.businessUnit,
+      startDate: s.startDate.slice(0, 10),
+      endDate: s.endDate.slice(0, 10),
+      hours: s.hours?.toString() ?? '',
+      costPerAttendee: s.costPerAttendee?.toString() ?? '',
+      trainingType: s.trainingType ?? '',
+      capability: s.capability ?? '',
+      vendor: s.vendor ?? '',
+    })
+    setEditingScheduleId(s.id)
+    setShowAddSchedule(true)
+  }
+
+  const saveSchedule = async () => {
     setCreatingSchedule(true)
     try {
-      const res = await fetch('/api/admin/training-schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newSchedule,
-          hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
-          costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
-        }),
-      })
+      const res = await fetch(
+        editingScheduleId ? `/api/admin/training-schedule/${editingScheduleId}` : '/api/admin/training-schedule',
+        {
+          method: editingScheduleId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...newSchedule,
+            hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
+            costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
+          }),
+        }
+      )
       if (res.ok) {
-        const created = await res.json()
-        if (newSchedulePending.length > 0) {
-          await fetch(`/api/admin/training-schedule/${created.id}/attendees`, {
+        const saved = await res.json()
+        if (!editingScheduleId && newSchedulePending.length > 0) {
+          await fetch(`/api/admin/training-schedule/${saved.id}/attendees`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifiers: newSchedulePending.map((p) => p.staffId) }),
           })
         }
-        setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '' })
-        setNewSchedulePending([])
-        setNewScheduleSearchQuery('')
-        setShowAddSchedule(false)
+        resetScheduleForm()
         await loadSchedules()
       } else {
         const data = await res.json().catch(() => ({}))
-        alert(data.error || 'Failed to create schedule.')
+        alert(data.error || `Failed to ${editingScheduleId ? 'update' : 'create'} schedule.`)
       }
     } finally {
       setCreatingSchedule(false)
@@ -371,7 +399,10 @@ export function SurveyAutomationPanel() {
 
   const sendStage = async (scheduleId: string, stage: 'pre' | 'post1' | 'post2', attendeeIds?: string[]) => {
     const key = `${scheduleId}:${stage}:${attendeeIds?.join(',') || 'all'}`
-    if (!confirm(`Send the ${STAGE_LABELS[stage]} email now?`)) return
+    const confirmMsg = attendeeIds
+      ? `Send the ${STAGE_LABELS[stage]} email now?`
+      : `Send the ${STAGE_LABELS[stage]} email to everyone who hasn't already responded? (Anyone who already filled it out won't be re-sent.)`
+    if (!confirm(confirmMsg)) return
     setSendingKey(key)
     setSendResult(null)
     try {
@@ -579,7 +610,7 @@ export function SurveyAutomationPanel() {
             </div>
           </div>
           <button
-            onClick={() => setShowAddSchedule((v) => !v)}
+            onClick={() => (showAddSchedule ? resetScheduleForm() : setShowAddSchedule(true))}
             className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -639,47 +670,53 @@ export function SurveyAutomationPanel() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">
-                Attendees — search by name, email, or Staff ID (add as many as are going)
-              </label>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  value={newScheduleSearchQuery}
-                  onChange={(e) => setNewScheduleSearchQuery(e.target.value)}
-                  placeholder="Type a name, email, or Staff ID…"
-                  className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
-                />
-                {newScheduleSearchResults.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {newScheduleSearchResults.map((r) => (
-                      <button
-                        key={r.staffId}
-                        type="button"
-                        onClick={() => addToNewSchedulePending(r)}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
-                      >
-                        <span className="text-slate-700">{r.name}</span>
-                        <span className="text-slate-400">{r.staffId}{r.businessUnit ? ` · ${r.businessUnit}` : ''}</span>
-                      </button>
+            {editingScheduleId ? (
+              <p className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                Attendees are managed from the schedule&rsquo;s own row below (expand it to add/remove people) — this form only edits the schedule&rsquo;s own details.
+              </p>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Attendees — search by name, email, or Staff ID (add as many as are going)
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={newScheduleSearchQuery}
+                    onChange={(e) => setNewScheduleSearchQuery(e.target.value)}
+                    placeholder="Type a name, email, or Staff ID…"
+                    className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  />
+                  {newScheduleSearchResults.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {newScheduleSearchResults.map((r) => (
+                        <button
+                          key={r.staffId}
+                          type="button"
+                          onClick={() => addToNewSchedulePending(r)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                        >
+                          <span className="text-slate-700">{r.name}</span>
+                          <span className="text-slate-400">{r.staffId}{r.businessUnit ? ` · ${r.businessUnit}` : ''}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {newSchedulePending.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {newSchedulePending.map((p) => (
+                      <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                        {p.name}
+                        <button type="button" onClick={() => removeFromNewSchedulePending(p.staffId)} className="hover:text-red-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
                     ))}
                   </div>
                 )}
               </div>
-              {newSchedulePending.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {newSchedulePending.map((p) => (
-                    <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
-                      {p.name}
-                      <button type="button" onClick={() => removeFromNewSchedulePending(p.staffId)} className="hover:text-red-600">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs text-slate-500">
                 Start date
@@ -742,19 +779,37 @@ export function SurveyAutomationPanel() {
                   {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </label>
+              <label className="text-xs text-slate-500">
+                Vendor
+                <select
+                  value={newSchedule.vendor}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, vendor: e.target.value })}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                >
+                  <option value="">Select…</option>
+                  {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                </select>
+              </label>
             </div>
             <p className="text-[11px] text-slate-400">
-              These feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added — cost, type, and
-              capability are set once here and apply to the whole schedule.
+              Cost, type, and capability feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added.
+              Vendor is used by the Talent Members report (Admin → Vendors manages this list). All are set once here and apply to the whole schedule.
             </p>
-            <button
-              onClick={createSchedule}
-              disabled={creatingSchedule || !newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate}
-              className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
-            >
-              {creatingSchedule && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Create Schedule
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveSchedule}
+                disabled={creatingSchedule || !newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate}
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+              >
+                {creatingSchedule && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {editingScheduleId ? 'Save Changes' : 'Create Schedule'}
+              </button>
+              {editingScheduleId && (
+                <button onClick={resetScheduleForm} className="text-xs text-slate-500 hover:text-slate-700">
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -788,7 +843,7 @@ export function SurveyAutomationPanel() {
                       <p className="text-xs text-slate-500">
                         {s.businessUnit} · {fmtDate(s.startDate)}–{fmtDate(s.endDate)} · {s.hours ? `${s.hours}h` : 'no hours set'} ·{' '}
                         {s.costPerAttendee ? `₦${s.costPerAttendee.toLocaleString()}/attendee` : 'no cost set'} · {s.attendeeCount} attendee{s.attendeeCount === 1 ? '' : 's'}
-                        {s.trainingType ? ` · ${s.trainingType}` : ''}{s.capability ? ` · ${s.capability}` : ''}
+                        {s.trainingType ? ` · ${s.trainingType}` : ''}{s.capability ? ` · ${s.capability}` : ''}{s.vendor ? ` · ${s.vendor}` : ''}
                       </p>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         Pre: {s.preSent}/{s.attendeeCount} · Post-1: {s.post1Sent}/{s.attendeeCount} · Post-2: {s.post2Sent}/{s.attendeeCount}
@@ -825,8 +880,15 @@ export function SurveyAutomationPanel() {
                           Refresh from Roster
                         </button>
                         <button
+                          onClick={() => startEditSchedule(s)}
+                          className="flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 ml-auto"
+                        >
+                          <PenLine className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        <button
                           onClick={() => deleteSchedule(s.id)}
-                          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-600 ml-auto"
+                          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Delete schedule

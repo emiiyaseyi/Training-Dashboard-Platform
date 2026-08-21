@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffId, normalizeEmail } from '@/lib/permissions'
+import { rateLimit } from '@/lib/rate-limit'
 
 // Public, unauthenticated — called from the login form to tell the user immediately if a
 // Staff ID/email isn't recognised, and to decide whether to show a password field at all.
+// Rate-limited since it's an unauthenticated identifier-existence check (a classic enumeration
+// target) with no other login-attempt throttling in front of it.
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, 'auth-lookup', 20, 60_000)
+  if (limited) return limited
+
   try {
     const { identifier } = (await req.json()) as { identifier?: string }
     const idAsStaffId = normalizeStaffId(identifier)

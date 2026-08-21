@@ -9,7 +9,7 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
-import { TalentMemberConfigPanel } from '@/components/admin/TalentMemberConfig'
+import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
@@ -614,6 +614,12 @@ export default function AdminPage() {
             endpoint="/api/capabilities"
             namePlaceholder="e.g. Risk Management"
           />
+          <TaxonomyPanel
+            title="Vendors"
+            description="Training vendors/facilitators, selectable when creating a Training Schedule. Used by the Talent Members report to show which vendor ran each TM training."
+            endpoint="/api/vendors"
+            namePlaceholder="e.g. Lagos Business School"
+          />
         </div>
 
         {/* User access & permissions */}
@@ -665,8 +671,8 @@ export default function AdminPage() {
         {/* Budget calculation settings */}
         <BudgetSettingsPanel />
 
-        {/* Talent Member (TM) population */}
-        <TalentMemberConfigPanel />
+        {/* Talent Member (TM) exemptions — the TM roster itself comes from the comprehensive staff list's "Is Talent Member" column, not admin-entered here */}
+        <TalentMemberExemptionPanel />
 
         {/* Other Investment Budget — group training cost distribution */}
         <GroupCostDistribution />

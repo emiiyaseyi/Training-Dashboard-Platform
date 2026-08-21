@@ -88,7 +88,7 @@ model User {
 model UserPagePermission {
   id     String @id @default(cuid())
   userId String
-  page   String // 'executive-overview' | 'training-analytics' | 'subscriptions' | 'business-units' | 'capability-coverage' | 'report-generation' | 'upload-data' | 'admin-settings'
+  page   String // 'executive-overview' | 'training-analytics' | 'subscriptions' | 'business-units' | 'capability-coverage' | 'yet-to-attend' | 'talent-members' | 'report-generation' | 'upload-data' | 'admin-settings'
   level  String // 'view' | 'view-export' | 'admin'
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -116,13 +116,52 @@ model DifferentiatingCapability {
   updatedAt DateTime @updatedAt
 }
 
-// Year-specific total headcount for the Talent Member (TM) population, used by the TM Trainings report
-model TalentMemberConfig {
-  id            String   @id @default(cuid())
-  year          Int      @unique
-  totalHeadcount Int     @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+// Per-year exemption list for the Talent Member (TM) Trainings report — staff the admin has
+// excused from that year's TM completion requirement. Entered by whichever identifier the admin
+// has on hand (name, Staff ID, or email); resolved against the live TM roster (StaffRosterRecord
+// + comprehensive staff list "Is Talent Member" column) at read time, not stored redundantly.
+model TalentMemberExemption {
+  id        String   @id @default(cuid())
+  year      Int
+  staffId   String?
+  name      String?
+  email     String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([year])
+}
+
+// Durable record of every individual survey send attempt (original send or reminder nudge) —
+// attendee.*SurveySentAt only ever holds the LATEST send time, so a resend silently erases any
+// trace that an earlier send happened. This is the audit trail: who was emailed, when, for which
+// schedule/stage, whether it was a reminder, and whether it actually succeeded.
+model SurveySendLog {
+  id           String   @id @default(cuid())
+  scheduleId   String
+  trainingName String // denormalized — readable even after the schedule itself is deleted
+  stage        String // "pre" | "post1" | "post2"
+  attendeeId   String
+  staffName    String
+  recipient    String // the actual "to" address used (employee or manager, per stage)
+  isReminder   Boolean  @default(false)
+  success      Boolean
+  errorMessage String?
+  sentAt       DateTime @default(now())
+
+  @@index([scheduleId])
+  @@index([sentAt])
+}
+
+// Admin-managed vendor/facilitator list — lets Training Schedule entries pick a vendor from a
+// fixed list rather than free text, so the TM Trainings report can show a real (not guessed)
+// vendor per training.
+model Vendor {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Audit trail for "Other Investment Budget" group-cost distributions — lets the admin see what's
@@ -317,6 +356,7 @@ model TrainingSchedule {
   costPerAttendee Float? // applied uniformly to every attendee's mirrored Training Data row
   trainingType    String? // references TrainingType.name
   capability      String? // references DifferentiatingCapability.name
+  vendor          String? // references Vendor.name — used by the TM Trainings report (training name, date, vendor)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

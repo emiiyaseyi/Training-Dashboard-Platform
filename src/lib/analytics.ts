@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
+import { computeTalentMemberReport } from './talent-member'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,7 +151,9 @@ export interface TalentMemberReport {
   totalHeadcount: number
   staffTrained: number
   staffNotTrained: number
+  staffExempted: number
   totalSpend: number
+  coveragePct: number
 }
 
 export interface StaffAttendanceRow {
@@ -591,7 +594,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     rawKSS,
     trainingTypes,
     capabilities,
-    talentMemberConfig,
+    talentMemberReport,
     budgetSettings,
     rawManagerReviews,
   ] = await Promise.all([
@@ -602,7 +605,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.kSSRecord.findMany(),
     prisma.trainingType.findMany(),
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
-    prisma.talentMemberConfig.findUnique({ where: { year: filter.year ?? new Date().getFullYear() } }),
+    computeTalentMemberReport(filter.year ?? new Date().getFullYear()),
     prisma.budgetSettings.findFirst(),
     prisma.managerReviewRecord.findMany(),
   ])
@@ -896,15 +899,14 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     .map((t) => t.name)
 
   // ── Talent Member (TM) — a Training Type that still counts as formal training, but is also
-  // tracked separately against a configured total TM population ──
-  const tmRecords = trainingRecords.filter((r) => (r.trainingType ?? '').toLowerCase() === 'tm')
-  const tmTotalHeadcount = talentMemberConfig?.totalHeadcount ?? 0
-  const tmStaffTrained = new Set(tmRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
+  // tracked separately against the real, named TM roster (see talent-member.ts) ──
   const talentMember: TalentMemberReport = {
-    totalHeadcount: tmTotalHeadcount,
-    staffTrained: tmStaffTrained,
-    staffNotTrained: Math.max(0, tmTotalHeadcount - tmStaffTrained),
-    totalSpend: tmRecords.reduce((s, r) => s + r.cost, 0),
+    totalHeadcount: talentMemberReport.totalTalentMembers,
+    staffTrained: talentMemberReport.staffTrained,
+    staffNotTrained: talentMemberReport.staffNotTrained,
+    staffExempted: talentMemberReport.staffExempted,
+    totalSpend: talentMemberReport.totalSpend,
+    coveragePct: talentMemberReport.coveragePct,
   }
 
   return {

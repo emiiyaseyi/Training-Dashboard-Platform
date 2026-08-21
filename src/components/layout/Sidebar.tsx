@@ -18,10 +18,12 @@ import {
   UserCircle,
   UserX,
   Mail,
+  Award,
+  HelpCircle,
 } from 'lucide-react'
 import { hasAccess, type PageKey } from '@/lib/permissions'
 
-const ANALYTICS_PAGE_COUNT = 6
+const ANALYTICS_PAGE_COUNT = 7
 
 const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
   { href: '/',               label: 'Executive Overview',      icon: LayoutDashboard, page: 'executive-overview' },
@@ -30,6 +32,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/business-units', label: 'Business Units',          icon: Building2,       page: 'business-units' },
   { href: '/capabilities',   label: 'Capability Coverage',     icon: Layers,          page: 'capability-coverage' },
   { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
+  { href: '/talent-members', label: 'Talent Members',          icon: Award,           page: 'talent-members' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
   { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
   { href: '/admin/surveys',  label: 'Survey Automation',       icon: Mail,            page: 'admin-settings' },
@@ -116,6 +119,15 @@ export function Sidebar() {
               {isSuperAdmin ? 'Super Admin' : session.user.staffId || session.user.email}
             </p>
           </div>
+        </Link>
+        <Link
+          href="/help"
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
+            pathname === '/help' ? 'bg-gold-400 text-navy-800' : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
+          }`}
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+          Help & FAQ
         </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}

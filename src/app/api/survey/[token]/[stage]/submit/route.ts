@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { MONTHS } from '@/lib/filter-types'
 import type { SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { mirrorSurveyResponse } from '@/lib/survey-mirror'
+import { rateLimit } from '@/lib/rate-limit'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -29,7 +30,10 @@ async function getOrCreateNativeBatch(type: string, filename: string) {
   return prisma.uploadBatch.create({ data: { type, filename, recordCount: 0 } })
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ token: string; stage: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string; stage: string }> }) {
+  const limited = rateLimit(req, 'survey-submit', 20, 60_000)
+  if (limited) return limited
+
   try {
     const { token, stage } = await params
     if (!VALID_STAGES.includes(stage as SurveyStageKey)) {
