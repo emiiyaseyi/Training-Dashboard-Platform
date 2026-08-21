@@ -13,6 +13,7 @@ export interface ResolvedStaff {
   email: string | null
   lineManagerStaffId: string | null
   businessUnit: string
+  isTalentMember: boolean
 }
 
 // "First Last" only, no middle name — used specifically for the Line Manager Name column written
@@ -53,6 +54,7 @@ async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>>
       // BU-scoped data.
       bu: findHeader(headers, ['businessunit', 'businessunits', 'bu', 'costcenter']),
       lineManager: findHeader(headers, ['linemanagerstaffid', 'linemanagerid', 'reportsto', 'managerstaffid', 'manager', 'linemanager', 'supervisor']),
+      isTalentMember: findHeader(headers, ['istalentmember', 'talentmember', 'tm']),
     }
     if (!col.staffId) return map // can't join to anything without a Staff ID column
 
@@ -77,6 +79,7 @@ async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>>
         email: col.email ? norm(r[col.email]).toLowerCase() || null : null,
         lineManagerStaffId: col.lineManager ? norm(r[col.lineManager]).toUpperCase() || null : null,
         businessUnit: col.bu ? normalizeBUName(norm(r[col.bu])) : '',
+        isTalentMember: col.isTalentMember ? /^y/i.test(norm(r[col.isTalentMember])) : false,
       })
     }
   } catch (err) {
@@ -105,6 +108,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       email: r.email,
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
+      isTalentMember: false, // not tracked on the uploaded roster — only the comprehensive staff list's "Is Talent Member" column carries this
     })
   }
 
@@ -122,6 +126,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
         email: existing.email || extra.email,
         lineManagerStaffId: existing.lineManagerStaffId || extra.lineManagerStaffId,
         businessUnit: existing.businessUnit || extra.businessUnit,
+        isTalentMember: existing.isTalentMember || extra.isTalentMember,
       })
     }
   }

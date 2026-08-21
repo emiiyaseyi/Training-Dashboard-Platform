@@ -36,6 +36,12 @@ export interface SendSurveyResult {
 // onlyUnsent restricts to attendees who don't already have this stage's timestamp set — off by
 // default so a manual "send to all" click can deliberately resend as a reminder, but the
 // automated cron trigger always passes true so it never re-spams someone once they're sent.
+//
+// Duplicate-send guard: when attendeeIds is omitted (a bulk "send to all" click, not a specific
+// person), anyone who has ALREADY RESPONDED to this stage is always excluded regardless of
+// onlyUnsent — bulk actions should never re-prompt someone who already filled the form. An
+// explicit attendeeIds list (the per-attendee resend button) bypasses this on purpose, since
+// clicking one person's tick is a deliberate, individually-confirmed override.
 export async function sendSurveyStage(
   scheduleId: string,
   stage: SurveyStage,
@@ -59,10 +65,13 @@ export async function sendSurveyStage(
   const baseUrl = getAppBaseUrl()
   const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
   const sentField = STAGE_SENT_FIELD[stage]
+  const respondedField = STAGE_RESPONDED_FIELD[stage]
   const recipientRole = surveyRecipientRole(stage)
   const result: SendSurveyResult = { sent: 0, skipped: [] }
 
-  const targets = onlyUnsent ? schedule.attendees.filter((a) => !a[sentField]) : schedule.attendees
+  const targets = attendeeIds
+    ? schedule.attendees
+    : schedule.attendees.filter((a) => (onlyUnsent ? !a[sentField] : !a[respondedField]))
 
   for (const attendee of targets) {
     const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
@@ -99,12 +108,43 @@ export async function sendSurveyStage(
         data: { [sentField]: new Date(), [STAGE_REMINDER_FIELD[stage]]: new Date() },
       })
       result.sent++
+      await logSend(schedule, stage, attendee, toAddress, false, true, null)
     } catch (err) {
-      result.skipped.push({ staffName: attendee.staffName, reason: err instanceof Error ? err.message : 'Send failed.' })
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      result.skipped.push({ staffName: attendee.staffName, reason: message })
+      await logSend(schedule, stage, attendee, toAddress, false, false, message)
     }
   }
 
   return result
+}
+
+async function logSend(
+  schedule: { id: string; trainingName: string },
+  stage: SurveyStage,
+  attendee: TrainingScheduleAttendee,
+  recipient: string,
+  isReminder: boolean,
+  success: boolean,
+  errorMessage: string | null
+): Promise<void> {
+  try {
+    await prisma.surveySendLog.create({
+      data: {
+        scheduleId: schedule.id,
+        trainingName: schedule.trainingName,
+        stage,
+        attendeeId: attendee.id,
+        staffName: attendee.staffName,
+        recipient,
+        isReminder,
+        success,
+        errorMessage,
+      },
+    })
+  } catch (err) {
+    console.error('[survey-send] failed to write send log', err)
+  }
 }
 
 const HOUR_MS = 3600000
@@ -163,8 +203,11 @@ export async function sendSurveyReminders(
       await sendMail({ to: toAddress, cc, subject, html })
       await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
       result.sent++
+      await logSend(schedule, stage, attendee, toAddress, true, true, null)
     } catch (err) {
-      result.skipped.push({ staffName: attendee.staffName, reason: err instanceof Error ? err.message : 'Reminder send failed.' })
+      const message = err instanceof Error ? err.message : 'Reminder send failed.'
+      result.skipped.push({ staffName: attendee.staffName, reason: message })
+      await logSend(schedule, stage, attendee, toAddress, true, false, message)
     }
   }
 

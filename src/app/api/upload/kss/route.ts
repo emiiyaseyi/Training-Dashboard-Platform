@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseKSSExcel } from '@/lib/excel-parser'
 import { importKSSRows } from '@/lib/import-records'
 import { requirePermission } from '@/lib/session-guard'
+import { validateUploadFile } from '@/lib/upload-validation'
 
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('upload-data', 'admin')
@@ -13,6 +14,8 @@ export async function POST(req: NextRequest) {
     const period = (formData.get('period') as string | null) ?? ''
 
     if (!file) return NextResponse.json({ error: 'No file provided.' }, { status: 400 })
+    const fileError = validateUploadFile(file)
+    if (fileError) return NextResponse.json({ error: fileError }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const { rows, errors, warnings } = parseKSSExcel(buffer)

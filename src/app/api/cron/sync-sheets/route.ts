@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { syncFromGoogleSheets } from '@/lib/sheets-sync'
+import { sendCronFailureAlert } from '@/lib/cron-alert'
 
 // Invoked by Vercel Cron (see vercel.json) on a fixed heartbeat — actually syncs only when the
 // admin has auto-sync enabled AND enough time has passed since the last sync to satisfy their
@@ -28,9 +29,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await syncFromGoogleSheets('scheduled')
+    await sendCronFailureAlert('Google Sheets sync', result.errors.map((e) => `${e.sheet}: ${e.message}`))
     return NextResponse.json(result)
   } catch (err) {
     console.error('[cron/sync-sheets]', err)
+    await sendCronFailureAlert('Google Sheets sync', [err instanceof Error ? err.message : 'Unknown error.'])
     return NextResponse.json({ error: 'Scheduled sync failed unexpectedly.' }, { status: 500 })
   }
 }

@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { surveyRecipientRole } from '@/lib/survey-email'
 import type { SurveyStage } from '@/lib/survey-email'
 import { getStageQuestions, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
+import { rateLimit } from '@/lib/rate-limit'
 
 const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
@@ -22,7 +23,12 @@ const SENT_FIELD = {
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control.
 // Returns just enough context to render the form: who it's for, which training, whether it's
 // already been submitted, and whether the viewer should be addressed as the employee or manager.
-export async function GET(req: Request, { params }: { params: Promise<{ token: string; stage: string }> }) {
+// Rate-limited as a courtesy floor against token-guessing scripts, on top of the token's own
+// unguessability.
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string; stage: string }> }) {
+  const limited = rateLimit(req, 'survey-get', 60, 60_000)
+  if (limited) return limited
+
   try {
     const { token, stage } = await params
     if (!VALID_STAGES.includes(stage as SurveyStage)) {

@@ -7,6 +7,8 @@ import { SurveyAutomationPanel } from '@/components/admin/SurveyAutomationPanel'
 import { SurveyQuestionEditor } from '@/components/admin/SurveyQuestionEditor'
 import { SurveyResponseMirrorPanel } from '@/components/admin/SurveyResponseMirrorPanel'
 import { TrainingDataMirrorPanel } from '@/components/admin/TrainingDataMirrorPanel'
+import { SurveySendLogPanel } from '@/components/admin/SurveySendLogPanel'
+import { SurveyInsightsPanel } from '@/components/admin/SurveyInsightsPanel'
 
 export default function AdminSurveysPage() {
   return (
@@ -26,6 +28,8 @@ export default function AdminSurveysPage() {
         <TrainingDataMirrorPanel />
         <SurveyAutomationPanel />
         <SurveyQuestionEditor />
+        <SurveyInsightsPanel />
+        <SurveySendLogPanel />
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { Users, UserCheck, UserX } from 'lucide-react'
+import { Users, UserCheck, UserX, UserMinus, Gauge } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { ReportTile } from './ReportTile'
 import { SlideShell } from './SlideShell'
@@ -12,11 +12,13 @@ export function Slide8TalentMember({ data, pageNumber, periodLabel }: { data: Gr
 
   return (
     <SlideShell title="Talent Member (TM) Trainings" subtitle="Coverage and investment for the Talent Member population" pageNumber={pageNumber} periodLabel={periodLabel}>
-      <div className="grid grid-cols-4 gap-3 mb-4">
-        <ReportTile icon={Users} title="Total Talent Members" value={tm.totalHeadcount.toLocaleString()} subtitle="Configured TM population" />
-        <ReportTile icon={UserCheck} title="Staff Trained" value={tm.staffTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No TM headcount configured'} valueColor="text-report-green" />
-        <ReportTile icon={UserX} title="Yet to be Trained" value={tm.staffNotTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No TM headcount configured'} valueColor={tm.staffNotTrained > 0 ? 'text-report-red' : 'text-report-green'} />
+      <div className="grid grid-cols-3 grid-rows-2 gap-3 mb-4">
+        <ReportTile icon={Users} title="Total Talent Members" value={tm.totalHeadcount.toLocaleString()} subtitle="Current TM roster" />
+        <ReportTile icon={UserCheck} title="Staff Trained" value={tm.staffTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No Talent Members on roster'} valueColor="text-report-green" />
+        <ReportTile icon={UserX} title="Yet to be Trained" value={tm.staffNotTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No Talent Members on roster'} valueColor={tm.staffNotTrained > 0 ? 'text-report-red' : 'text-report-green'} />
+        <ReportTile icon={UserMinus} title="Staff Exempted" value={tm.staffExempted.toLocaleString()} subtitle="Excused from this year's requirement" />
         <ReportTile icon={NairaSign} title="Total Spend" value={fmt(tm.totalSpend)} subtitle="Counts toward Formal Training Spend" valueColor="text-gold-400" />
+        <ReportTile icon={Gauge} title="TM Coverage" value={pct(tm.coveragePct)} subtitle="Trained ÷ (Total − Exempted)" valueColor={tm.coveragePct >= 70 ? 'text-report-green' : tm.coveragePct >= 40 ? 'text-gold-400' : 'text-report-red'} />
       </div>
 
       <div className="rounded-xl border border-navy-200 bg-navy-100 p-5">

@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { uploadFileToDrive } from '@/lib/google-drive'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import type { SurveyStageKey } from '@/lib/survey-questions'
+import { rateLimit } from '@/lib/rate-limit'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -21,7 +22,10 @@ const SENT_FIELD = {
 // Public, unauthenticated (same token-based access as the rest of the survey routes). Called by
 // the form as soon as a file question's picker is used, ahead of the final submit — the returned
 // Drive link becomes that question's answer value, same as any text answer.
-export async function POST(req: Request, { params }: { params: Promise<{ token: string; stage: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string; stage: string }> }) {
+  const limited = rateLimit(req, 'survey-upload', 20, 60_000)
+  if (limited) return limited
+
   try {
     const { token, stage } = await params
     if (!VALID_STAGES.includes(stage as SurveyStageKey)) {
