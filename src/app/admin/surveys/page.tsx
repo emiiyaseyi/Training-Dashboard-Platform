@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -9,8 +10,11 @@ import { SurveyResponseMirrorPanel } from '@/components/admin/SurveyResponseMirr
 import { TrainingDataMirrorPanel } from '@/components/admin/TrainingDataMirrorPanel'
 import { SurveySendLogPanel } from '@/components/admin/SurveySendLogPanel'
 import { SurveyInsightsPanel } from '@/components/admin/SurveyInsightsPanel'
+import { AlreadyAttendedTrainingsPanel } from '@/components/admin/AlreadyAttendedTrainingsPanel'
 
 export default function AdminSurveysPage() {
+  const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0)
+
   return (
     <div className="flex flex-col">
       <PageHeader
@@ -26,7 +30,8 @@ export default function AdminSurveysPage() {
       <div className="p-8 space-y-6">
         <SurveyResponseMirrorPanel />
         <TrainingDataMirrorPanel />
-        <SurveyAutomationPanel />
+        <AlreadyAttendedTrainingsPanel onScheduleCreated={() => setScheduleRefreshKey((k) => k + 1)} />
+        <SurveyAutomationPanel key={scheduleRefreshKey} />
         <SurveyQuestionEditor />
         <SurveyInsightsPanel />
         <SurveySendLogPanel />

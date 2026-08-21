@@ -68,8 +68,9 @@ export function buildSurveyEmail(input: {
   endDate?: Date | string | null
   trainingType?: string | null
   isReminder?: boolean // prefixes the subject and adds a short nudge line — used by the daily reminder sweep
+  isHistorical?: boolean // sent via "Already Attended Trainings" (retroactively created schedule) — adds a duplicate-fill caveat to Post-1 and reframes Post-2's intro
 }): { subject: string; html: string } {
-  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, isReminder } = input
+  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, isReminder, isHistorical } = input
   const firstName = firstNameOf(recipientName)
   const subject = stage === 'pre'
     ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
@@ -114,6 +115,7 @@ export function buildSurveyEmail(input: {
         ${P('As part of our learning evaluation process, kindly complete the post-training survey using the link below:')}
         ${BUTTON(formUrl, 'Post-Training Survey')}
         ${P(`In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team ${kssDeadlineText}.`)}
+        ${isHistorical ? P('If you have previously completed a post-training survey for this programme, please disregard this email.', 'color:#6B7280;') : ''}
         ${P('Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.')}
         ${P('Thank you for your participation, and we look forward to receiving your feedback.')}
         ${SIGNOFF}
@@ -126,7 +128,9 @@ export function buildSurveyEmail(input: {
     subject,
     html: wrap(`
       ${P(`Dear ${firstName},`)}
-      ${P(`${firstNameOf(employeeName)} recently attended the ${trainingName} programme.`)}
+      ${isHistorical
+        ? P(`${firstNameOf(employeeName)} attended the ${trainingName} programme. Post-training impact reviews are now being tracked as part of our learning records, and we kindly request your input in completing this review.`)
+        : P(`${firstNameOf(employeeName)} recently attended the ${trainingName} programme.`)}
       ${P('Kindly complete the Training Impact Survey using the link below to provide your assessment of the participant\'s application of the knowledge and skills gained from the training.')}
       ${BUTTON(formUrl, 'Training Impact Survey')}
       ${P('Your feedback will help us understand the value the training has delivered and identify areas for further development.')}

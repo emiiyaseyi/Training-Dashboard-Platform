@@ -56,13 +56,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // attendee itself (not just logged) so a failure is visible to the admin and retryable —
     // this schedule is just another way of getting rows into that same tab, not a separate
     // pipeline, so no direct TrainingRecord write or dedup handling is needed here.
-    for (const attendee of createdAttendees) {
-      const result = await mirrorAttendeeToTrainingData(attendee, schedule)
-      if (result.attempted) {
-        await prisma.trainingScheduleAttendee.update({
-          where: { id: attendee.id },
-          data: { trainingDataSyncedAt: result.success ? new Date() : null, trainingDataSyncError: result.success ? null : result.message },
-        })
+    // Skipped for schedules sourced from Already Attended Trainings — those attendees came FROM
+    // an existing Training Data row, so mirroring them again would create a duplicate.
+    if (!schedule.sourcedFromHistoricalData) {
+      for (const attendee of createdAttendees) {
+        const result = await mirrorAttendeeToTrainingData(attendee, schedule)
+        if (result.attempted) {
+          await prisma.trainingScheduleAttendee.update({
+            where: { id: attendee.id },
+            data: { trainingDataSyncedAt: result.success ? new Date() : null, trainingDataSyncError: result.success ? null : result.message },
+          })
+        }
       }
     }
 

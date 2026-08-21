@@ -61,6 +61,9 @@ export async function sendSurveyStage(
   ])
 
   if (!schedule) throw new Error('Training schedule not found.')
+  if (stage === 'pre' && schedule.sourcedFromHistoricalData) {
+    throw new Error('Pre-Training surveys can\'t be sent for a training added via Already Attended Trainings — it already happened.')
+  }
 
   const baseUrl = getAppBaseUrl()
   const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
@@ -98,6 +101,7 @@ export async function sendSurveyStage(
       startDate: schedule.startDate,
       endDate: schedule.endDate,
       trainingType: schedule.trainingType,
+      isHistorical: schedule.sourcedFromHistoricalData,
     })
     try {
       await sendMail({ to: toAddress, cc, subject, html })
@@ -161,6 +165,7 @@ export async function sendSurveyReminders(
 ): Promise<SendSurveyResult> {
   const result: SendSurveyResult = { sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) return result
+  if (!schedule.remindersEnabled) return result
 
   const sentField = STAGE_SENT_FIELD[stage]
   const respondedField = STAGE_RESPONDED_FIELD[stage]
@@ -198,6 +203,7 @@ export async function sendSurveyReminders(
       endDate: schedule.endDate,
       trainingType: schedule.trainingType,
       isReminder: true,
+      isHistorical: schedule.sourcedFromHistoricalData,
     })
     try {
       await sendMail({ to: toAddress, cc, subject, html })

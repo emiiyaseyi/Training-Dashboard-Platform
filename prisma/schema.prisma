@@ -357,6 +357,8 @@ model TrainingSchedule {
   trainingType    String? // references TrainingType.name
   capability      String? // references DifferentiatingCapability.name
   vendor          String? // references Vendor.name — used by the TM Trainings report (training name, date, vendor)
+  remindersEnabled Boolean @default(true) // daily reminder sweep skips this schedule entirely when false — defaults off for schedules created via "Already Attended Trainings" since those are retroactive, not on the original nomination cadence
+  sourcedFromHistoricalData Boolean @default(false) // true when created via "Already Attended Trainings" (from already-uploaded Training Data records, not a fresh nomination) — Pre-Training is never sent for these, and Post-1/Post-2 copy adjusts accordingly
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

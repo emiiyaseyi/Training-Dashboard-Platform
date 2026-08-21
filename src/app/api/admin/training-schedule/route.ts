@@ -24,6 +24,8 @@ export async function GET() {
       trainingType: s.trainingType,
       capability: s.capability,
       vendor: s.vendor,
+      remindersEnabled: s.remindersEnabled,
+      sourcedFromHistoricalData: s.sourcedFromHistoricalData,
       attendeeCount: s.attendees.length,
       preSent: s.attendees.filter((a) => a.preSurveySentAt).length,
       post1Sent: s.attendees.filter((a) => a.post1SurveySentAt).length,
@@ -55,9 +57,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, sourcedFromHistoricalData } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
+      remindersEnabled?: boolean; sourcedFromHistoricalData?: boolean
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
@@ -74,6 +77,8 @@ export async function POST(req: NextRequest) {
         trainingType: trainingType?.trim() || null,
         capability: capability?.trim() || null,
         vendor: vendor?.trim() || null,
+        remindersEnabled: remindersEnabled ?? true,
+        sourcedFromHistoricalData: sourcedFromHistoricalData ?? false,
       },
     })
     return NextResponse.json(schedule)

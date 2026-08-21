@@ -48,6 +48,8 @@ interface Schedule {
   trainingType: string | null
   capability: string | null
   vendor: string | null
+  remindersEnabled: boolean
+  sourcedFromHistoricalData: boolean
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -326,6 +328,21 @@ export function SurveyAutomationPanel() {
   const deleteSchedule = async (id: string) => {
     if (!confirm('Delete this training schedule and all its attendees? This cannot be undone.')) return
     await fetch(`/api/admin/training-schedule/${id}`, { method: 'DELETE' })
+    await loadSchedules()
+  }
+
+  const toggleReminders = async (s: Schedule) => {
+    await fetch(`/api/admin/training-schedule/${s.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trainingName: s.trainingName, businessUnit: s.businessUnit,
+        startDate: s.startDate, endDate: s.endDate, hours: s.hours ?? undefined,
+        costPerAttendee: s.costPerAttendee ?? undefined, trainingType: s.trainingType ?? '',
+        capability: s.capability ?? '', vendor: s.vendor ?? '',
+        remindersEnabled: !s.remindersEnabled,
+      }),
+    })
     await loadSchedules()
   }
 
@@ -854,9 +871,9 @@ export function SurveyAutomationPanel() {
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-4">
-                      {/* Bulk send buttons */}
+                      {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened */}
                       <div className="flex flex-wrap items-center gap-2">
-                        {(['pre', 'post1', 'post2'] as const).map((stage) => {
+                        {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const)).map((stage) => {
                           const key = `${s.id}:${stage}:all`
                           return (
                             <button
@@ -878,6 +895,15 @@ export function SurveyAutomationPanel() {
                         >
                           {refreshingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                           Refresh from Roster
+                        </button>
+                        <button
+                          onClick={() => toggleReminders(s)}
+                          title="Whether the daily cron sweep sends reminder nudges for unfilled surveys on this schedule"
+                          className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                            s.remindersEnabled ? 'text-emerald-700 border-emerald-200 hover:bg-emerald-50' : 'text-slate-400 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          Reminders: {s.remindersEnabled ? 'On' : 'Off'}
                         </button>
                         <button
                           onClick={() => startEditSchedule(s)}
@@ -1030,7 +1056,7 @@ export function SurveyAutomationPanel() {
                                   <th className="text-left font-medium py-1.5 pr-3">Name</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Email</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
-                                  <th className="text-center font-medium py-1.5 pr-3">Pre</th>
+                                  {!s.sourcedFromHistoricalData && <th className="text-center font-medium py-1.5 pr-3">Pre</th>}
                                   <th className="text-center font-medium py-1.5 pr-3">Post-1</th>
                                   <th className="text-center font-medium py-1.5 pr-3">Post-2</th>
                                   <th className="py-1.5"></th>
@@ -1042,7 +1068,10 @@ export function SurveyAutomationPanel() {
                                     <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
-                                    {([
+                                    {(s.sourcedFromHistoricalData ? [
+                                      ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
+                                      ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
+                                    ] as const : [
                                       ['preSurveySentAt', 'preSurveyRespondedAt', 'pre'],
                                       ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
                                       ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
