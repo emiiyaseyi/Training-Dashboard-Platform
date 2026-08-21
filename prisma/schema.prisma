@@ -37,6 +37,7 @@ model GoogleSheetsConfig {
   subscriptionSheetName            String    @default("Subscriptions")
   kssSheetName                     String    @default("KSS")
   comprehensiveStaffListSheetName  String? // optional secondary staff source (e.g. "MERISTEM COMPREHENSIVE STAFF LIST") — read-only supplement to the uploaded roster, fills in gaps like missing email/line manager
+  talentMemberSheetName            String? // tab the Talent Member roster (TalentMemberRosterEntry) is mirrored into — admin adds/removes TMs from the Talent Members page, not by editing this sheet directly
   autoSyncEnabled                  Boolean   @default(false)
   syncFrequencyMinutes             Int       @default(60)
   lastSyncedAt                     DateTime?
@@ -114,6 +115,22 @@ model DifferentiatingCapability {
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// The Talent Member (TM) roster itself — admin-entered from the Talent Members page (bulk paste
+// or one at a time, by name/Staff ID/email), NOT derived from a column on the general staff list.
+// Each entry is mirrored (best-effort, auto + manual retry) into the sheet tab configured as
+// GoogleSheetsConfig.talentMemberSheetName, so the admin has an external copy too.
+model TalentMemberRosterEntry {
+  id             String    @id @default(cuid())
+  staffId        String?
+  name           String?
+  email          String?
+  createdAt      DateTime  @default(now())
+  sheetSyncedAt  DateTime?
+  sheetSyncError String?
+
+  @@index([staffId])
 }
 
 // Per-year exemption list for the Talent Member (TM) Trainings report — staff the admin has
@@ -269,7 +286,6 @@ model SurveySettings {
   preDaysBefore         Int      @default(7)  // Pre-Training survey sent this many days before startDate
   post1DaysAfter        Int      @default(1)  // Post-1 survey sent this many days after endDate
   post2DaysAfter        Int      @default(30) // Post-2 survey sent this many days after endDate
-  reminderIntervalHours Int      @default(24)   // hours between reminder nudges for an unfilled, already-sent survey
   expiryEnabled         Boolean  @default(true) // whether an unfilled survey stops accepting responses after expiryDays
   expiryDays            Int      @default(7)    // days after the original send before an unfilled survey expires
   maxFileUploadMB       Int      @default(20)    // per-file cap for "file" question uploads — one of 5/10/20/50/100
@@ -388,8 +404,8 @@ model TrainingScheduleAttendee {
   post2SurveyRespondedAt DateTime?
 
   // Last reminder nudge (or the original send, whichever is later) — gates the reminder cron's
-  // "has it been at least SurveySettings.reminderIntervalHours since we last nudged this person"
-  // check. *SurveySentAt itself stays fixed at the original send time (used for expiry).
+  // "was this person already nudged today" check (calendar-day comparison, since the cron itself
+  // only runs once a day). *SurveySentAt itself stays fixed at the original send time (used for expiry).
   preReminderAt   DateTime?
   post1ReminderAt DateTime?
   post2ReminderAt DateTime?

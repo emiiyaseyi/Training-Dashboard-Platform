@@ -1,14 +1,15 @@
 import { prisma } from '@/lib/prisma'
-import { loadRosterDirectory, type ResolvedStaff } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
-// Talent Member (TM) Trainings — a Training Type ("TM") tracked against a real, named roster
-// (StaffRosterRecord + comprehensive staff list "Is Talent Member" column), not just an aggregate
-// headcount. "Attended" and "upcoming" are both derived from TrainingSchedule (Training Type =
-// TM) rather than the bulk-uploaded TrainingRecord data, because that's the only source that
-// carries an exact date and a real (admin-configured, not guessed) vendor per training — a
-// TrainingSchedule row not created in-app simply won't appear here, by design, rather than being
-// approximated.
+// Talent Member (TM) Trainings — a Training Type ("TM") tracked against a real, named roster.
+// The roster itself is admin-entered (TalentMemberRosterEntry, managed from the Talent Members
+// page — bulk or one at a time, by name/Staff ID/email), each entry resolved here against the
+// staff directory for display name/BU/email. "Attended" and "upcoming" are both derived from
+// TrainingSchedule (Training Type = TM) rather than the bulk-uploaded TrainingRecord data,
+// because that's the only source that carries an exact date and a real (admin-configured, not
+// guessed) vendor per training — a TrainingSchedule row not created in-app simply won't appear
+// here, by design, rather than being approximated.
 
 export interface TMAttendedRecord {
   staffId: string
@@ -46,6 +47,13 @@ export interface TMYetToAttendRecord {
   email: string | null
 }
 
+export interface TMUnresolvedRosterEntry {
+  id: string
+  staffId: string | null
+  name: string | null
+  email: string | null
+}
+
 export interface TalentMemberFullReport {
   year: number
   totalTalentMembers: number
@@ -58,9 +66,14 @@ export interface TalentMemberFullReport {
   upcoming: TMUpcomingRecord[]
   exempted: TMExemptedRecord[]
   yetToAttend: TMYetToAttendRecord[]
+  unresolvedRosterEntries: TMUnresolvedRosterEntry[]
 }
 
-function resolveExemption(
+// Both TM roster entries and exemptions are entered the same loose way (name/Staff ID/email), so
+// they resolve against the staff directory the same way — but the ROSTER is what defines who's a
+// Talent Member at all, whereas exemptions must be checked against that roster specifically
+// (someone not on the roster can't meaningfully be "exempted" from it).
+function resolveAgainstRoster(
   e: { staffId: string | null; name: string | null; email: string | null },
   roster: ResolvedStaff[]
 ): ResolvedStaff | null {
@@ -80,8 +93,9 @@ function resolveExemption(
 }
 
 export async function computeTalentMemberReport(year: number): Promise<TalentMemberFullReport> {
-  const [directory, exemptions, tmSchedules] = await Promise.all([
+  const [directory, rosterEntries, exemptions, tmSchedules] = await Promise.all([
     loadRosterDirectory(),
+    prisma.talentMemberRosterEntry.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
     prisma.trainingSchedule.findMany({
       where: { trainingType: 'TM' },
@@ -90,11 +104,20 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     }),
   ])
 
-  const roster = [...directory.values()].filter((s) => s.isTalentMember)
+  const rosterMap = new Map<string, ResolvedStaff>()
+  const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
+  for (const e of rosterEntries) {
+    const match = e.staffId || e.name || e.email
+      ? resolveStaffLoose(e.staffId || e.name || e.email || '', directory)
+      : null
+    if (match) rosterMap.set(normalizeStaffIdKey(match.staffId), match)
+    else unresolvedRosterEntries.push({ id: e.id, staffId: e.staffId, name: e.name, email: e.email })
+  }
+  const roster = [...rosterMap.values()]
 
   const exemptedKeys = new Set<string>()
   const exempted: TMExemptedRecord[] = exemptions.map((e) => {
-    const match = resolveExemption(e, roster)
+    const match = resolveAgainstRoster(e, roster)
     if (match) exemptedKeys.add(normalizeStaffIdKey(match.staffId))
     return { id: e.id, staffId: e.staffId, name: e.name, email: e.email, reason: e.reason, resolved: !!match }
   })
@@ -162,5 +185,6 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     upcoming,
     exempted,
     yetToAttend,
+    unresolvedRosterEntries,
   }
 }
