@@ -13,9 +13,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
-      costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
+      costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string; remindersEnabled?: boolean
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
@@ -33,6 +33,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         trainingType: trainingType?.trim() || null,
         capability: capability?.trim() || null,
         vendor: vendor?.trim() || null,
+        ...(remindersEnabled !== undefined ? { remindersEnabled } : {}),
       },
     })
     return NextResponse.json(schedule)
