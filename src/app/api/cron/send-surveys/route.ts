@@ -35,7 +35,6 @@ export async function GET(req: NextRequest) {
   const post1DaysAfter = settings?.post1DaysAfter ?? 1
   const post2DaysAfter = settings?.post2DaysAfter ?? 30
   const reminderSettings = {
-    reminderIntervalHours: settings?.reminderIntervalHours ?? 24,
     expiryEnabled: settings?.expiryEnabled ?? true,
     expiryDays: settings?.expiryDays ?? 7,
   }

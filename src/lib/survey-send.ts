@@ -151,17 +151,22 @@ async function logSend(
   }
 }
 
-const HOUR_MS = 3600000
 const DAY_MS = 86400000
 
 // Nudges attendees who have been sent a stage but haven't responded yet — runs from the daily
 // cron, per schedule per stage, reusing the already-fetched schedule+attendees rather than
 // re-querying. Skips anyone whose survey has expired (per SurveySettings.expiryDays), since a
 // reminder pointing at a form that will refuse the submission is worse than no reminder.
+//
+// Cadence is once per UTC calendar day, not a rolling N-hour window: the cron itself only runs
+// once a day (vercel.json, fixed UTC time), so a "24 hours since last nudge" check could miss an
+// entire day depending on what time the original send happened relative to the cron's fixed
+// time. Comparing calendar dates instead means anyone still unresponded gets reminded on every
+// day's run, full stop, until they respond or expire — matching the actual daily cadence.
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { reminderIntervalHours: number; expiryEnabled: boolean; expiryDays: number }
+  settings: { expiryEnabled: boolean; expiryDays: number }
 ): Promise<SendSurveyResult> {
   const result: SendSurveyResult = { sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) return result
@@ -171,13 +176,14 @@ export async function sendSurveyReminders(
   const respondedField = STAGE_RESPONDED_FIELD[stage]
   const reminderField = STAGE_REMINDER_FIELD[stage]
   const now = Date.now()
+  const todayKey = new Date(now).toISOString().slice(0, 10)
 
   const due = schedule.attendees.filter((a) => {
     const sentAt = a[sentField]
     if (!sentAt || a[respondedField]) return false
     if (settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS) return false
-    const lastNudge = (a[reminderField] || sentAt).getTime()
-    return now - lastNudge >= settings.reminderIntervalHours * HOUR_MS
+    const lastNudge = a[reminderField] || sentAt
+    return lastNudge.toISOString().slice(0, 10) !== todayKey
   })
   if (due.length === 0) return result
 

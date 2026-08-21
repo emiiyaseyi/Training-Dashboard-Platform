@@ -16,7 +16,6 @@ interface SettingsState {
   preDaysBefore: number
   post1DaysAfter: number
   post2DaysAfter: number
-  reminderIntervalHours: number
   expiryEnabled: boolean
   expiryDays: number
   maxFileUploadMB: number
@@ -128,7 +127,7 @@ export function SurveyAutomationPanel() {
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
-    reminderIntervalHours: 24, expiryEnabled: true, expiryDays: 7, maxFileUploadMB: 20,
+    expiryEnabled: true, expiryDays: 7, maxFileUploadMB: 20,
   })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -182,7 +181,6 @@ export function SurveyAutomationPanel() {
         preDaysBefore: data.preDaysBefore ?? 7,
         post1DaysAfter: data.post1DaysAfter ?? 1,
         post2DaysAfter: data.post2DaysAfter ?? 30,
-        reminderIntervalHours: data.reminderIntervalHours ?? 24,
         expiryEnabled: data.expiryEnabled ?? true,
         expiryDays: data.expiryDays ?? 7,
         maxFileUploadMB: data.maxFileUploadMB ?? 20,
@@ -556,19 +554,9 @@ export function SurveyAutomationPanel() {
             <div>
               <p className="text-xs font-medium text-slate-600 mb-1.5">Reminders</p>
               <p className="text-[11px] text-slate-400 mb-2">
-                A daily nudge for anyone already sent a stage who hasn&apos;t responded yet. Stops once they respond or (if enabled) the survey expires.
+                A nudge every day the scheduled sweep runs, for anyone already sent a stage who hasn&apos;t responded yet — not a fixed hour count, so it can&apos;t miss a day depending on what time the original survey went out. Stops once they respond or (if enabled) the survey expires. Reminders can also be turned off per training schedule.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="text-xs text-slate-500">
-                  Remind every (hours)
-                  <input
-                    type="number"
-                    min={1}
-                    value={settings.reminderIntervalHours}
-                    onChange={(e) => setSettings({ ...settings, reminderIntervalHours: Number(e.target.value) })}
-                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
-                  />
-                </label>
                 <label className="text-xs text-slate-500 flex flex-col">
                   <span className="flex items-center gap-1.5 h-[18px]">
                     <input
