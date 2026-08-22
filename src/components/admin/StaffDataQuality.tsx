@@ -68,7 +68,7 @@ export function StaffDataQuality() {
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
   const [managerSearch, setManagerSearch] = useState('')
   const [rowQuery, setRowQuery] = useState('')
-  const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [saveResult, setSaveResult] = useState<{ level: 'success' | 'warning' | 'error'; message: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -129,22 +129,21 @@ export function StaffDataQuality() {
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         const sync = data.sheetSync as { attempted: boolean; success: boolean; reason?: string } | undefined
-        setSaveResult({
-          ok: true,
-          message: !sync?.attempted
-            ? 'Saved.'
+        setSaveResult(
+          !sync?.attempted
+            ? { level: 'success', message: 'Saved.' }
             : sync.success
-              ? 'Saved. Line Manager Name/Email updated in the comprehensive staff list sheet.'
-              : `Saved, but couldn't update the sheet: ${sync.reason || 'unknown reason'}`,
-        })
+              ? { level: 'success', message: 'Saved. Line Manager Name/Email updated in the comprehensive staff list sheet.' }
+              : { level: 'warning', message: `Saved to the database, but the sheet was NOT updated: ${sync.reason || 'unknown reason'}` }
+        )
         setEditingId(null)
         setDraft(null)
         await load()
       } else {
-        setSaveResult({ ok: false, message: data.error || 'Failed to save.' })
+        setSaveResult({ level: 'error', message: data.error || 'Failed to save.' })
       }
     } catch {
-      setSaveResult({ ok: false, message: 'Failed to save — network error.' })
+      setSaveResult({ level: 'error', message: 'Failed to save — network error.' })
     } finally {
       setSaving(false)
     }
@@ -199,10 +198,16 @@ export function StaffDataQuality() {
       )}
 
       {saveResult && (
-        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${
-          saveResult.ok ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'
+        <div className={`mb-3 flex items-start justify-between gap-3 text-xs rounded-lg px-3 py-2 border ${
+          saveResult.level === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700'
+            : saveResult.level === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800'
+            : 'bg-red-50 border-red-100 text-red-700'
         }`}>
-          {saveResult.message}
+          <span className="flex items-start gap-1.5">
+            {saveResult.level === 'warning' && <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />}
+            {saveResult.message}
+          </span>
+          <button onClick={() => setSaveResult(null)} className="shrink-0 opacity-60 hover:opacity-100"><X className="w-3.5 h-3.5" /></button>
         </div>
       )}
 
