@@ -453,6 +453,22 @@ model TrainingRecord {
   @@index([staffId])
 }
 
+// A sync detected that an existing TrainingRecord's data disagrees with what the source sheet
+// now says for what looks like the same event (same staff name + training + month, matched since
+// Staff ID — the usual join key — is sometimes exactly the field being corrected). Held here for
+// the admin to review old vs new and accept or reject, rather than silently overwritten, since the
+// loose match could occasionally be a false positive (two different people, same name).
+model TrainingRecordChange {
+  id               String   @id @default(cuid())
+  existingRecordId String
+  oldData          String   // JSON snapshot of the current TrainingRecord's tracked fields
+  newData          String   // JSON snapshot of what the sheet now says for the same fields
+  changedFields    String   // JSON string[] of which fields actually differ
+  detectedAt       DateTime @default(now())
+
+  @@index([existingRecordId])
+}
+
 model FeedbackRecord {
   id                  String   @id @default(cuid())
   businessUnit        String

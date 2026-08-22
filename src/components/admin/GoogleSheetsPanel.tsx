@@ -90,7 +90,7 @@ export function GoogleSheetsPanel() {
   const [previewing, setPreviewing] = useState(false)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [syncResult, setSyncResult] = useState<{ success: boolean; imported: Record<string, number> } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ success: boolean; imported: Record<string, number>; changesDetected: number } | null>(null)
   const [history, setHistory] = useState<SyncLogEntry[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [undoingId, setUndoingId] = useState<string | null>(null)
@@ -201,7 +201,7 @@ export function GoogleSheetsPanel() {
     try {
       const res = await fetch('/api/admin/google-sheets/sync', { method: 'POST' })
       const data = await res.json()
-      setSyncResult({ success: !!data.success, imported: data.imported || {} })
+      setSyncResult({ success: !!data.success, imported: data.imported || {}, changesDetected: data.changesDetected || 0 })
       setErrors(data.errors || [])
       setLastStatus(data.success ? 'success' : 'error')
       setLastCheckedAt(new Date().toISOString())
@@ -492,6 +492,10 @@ export function GoogleSheetsPanel() {
                 ? `Imported: ${Object.entries(syncResult.imported).map(([k, v]) => `${v} ${k}`).join(', ')}.`
                 : 'No new records imported.'}
               {!syncResult.success && ' Some tabs had issues — see below.'}
+              {syncResult.changesDetected > 0 && (
+                <> {syncResult.changesDetected} edit{syncResult.changesDetected === 1 ? '' : 's'} to already-imported Training Data
+                {' '}row{syncResult.changesDetected === 1 ? '' : 's'} detected — review in the panel below.</>
+              )}
             </div>
           )}
 
