@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2, AlertTriangle, Trash2 } from 'lucide-react'
+import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2, AlertTriangle, Trash2, GraduationCap } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { KPICard } from '@/components/ui/KPICard'
@@ -34,6 +34,8 @@ interface TalentMemberFullReport {
   staffExempted: number
   totalSpend: number
   coveragePct: number
+  staffWithUpcomingTraining: number
+  distinctTrainingsDelivered: number
   attended: TMAttendedRecord[]
   upcoming: TMUpcomingRecord[]
   exempted: TMExemptedRecord[]
@@ -192,13 +194,15 @@ export default function TalentMembersPage() {
       />
 
       <div className="p-4 sm:p-8 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Total Talent Members" value={data.totalTalentMembers.toLocaleString()} subtitle="Current TM roster" icon={Users} color="blue" />
           <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${year} TM training attendance`} icon={UserCheck} color="green" />
           <KPICard title="Yet to be Trained" value={data.staffNotTrained.toLocaleString()} subtitle="Not yet attended, not exempted" icon={UserX} color="red" alert={data.staffNotTrained > 0} />
           <KPICard title="Staff Exempted" value={data.staffExempted.toLocaleString()} subtitle={`Excused for ${year}`} icon={UserMinus} color="purple" />
           <KPICard title="Total Spend" value={`₦${data.totalSpend.toLocaleString()}`} subtitle="TM trainings attended this year" icon={NairaSign} color="amber" />
           <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Exempted)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
+          <KPICard title="Training Coming Soon" value={data.staffWithUpcomingTraining.toLocaleString()} subtitle="TMs on a scheduled, not-yet-happened training" icon={CalendarClock} color="blue" />
+          <KPICard title="Trainings Delivered" value={data.distinctTrainingsDelivered.toLocaleString()} subtitle={`Distinct TM programmes run in ${year}`} icon={GraduationCap} color="purple" />
         </div>
 
         {isPlatformAdmin && data.unresolvedRosterEntries.length > 0 && (
