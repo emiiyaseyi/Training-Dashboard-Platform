@@ -11,6 +11,7 @@ interface ConfigState {
   subscriptionSheetName: string
   kssSheetName: string
   comprehensiveStaffListSheetName: string
+  talentMemberSheetName: string
   autoSyncEnabled: boolean
   syncFrequencyMinutes: number
 }
@@ -68,6 +69,7 @@ const DEFAULT_STATE: ConfigState = {
   subscriptionSheetName: 'Subscriptions',
   kssSheetName: 'KSS',
   comprehensiveStaffListSheetName: '',
+  talentMemberSheetName: '',
   autoSyncEnabled: false,
   syncFrequencyMinutes: 60,
 }
@@ -105,6 +107,7 @@ export function GoogleSheetsPanel() {
         subscriptionSheetName: data.subscriptionSheetName || DEFAULT_STATE.subscriptionSheetName,
         kssSheetName: data.kssSheetName || DEFAULT_STATE.kssSheetName,
         comprehensiveStaffListSheetName: data.comprehensiveStaffListSheetName || '',
+        talentMemberSheetName: data.talentMemberSheetName || '',
         autoSyncEnabled: !!data.autoSyncEnabled,
         syncFrequencyMinutes: data.syncFrequencyMinutes || 60,
       })
@@ -320,6 +323,22 @@ export function GoogleSheetsPanel() {
             <p className="text-[11px] text-slate-400 mt-1">
               Not part of Sync Now/Preview — read live, on demand, as a supplement to the uploaded Staff Roster wherever a Staff ID, email,
               name, line manager, or Business Unit is missing there (e.g. resolving attendees for Survey Automation).
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              Talent Member roster tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.talentMemberSheetName}
+              onChange={(e) => setState({ ...state, talentMemberSheetName: e.target.value })}
+              placeholder="Talent Members"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Not read from — this is a one-way export. The Talent Member roster itself is managed from the Talent Members page (add by
+              name/Staff ID/email); every addition there is mirrored into this tab so you have an external copy.
             </p>
           </div>
 

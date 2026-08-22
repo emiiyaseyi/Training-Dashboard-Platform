@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { NairaSign } from '@/components/ui/NairaSign'
+import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
 
 interface TMAttendedRecord {
   staffId: string; staffName: string; businessUnit: string; trainingName: string
@@ -36,6 +37,7 @@ interface TalentMemberFullReport {
   upcoming: TMUpcomingRecord[]
   exempted: TMExemptedRecord[]
   yetToAttend: TMYetToAttendRecord[]
+  unresolvedRosterEntries: { id: string; staffId: string | null; name: string | null; email: string | null }[]
 }
 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString()
@@ -133,10 +135,19 @@ export default function TalentMembersPage() {
       />
 
       <div className="p-8 space-y-6">
+        <TalentMemberRosterPanel onChanged={() => load(year)} />
+
+        {data.unresolvedRosterEntries.length > 0 && (
+          <AlertBadge
+            variant="warning"
+            message={`${data.unresolvedRosterEntries.length} roster ${data.unresolvedRosterEntries.length === 1 ? 'entry doesn\'t' : 'entries don\'t'} match a current staff member yet (${data.unresolvedRosterEntries.map((e) => e.name || e.staffId || e.email).join(', ')}) — they won't count toward the totals below until they resolve. Check spelling, or that they're on the uploaded Staff Roster / comprehensive staff list.`}
+          />
+        )}
+
         {data.totalTalentMembers === 0 && (
           <AlertBadge
             variant="info"
-            message='No Talent Members found. Add an "Is Talent Member" column (Yes/No) to the "MERISTEM COMPREHENSIVE STAFF LIST" sheet configured under Admin → Live Data Source.'
+            message="No Talent Members on the roster yet — add them above, individually or in bulk."
           />
         )}
 

@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       subscriptionSheetName: body.subscriptionSheetName || 'Subscriptions',
       kssSheetName: body.kssSheetName || 'KSS',
       comprehensiveStaffListSheetName: body.comprehensiveStaffListSheetName || null,
+      talentMemberSheetName: body.talentMemberSheetName || null,
       autoSyncEnabled: !!body.autoSyncEnabled,
       syncFrequencyMinutes: body.syncFrequencyMinutes ? parseInt(body.syncFrequencyMinutes) : 60,
     }
