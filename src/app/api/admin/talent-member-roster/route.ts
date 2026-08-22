@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
-import { mirrorRosterEntryToSheet } from '@/lib/talent-member-roster-mirror'
+import { mirrorRosterEntryToSheet, backfillRosterEntryFromDirectory } from '@/lib/talent-member-roster-mirror'
 
 export async function GET() {
   const gate = await requirePermission('talent-members', 'view')
@@ -72,8 +72,12 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.$transaction(toCreate.map((data) => prisma.talentMemberRosterEntry.create({ data })))
 
+    // Resolve against the staff directory immediately so the stored row (and what gets mirrored
+    // to the sheet) carries the full Name/Staff ID/Email, not just whichever one was typed —
+    // matches what the report already does for display, just persisted this time.
     for (const entry of created) {
-      const result = await mirrorRosterEntryToSheet(entry)
+      const { entry: finalEntry } = await backfillRosterEntryFromDirectory(entry)
+      const result = await mirrorRosterEntryToSheet(finalEntry)
       if (result.attempted) {
         await prisma.talentMemberRosterEntry.update({
           where: { id: entry.id },

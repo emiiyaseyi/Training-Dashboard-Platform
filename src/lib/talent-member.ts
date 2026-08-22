@@ -1,15 +1,22 @@
 import { prisma } from '@/lib/prisma'
 import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { MONTHS } from '@/lib/filter-types'
 
 // Talent Member (TM) Trainings — a Training Type ("TM") tracked against a real, named roster.
-// The roster itself is admin-entered (TalentMemberRosterEntry, managed from the Talent Members
-// page — bulk or one at a time, by name/Staff ID/email), each entry resolved here against the
-// staff directory for display name/BU/email. "Attended" and "upcoming" are both derived from
-// TrainingSchedule (Training Type = TM) rather than the bulk-uploaded TrainingRecord data,
-// because that's the only source that carries an exact date and a real (admin-configured, not
-// guessed) vendor per training — a TrainingSchedule row not created in-app simply won't appear
-// here, by design, rather than being approximated.
+// The roster itself is admin-entered (TalentMemberRosterEntry, managed from Admin → Talent Member
+// Roster — bulk or one at a time, by name/Staff ID/email), each entry resolved here against the
+// staff directory for display name/BU/email.
+//
+// "Attended" is the union of two sources, since either one on its own misses real completions:
+//  - TrainingRecord rows tagged Training Type = "TM" (the bulk-uploaded/synced "2026 Training
+//    Data" sheet) — this is the primary source for historical/already-attended TM trainings,
+//    since that's where the admin's real completion data actually lives. Only has month-level
+//    dates (no exact day) and no vendor.
+//  - TrainingSchedule rows with trainingType = "TM" whose end date has passed — trainings the
+//    admin scheduled and sent surveys for in-app, which carries an exact date and vendor.
+// A person needs to show up in only one of the two to count as trained; "upcoming" still comes
+// from TrainingSchedule only, since a TrainingRecord row by definition already happened.
 
 export interface TMAttendedRecord {
   staffId: string
@@ -93,7 +100,7 @@ function resolveAgainstRoster(
 }
 
 export async function computeTalentMemberReport(year: number): Promise<TalentMemberFullReport> {
-  const [directory, rosterEntries, exemptions, tmSchedules] = await Promise.all([
+  const [directory, rosterEntries, exemptions, tmSchedules, yearTrainingRecords] = await Promise.all([
     loadRosterDirectory(),
     prisma.talentMemberRosterEntry.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
@@ -102,7 +109,11 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
       include: { attendees: true },
       orderBy: { startDate: 'asc' },
     }),
+    prisma.trainingRecord.findMany({ where: { year } }),
   ])
+  // Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
+  // postgres (production) connectors — sqlite has no case-insensitive `mode` filter.
+  const tmTrainingRecords = yearTrainingRecords.filter((r) => (r.trainingType || '').trim().toLowerCase() === 'tm')
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
@@ -147,6 +158,24 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
       attendedKeys.add(key)
       if (sched.costPerAttendee) totalSpend += sched.costPerAttendee
     }
+  }
+
+  for (const rec of tmTrainingRecords) {
+    const key = normalizeStaffIdKey(rec.staffId)
+    if (!rosterKeys.has(key)) continue // only Talent Members count toward TM completion
+    const monthIdx = MONTHS.indexOf(rec.month as typeof MONTHS[number])
+    const approxDate = new Date(rec.year, monthIdx >= 0 ? monthIdx : 0, 1)
+    attended.push({
+      staffId: rec.staffId,
+      staffName: rec.staffName,
+      businessUnit: rec.businessUnit,
+      trainingName: rec.training,
+      startDate: approxDate,
+      endDate: approxDate,
+      vendor: null,
+    })
+    attendedKeys.add(key)
+    totalSpend += rec.cost
   }
 
   const upcoming: TMUpcomingRecord[] = upcomingSchedules.map((s) => ({

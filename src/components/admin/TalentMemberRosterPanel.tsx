@@ -34,6 +34,7 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
   const [autoResolving, setAutoResolving] = useState(false)
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
+  const [refreshingDirectory, setRefreshingDirectory] = useState(false)
 
   const [mode, setMode] = useState<'search' | 'bulk'>('search')
   const [directory, setDirectory] = useState<RosterStaff[]>([])
@@ -129,6 +130,20 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     }
   }
 
+  const refreshFromDirectory = async () => {
+    setRefreshingDirectory(true)
+    try {
+      const res = await fetch('/api/admin/talent-member-roster/refresh-from-directory', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      await fetchEntries()
+      onChanged()
+      if (res.ok) alert(`Updated ${data.updated} of ${data.total} entries from the staff directory.`)
+      else alert(data.error || 'Failed to refresh from the staff directory.')
+    } finally {
+      setRefreshingDirectory(false)
+    }
+  }
+
   const addSelected = async () => {
     if (pending.length === 0) return
     setAdding(true)
@@ -199,7 +214,17 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
       icon={Users}
       title={`Talent Member Roster (${entries.length})`}
       description="Add or remove Talent Members here — search the staff directory and select as many as needed, or paste a list. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
-      defaultOpen
+      headerActions={
+        <button
+          onClick={(e) => { e.stopPropagation(); refreshFromDirectory() }}
+          disabled={refreshingDirectory}
+          title="Re-match every entry against the staff directory and fill in any missing Name/Staff ID/Email"
+          className="flex items-center gap-1.5 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {refreshingDirectory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Update Missing Details
+        </button>
+      }
     >
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-xs">

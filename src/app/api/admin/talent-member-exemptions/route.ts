@@ -16,33 +16,41 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Accepts either a single exemption ({ year, staffId/name/email, reason }) or a batch
+// ({ year, items: [{ staffId/name/email, reason }, ...] }) — the panel's search-and-collect flow
+// stages several picks (each with its own reason) before saving them all in one call.
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('talent-members', 'admin')
   if (gate instanceof NextResponse) return gate
 
   try {
     const body = await req.json()
-    const { year, staffId, name, email, reason } = body as {
+    const { year, staffId, name, email, reason, items } = body as {
       year: number; staffId?: string; name?: string; email?: string; reason?: string
+      items?: { staffId?: string; name?: string; email?: string; reason?: string }[]
     }
     if (!year) return NextResponse.json({ error: 'Year is required.' }, { status: 400 })
-    if (!staffId?.trim() && !name?.trim() && !email?.trim()) {
-      return NextResponse.json({ error: 'Enter a name, Staff ID, or email for the exempted staff member.' }, { status: 400 })
+
+    const rows = Array.isArray(items) ? items : [{ staffId, name, email, reason }]
+    const toCreate = rows
+      .filter((r) => r.staffId?.trim() || r.name?.trim() || r.email?.trim())
+      .map((r) => ({
+        year,
+        staffId: r.staffId?.trim() || null,
+        name: r.name?.trim() || null,
+        email: r.email?.trim().toLowerCase() || null,
+        reason: r.reason?.trim() || null,
+      }))
+
+    if (toCreate.length === 0) {
+      return NextResponse.json({ error: 'Enter a name, Staff ID, or email for at least one exempted staff member.' }, { status: 400 })
     }
 
-    const exemption = await prisma.talentMemberExemption.create({
-      data: {
-        year,
-        staffId: staffId?.trim() || null,
-        name: name?.trim() || null,
-        email: email?.trim().toLowerCase() || null,
-        reason: reason?.trim() || null,
-      },
-    })
-    return NextResponse.json(exemption)
+    const created = await prisma.$transaction(toCreate.map((data) => prisma.talentMemberExemption.create({ data })))
+    return NextResponse.json(Array.isArray(items) ? { added: created.length } : created[0])
   } catch (err) {
     console.error('[admin/talent-member-exemptions POST]', err)
-    return NextResponse.json({ error: 'Failed to save exemption.' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to save exemption(s).' }, { status: 500 })
   }
 }
 
