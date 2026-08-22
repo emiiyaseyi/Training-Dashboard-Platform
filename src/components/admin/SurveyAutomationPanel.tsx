@@ -5,6 +5,7 @@ import {
   Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
+import { SectionCard } from '@/components/ui/SectionCard'
 
 const SCHEDULE_PAGE_SIZE = 10
 const ATTENDEE_PAGE_SIZE = 15
@@ -465,19 +466,11 @@ export function SurveyAutomationPanel() {
       {/* Survey forms are native to the platform — no Google Form links needed. Submissions
           write to the database and optionally mirror into a tab on the spreadsheet already
           configured under Live Data Source. */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-        <div className="flex items-start gap-3 mb-4">
-          <Link2 className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-slate-800">Survey Mirror Sheets</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Forms are hosted in the platform — every submission is saved here. Set a tab name below to also mirror a copy into that
-              tab (in the spreadsheet configured under Live Data Source). Leave blank to skip mirroring for that stage. Pre and Post-1
-              are filled by the employee; Post-2 by their line manager.
-            </p>
-          </div>
-        </div>
-
+      <SectionCard
+        icon={Link2}
+        title="Survey Mirror Sheets"
+        description="Forms are hosted in the platform — every submission is saved here. Set a tab name below to also mirror a copy into that tab (in the spreadsheet configured under Live Data Source). Leave blank to skip mirroring for that stage. Pre and Post-1 are filled by the employee; Post-2 by their line manager."
+      >
         {loadingSettings ? (
           <p className="text-xs text-slate-400">Loading…</p>
         ) : (
@@ -602,7 +595,7 @@ export function SurveyAutomationPanel() {
             </button>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       {/* Training schedules */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
