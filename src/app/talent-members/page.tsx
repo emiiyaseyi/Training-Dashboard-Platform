@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock } from 'lucide-react'
+import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { KPICard } from '@/components/ui/KPICard'
@@ -11,6 +11,7 @@ import { SectionExport } from '@/components/ui/SectionExport'
 import { NairaSign } from '@/components/ui/NairaSign'
 
 interface TMAttendedRecord {
+  recordId: string | null; source: 'schedule' | 'record'
   staffId: string; staffName: string; businessUnit: string; trainingName: string
   startDate: string; endDate: string; vendor: string | null
 }
@@ -37,6 +38,7 @@ interface TalentMemberFullReport {
   exempted: TMExemptedRecord[]
   yetToAttend: TMYetToAttendRecord[]
   unresolvedRosterEntries: { id: string; staffId: string | null; name: string | null; email: string | null }[]
+  excludedAttendance: { staffId: string; staffName: string; training: string; month: string }[]
 }
 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString()
@@ -47,6 +49,9 @@ export default function TalentMembersPage() {
   const [data, setData] = useState<TalentMemberFullReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null)
+  const [vendorDraft, setVendorDraft] = useState('')
+  const [savingVendor, setSavingVendor] = useState(false)
 
   const load = useCallback(async (y: number) => {
     setLoading(true)
@@ -63,6 +68,25 @@ export default function TalentMembersPage() {
   }, [])
 
   useEffect(() => { load(year) }, [year, load])
+
+  const saveVendor = async (recordId: string) => {
+    setSavingVendor(true)
+    try {
+      const res = await fetch(`/api/admin/training-record/${recordId}/vendor`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendor: vendorDraft }),
+      })
+      if (res.ok) {
+        setEditingVendorId(null)
+        await load(year)
+      } else {
+        alert('Failed to save vendor.')
+      }
+    } finally {
+      setSavingVendor(false)
+    }
+  }
 
   const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i)
 
@@ -157,6 +181,13 @@ export default function TalentMembersPage() {
           />
         )}
 
+        {data.excludedAttendance.length > 0 && (
+          <AlertBadge
+            variant="warning"
+            message={`${data.excludedAttendance.length} row${data.excludedAttendance.length === 1 ? '' : 's'} in the 2026 Training Data tagged Training Type = TM didn't count toward Staff Trained because the Staff ID doesn't match anyone currently on the TM roster: ${data.excludedAttendance.map((e) => `${e.staffName} (${e.staffId}) — ${e.training}`).join('; ')}.`}
+          />
+        )}
+
         <SectionCard
           icon={CalendarCheck}
           title={`TMs That Attended a Training (${data.attended.length})`}
@@ -171,7 +202,41 @@ export default function TalentMembersPage() {
               { key: 'trainingName', header: 'Training' },
               { key: 'startDate', header: 'Start', render: (r) => fmtDate(r.startDate as string) },
               { key: 'endDate', header: 'End', render: (r) => fmtDate(r.endDate as string) },
-              { key: 'vendor', header: 'Vendor', render: (r) => (r.vendor as string) || '—' },
+              {
+                key: 'vendor', header: 'Vendor',
+                render: (r) => {
+                  const row = r as unknown as TMAttendedRecord
+                  if (row.source !== 'record' || !row.recordId) return row.vendor || '—'
+                  if (editingVendorId === row.recordId) {
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          value={vendorDraft}
+                          onChange={(e) => setVendorDraft(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveVendor(row.recordId!) }}
+                          className="text-xs border border-slate-300 rounded px-2 py-1 w-32"
+                        />
+                        <button onClick={() => saveVendor(row.recordId!)} disabled={savingVendor} className="text-emerald-600 hover:text-emerald-800">
+                          {savingVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={() => setEditingVendorId(null)} className="text-slate-400 hover:text-red-600">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )
+                  }
+                  return (
+                    <button
+                      onClick={() => { setEditingVendorId(row.recordId); setVendorDraft(row.vendor || '') }}
+                      className="flex items-center gap-1 text-slate-600 hover:text-blue-600 group"
+                    >
+                      {row.vendor || <span className="text-slate-400">—</span>}
+                      <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                    </button>
+                  )
+                },
+              },
             ]}
             data={data.attended as unknown as Record<string, unknown>[]}
             emptyMessage="No TM training attendance recorded yet."

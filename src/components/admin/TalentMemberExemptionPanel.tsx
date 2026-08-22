@@ -33,6 +33,7 @@ export function TalentMemberExemptionPanel() {
 
   const [addingNew, setAddingNew] = useState(false)
   const [directory, setDirectory] = useState<RosterStaff[]>([])
+  const [rosterStaffIds, setRosterStaffIds] = useState<Set<string> | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [pending, setPending] = useState<PendingExemption[]>([])
   const [saving, setSaving] = useState(false)
@@ -54,17 +55,26 @@ export function TalentMemberExemptionPanel() {
       .then((res) => res.json())
       .then((data) => setDirectory(Array.isArray(data) ? data : []))
       .catch(() => {})
+    // Only current Talent Members can be meaningfully exempted — searching the whole staff
+    // directory here let admins pick someone who isn't actually on the TM roster, which then
+    // silently failed to resolve and didn't count on the report (the "not reflecting" bug).
+    fetch('/api/admin/talent-member-roster')
+      .then((res) => res.json())
+      .then((data: { staffId: string | null; resolved: boolean }[]) =>
+        setRosterStaffIds(new Set(data.filter((e) => e.resolved && e.staffId).map((e) => e.staffId as string)))
+      )
+      .catch(() => setRosterStaffIds(new Set()))
   }, [])
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    if (!q) return []
+    if (!q || !rosterStaffIds) return []
     const pendingIds = new Set(pending.map((p) => p.staffId))
     return directory
-      .filter((r) => !pendingIds.has(r.staffId))
+      .filter((r) => rosterStaffIds.has(r.staffId) && !pendingIds.has(r.staffId))
       .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
       .slice(0, 8)
-  }, [searchQuery, directory, pending])
+  }, [searchQuery, directory, pending, rosterStaffIds])
 
   const addToPending = (staff: RosterStaff) => {
     setPending((prev) => [...prev, { ...staff, reason: '' }])
@@ -179,6 +189,7 @@ export function TalentMemberExemptionPanel() {
               </button>
             ) : (
               <div className="border border-blue-200 rounded-lg p-3 space-y-3">
+                <p className="text-[11px] text-slate-400">Searches current Talent Members only — someone not on the TM roster can&apos;t be exempted from it.</p>
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <input

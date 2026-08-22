@@ -19,6 +19,8 @@ import { MONTHS } from '@/lib/filter-types'
 // from TrainingSchedule only, since a TrainingRecord row by definition already happened.
 
 export interface TMAttendedRecord {
+  recordId: string | null // TrainingRecord id — set only for source: 'record', so its vendor can be edited after the fact (no vendor column at upload time)
+  source: 'schedule' | 'record'
   staffId: string
   staffName: string
   businessUnit: string
@@ -61,6 +63,13 @@ export interface TMUnresolvedRosterEntry {
   email: string | null
 }
 
+export interface TMExcludedAttendance {
+  staffId: string
+  staffName: string
+  training: string
+  month: string
+}
+
 export interface TalentMemberFullReport {
   year: number
   totalTalentMembers: number
@@ -74,6 +83,7 @@ export interface TalentMemberFullReport {
   exempted: TMExemptedRecord[]
   yetToAttend: TMYetToAttendRecord[]
   unresolvedRosterEntries: TMUnresolvedRosterEntry[]
+  excludedAttendance: TMExcludedAttendance[]
 }
 
 // Both TM roster entries and exemptions are entered the same loose way (name/Staff ID/email), so
@@ -112,8 +122,11 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     prisma.trainingRecord.findMany({ where: { year } }),
   ])
   // Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
-  // postgres (production) connectors — sqlite has no case-insensitive `mode` filter.
-  const tmTrainingRecords = yearTrainingRecords.filter((r) => (r.trainingType || '').trim().toLowerCase() === 'tm')
+  // postgres (production) connectors — sqlite has no case-insensitive `mode` filter. Whitespace
+  // is stripped entirely (not just trimmed) so a stray non-breaking space or double space from
+  // manual data entry in the Training Type column still matches.
+  const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
+  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm')
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
@@ -147,6 +160,8 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
       const key = normalizeStaffIdKey(att.staffId)
       if (!rosterKeys.has(key)) continue // only Talent Members count toward TM completion
       attended.push({
+        recordId: null,
+        source: 'schedule',
         staffId: att.staffId,
         staffName: att.staffName,
         businessUnit: sched.businessUnit,
@@ -160,19 +175,28 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     }
   }
 
+  const excludedAttendance: TMExcludedAttendance[] = []
   for (const rec of tmTrainingRecords) {
     const key = normalizeStaffIdKey(rec.staffId)
-    if (!rosterKeys.has(key)) continue // only Talent Members count toward TM completion
+    if (!rosterKeys.has(key)) {
+      // Tagged Training Type = TM, but the Staff ID doesn't match anyone currently on the TM
+      // roster — surfaced so the admin can see exactly which "TM" records aren't counting and
+      // why (typo'd Staff ID, or a real person who genuinely isn't on this year's roster).
+      excludedAttendance.push({ staffId: rec.staffId, staffName: rec.staffName, training: rec.training, month: rec.month })
+      continue
+    }
     const monthIdx = MONTHS.indexOf(rec.month as typeof MONTHS[number])
     const approxDate = new Date(rec.year, monthIdx >= 0 ? monthIdx : 0, 1)
     attended.push({
+      recordId: rec.id,
+      source: 'record',
       staffId: rec.staffId,
       staffName: rec.staffName,
       businessUnit: rec.businessUnit,
       trainingName: rec.training,
       startDate: approxDate,
       endDate: approxDate,
-      vendor: null,
+      vendor: rec.vendor,
     })
     attendedKeys.add(key)
     totalSpend += rec.cost
@@ -215,5 +239,6 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     exempted,
     yetToAttend,
     unresolvedRosterEntries,
+    excludedAttendance,
   }
 }
