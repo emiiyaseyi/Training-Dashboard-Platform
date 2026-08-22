@@ -79,6 +79,8 @@ export interface TalentMemberFullReport {
   staffExempted: number
   totalSpend: number
   coveragePct: number
+  staffWithUpcomingTraining: number
+  distinctTrainingsDelivered: number
   attended: TMAttendedRecord[]
   upcoming: TMUpcomingRecord[]
   exempted: TMExemptedRecord[]
@@ -213,6 +215,17 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     attendeeCount: s.attendees.length,
   }))
 
+  const upcomingStaffKeys = new Set<string>()
+  for (const sched of upcomingSchedules) {
+    for (const att of sched.attendees) {
+      const key = normalizeStaffIdKey(att.staffId)
+      if (rosterKeys.has(key)) upcomingStaffKeys.add(key)
+    }
+  }
+  const staffWithUpcomingTraining = upcomingStaffKeys.size
+
+  const distinctTrainingsDelivered = new Set(attended.map((a) => a.trainingName.trim().toLowerCase())).size
+
   const yetToAttend: TMYetToAttendRecord[] = roster
     .filter((s) => {
       const key = normalizeStaffIdKey(s.staffId)
@@ -235,6 +248,8 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
     staffExempted,
     totalSpend,
     coveragePct,
+    staffWithUpcomingTraining,
+    distinctTrainingsDelivered,
     attended,
     upcoming,
     exempted,
