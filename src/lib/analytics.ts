@@ -339,6 +339,7 @@ function computeDataQuality(
   trainingCount: number,
   feedbackCount: number,
   subscriptionCount: number,
+  unrecognizedTrainingTypeCount: number,
 ): { score: number; issues: string[] } {
   const issues: string[] = []
   let score = 100
@@ -348,6 +349,16 @@ function computeDataQuality(
   if (subscriptionCount === 0) { issues.push('No subscription data uploaded — total learning investment incomplete.'); score -= 15 }
   if (trainingCount > 0 && feedbackCount > 0 && feedbackCount < trainingCount * 0.2) {
     issues.push('Feedback coverage below 20% of training records.'); score -= 15
+  }
+  if (unrecognizedTrainingTypeCount > 0) {
+    // Falls back to "Formal Training" (see classifyTraining) rather than being dropped, but
+    // silently — reclassifying a Training Type in Admin has no visible effect on Formal vs
+    // Strategic Initiative spend for a record whose own trainingType text doesn't actually match
+    // any configured type name (a stale/misspelled value from before the type existed, or an
+    // upload that didn't match it exactly). Surfaced here since that mismatch is otherwise
+    // invisible — the record still counts, just always as Formal until the name matches.
+    issues.push(`${unrecognizedTrainingTypeCount} training record(s) have a Training Type that doesn't match any name in Admin → Training Types — counted as Formal Training Spend by default until it's corrected.`)
+    score -= 10
   }
 
   return { score: Math.max(0, score), issues }
@@ -839,7 +850,10 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     }
   })
 
-  const dataQuality = computeDataQuality(trainingRecords.length, feedbackRecords.length, subscriptionRecords.length)
+  const unrecognizedTrainingTypeCount = trainingRecords.filter(
+    (r) => r.trainingType && r.trainingType.trim() && !typeMap.has(r.trainingType.trim().toLowerCase())
+  ).length
+  const dataQuality = computeDataQuality(trainingRecords.length, feedbackRecords.length, subscriptionRecords.length, unrecognizedTrainingTypeCount)
   const trainingParticipation = computeParticipation(trainingRecords, uniqueStaffTrained)
   const subscriptionParticipation = computeParticipation(
     subscriptionRecords.map((r) => ({ staffId: r.staffId, staffName: r.staffName })),
