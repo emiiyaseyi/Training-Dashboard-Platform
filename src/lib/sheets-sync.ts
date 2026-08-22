@@ -128,6 +128,48 @@ export async function applyTrainingRecordChange(change: { existingRecordId: stri
   await prisma.trainingRecord.update({ where: { id: change.existingRecordId }, data: newData })
 }
 
+// Bulk version of the above for "Accept All" — applying 300+ pending changes one at a time (each
+// its own multi-query round trip) is what made that button appear to hang and then lose all
+// progress when the request finally hit the serverless function's time limit. This cuts the work
+// two ways: propagates each unique old→new Staff ID pair once (not once per flagged row it came
+// from — the same corrected ID often shows up on several rows for one person), and deletes each
+// change's proposal immediately after applying it rather than only at the very end, so a run that
+// gets cut short still leaves genuine, visible progress — the panel's count reflects exactly what
+// went through, and a retry only has the remainder left to do.
+const BATCH_SIZE = 25
+
+export async function applyAllTrainingRecordChanges(): Promise<{ applied: number; total: number }> {
+  const changes = await prisma.trainingRecordChange.findMany()
+  const parsed = changes.map((c) => ({
+    id: c.id,
+    existingRecordId: c.existingRecordId,
+    oldData: JSON.parse(c.oldData) as TrainingRecordSnapshot,
+    newData: JSON.parse(c.newData) as TrainingRecordSnapshot,
+  }))
+
+  const idPairs = new Map<string, string>()
+  for (const c of parsed) {
+    if (c.oldData.staffId !== c.newData.staffId) idPairs.set(c.oldData.staffId, c.newData.staffId)
+  }
+  for (const [oldId, newId] of idPairs) {
+    await Promise.all([
+      prisma.trainingRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+      prisma.subscriptionRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+      prisma.kSSRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+    ])
+  }
+
+  let applied = 0
+  for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
+    const batch = parsed.slice(i, i + BATCH_SIZE)
+    await Promise.all(batch.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData })))
+    await prisma.trainingRecordChange.deleteMany({ where: { id: { in: batch.map((c) => c.id) } } })
+    applied += batch.length
+  }
+
+  return { applied, total: changes.length }
+}
+
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
   // FeedbackRecord has no staffId field — the closest available fingerprint for "same response".
   const existing = await prisma.feedbackRecord.findMany({

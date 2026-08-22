@@ -360,6 +360,14 @@ model SmtpSettings {
   updatedAt   DateTime @updatedAt
 }
 
+// Singleton, same pattern as SmtpSettings — read by every authenticated user (not just admins) so
+// IdleLogout applies the configured timeout platform-wide, but only editable by an admin.
+model SecuritySettings {
+  id                 String   @id @default(cuid())
+  idleTimeoutSeconds Int      @default(90)
+  updatedAt          DateTime @updatedAt
+}
+
 // An "upcoming training" — distinct from TrainingRecord (actual cost, uploaded after the fact)
 // so nothing double-counts. Drives the 3-stage survey email lifecycle for its attendees.
 model TrainingSchedule {
