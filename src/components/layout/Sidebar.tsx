@@ -20,6 +20,7 @@ import {
   Mail,
   Award,
   HelpCircle,
+  X,
 } from 'lucide-react'
 import { hasAccess, type PageKey } from '@/lib/permissions'
 
@@ -39,12 +40,19 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/admin',          label: 'Admin Settings',          icon: Settings,        page: 'admin-settings' },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  // Off-canvas drawer state — only meaningful below the md breakpoint. Desktop always renders
+  // the sidebar statically, ignoring both.
+  open?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ open = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { data: session, status } = useSession()
 
   if (status === 'loading') {
-    return <aside className="w-64 shrink-0 bg-navy-700 h-screen" />
+    return <aside className="hidden md:block w-64 shrink-0 bg-navy-700 h-screen" />
   }
   if (!session?.user) return null
 
@@ -61,6 +69,7 @@ export function Sidebar() {
       <Link
         key={href}
         href={href}
+        onClick={onClose}
         className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
           active
             ? 'bg-gold-400 text-navy-800'
@@ -74,17 +83,38 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-navy-700 text-slate-300 flex flex-col h-screen">
+    <>
+      {/* Backdrop — mobile only, closes the drawer on tap outside it */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 bg-navy-700 text-slate-300 flex flex-col h-screen
+          transform transition-transform duration-200 ease-in-out
+          md:relative md:inset-auto md:z-auto md:translate-x-0
+          ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      >
       {/* Brand */}
       <div className="px-6 py-5 border-b border-navy-500/40">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gold-400 flex items-center justify-center shrink-0">
             <BookOpen className="w-4 h-4 text-navy-800" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-white font-semibold text-sm leading-tight">Learning Intel</p>
             <p className="text-slate-500 text-xs">Dashboard Platform</p>
           </div>
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            className="md:hidden ml-auto p-1 rounded-lg text-slate-400 hover:bg-navy-600 hover:text-slate-100 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -111,7 +141,7 @@ export function Sidebar() {
 
       {/* User / footer */}
       <div className="px-4 py-4 border-t border-navy-500/40 space-y-3">
-        <Link href="/account" className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-navy-600">
+        <Link href="/account" onClick={onClose} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-navy-600">
           <UserCircle className="w-6 h-6 text-slate-400 shrink-0" />
           <div className="min-w-0">
             <p className="text-slate-200 text-xs font-medium truncate">{session.user.name}</p>
@@ -122,6 +152,7 @@ export function Sidebar() {
         </Link>
         <Link
           href="/help"
+          onClick={onClose}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
             pathname === '/help' ? 'bg-gold-400 text-navy-800' : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
           }`}
@@ -141,6 +172,7 @@ export function Sidebar() {
           <span>Learning Intelligence Platform</span>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

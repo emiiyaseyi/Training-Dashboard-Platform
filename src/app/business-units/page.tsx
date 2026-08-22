@@ -233,7 +233,7 @@ export default function BusinessUnitsDashboard() {
         }
       />
 
-      <div className="p-8 space-y-10">
+      <div className="p-4 sm:p-8 space-y-10">
         {buList.length === 0 ? (
           <AlertBadge variant="info" message="No business unit data found. Upload training or subscription data first." />
         ) : (

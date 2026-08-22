@@ -101,7 +101,7 @@ export default function UploadPage() {
         subtitle="Import Excel files to populate the dashboard"
       />
 
-      <div className="p-8 space-y-8">
+      <div className="p-4 sm:p-8 space-y-8">
         {/* Data quality — staff count vs configured headcount */}
         <DataQualityIssues />
 

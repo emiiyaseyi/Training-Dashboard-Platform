@@ -64,6 +64,7 @@ export interface TMUnresolvedRosterEntry {
 }
 
 export interface TMExcludedAttendance {
+  id: string
   staffId: string
   staffName: string
   training: string
@@ -182,7 +183,7 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
       // Tagged Training Type = TM, but the Staff ID doesn't match anyone currently on the TM
       // roster — surfaced so the admin can see exactly which "TM" records aren't counting and
       // why (typo'd Staff ID, or a real person who genuinely isn't on this year's roster).
-      excludedAttendance.push({ staffId: rec.staffId, staffName: rec.staffName, training: rec.training, month: rec.month })
+      excludedAttendance.push({ id: rec.id, staffId: rec.staffId, staffName: rec.staffName, training: rec.training, month: rec.month })
       continue
     }
     const monthIdx = MONTHS.indexOf(rec.month as typeof MONTHS[number])

@@ -245,7 +245,7 @@ export default function AdminPage() {
         }
       />
 
-      <div className="p-8 space-y-8">
+      <div className="p-4 sm:p-8 space-y-8">
         {/* Guide */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
           <div className="flex items-start gap-3">
