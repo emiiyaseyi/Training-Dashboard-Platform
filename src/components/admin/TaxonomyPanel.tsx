@@ -127,7 +127,8 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
             const changed = vals.name !== item.name || parseInt(vals.order) !== item.order || vals.classification !== (item.classification ?? 'formal')
 
             return (
-              <div key={item.id} className="flex items-center gap-3 border border-slate-100 rounded-lg p-3">
+              <div key={item.id} className="overflow-x-auto border border-slate-100 rounded-lg">
+              <div className="flex items-center gap-3 p-3 min-w-max">
                 <div className="w-7 h-7 rounded-full bg-navy-50 flex items-center justify-center shrink-0">
                   <Tag className="w-3.5 h-3.5 text-navy-600" />
                 </div>
@@ -172,12 +173,17 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
                   {deleting === item.id ? <div className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Trash2 className="w-3 h-3" />}
                 </button>
               </div>
+              </div>
             )
           })}
 
           {!addingNew ? (
             <button
-              onClick={() => setAddingNew(true)}
+              onClick={() => {
+                const nextOrder = items.length > 0 ? Math.max(...items.map((it) => it.order)) + 1 : 0
+                setNewItem((p) => ({ ...p, order: String(nextOrder) }))
+                setAddingNew(true)
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed border-slate-200 text-sm text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors w-full justify-center"
             >
               <Plus className="w-4 h-4" /> Add

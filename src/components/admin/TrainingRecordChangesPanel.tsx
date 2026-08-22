@@ -85,10 +85,18 @@ export function TrainingRecordChangesPanel() {
     try {
       const res = await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-      if (res.ok && data.applied < data.total) {
-        setAcceptAllNote(`Applied ${data.applied} of ${data.total} — the rest are still pending below. Click Accept All again to continue; nothing already applied gets redone.`)
-      } else if (!res.ok) {
-        setAcceptAllNote('The request timed out or failed partway through, but whatever went through before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
+      if (res.ok) {
+        const parts: string[] = [`Applied ${data.applied} of ${data.total}.`]
+        if (data.orphaned > 0) parts.push(`${data.orphaned} were for records that no longer exist and were cleared out.`)
+        if (data.failed?.length > 0) parts.push(`${data.failed.length} genuinely failed and were left in place — first error: ${data.failed[0].message}`)
+        if (data.applied < data.total) parts.push('The rest are still pending below — click Accept All again to continue; nothing already applied gets redone.')
+        if (data.applied === data.total && data.orphaned === 0 && (!data.failed || data.failed.length === 0)) {
+          setAcceptAllNote('')
+        } else {
+          setAcceptAllNote(parts.join(' '))
+        }
+      } else {
+        setAcceptAllNote(data.error || 'The request timed out or failed partway through, but whatever went through before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
       }
     } catch {
       setAcceptAllNote('Lost connection before hearing back, but progress made before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
