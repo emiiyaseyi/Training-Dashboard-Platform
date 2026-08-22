@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { History, Search, ChevronDown, ChevronUp, Loader2, Send } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 
-interface HistoricalAttendee { staffId: string; staffName: string }
+interface HistoricalAttendee { staffId: string; staffName: string; businessUnit: string }
 interface HistoricalGroup {
   training: string
-  businessUnit: string
+  businessUnits: string[]
   month: string
   year: number
   attendeeCount: number
@@ -54,12 +54,12 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
 
   useEffect(() => { load() }, [])
 
-  const groupKey = (g: HistoricalGroup) => `${g.training}|${g.businessUnit}|${g.month}|${g.year}`
+  const groupKey = (g: HistoricalGroup) => `${g.training}|${g.month}|${g.year}`
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return groups
-    return groups.filter((g) => g.training.toLowerCase().includes(q) || g.businessUnit.toLowerCase().includes(q))
+    return groups.filter((g) => g.training.toLowerCase().includes(q) || g.businessUnits.some((bu) => bu.toLowerCase().includes(q)))
   }, [groups, query])
 
   const expand = (g: HistoricalGroup) => {
@@ -95,7 +95,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           trainingName: g.training,
-          businessUnit: g.businessUnit,
+          businessUnit: g.businessUnits[0], // nominal default only — each attendee still gets their own actual BU when added below
           startDate, endDate,
           remindersEnabled,
           sourcedFromHistoricalData: true,
@@ -157,7 +157,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{g.training}</p>
                       <p className="text-xs text-slate-500">
-                        {g.businessUnit} · {g.month} {g.year} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
+                        {g.businessUnits.length <= 2 ? g.businessUnits.join(', ') : `${g.businessUnits.length} Business Units`} · {g.month} {g.year} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
                         {g.hasExistingSchedule && <span className="text-amber-600"> · a schedule already exists for this training</span>}
                       </p>
                     </div>
@@ -178,6 +178,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                           <label key={a.staffId} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 cursor-pointer">
                             <input type="checkbox" checked={selected.has(a.staffId)} onChange={() => toggleAttendee(a.staffId)} />
                             <span className="text-slate-700">{a.staffName}</span>
+                            <span className="text-slate-400">{a.businessUnit}</span>
                             <span className="text-slate-400 ml-auto">{a.staffId}</span>
                           </label>
                         ))}
