@@ -258,7 +258,7 @@ export default function TalentMembersPage() {
         <SectionCard
           icon={CalendarCheck}
           title={`TMs That Attended a Training (${data.attended.length})`}
-          description="Sourced from the 2026 Training Data (Training Type = TM) and from scheduled TM trainings whose end date has passed. Month-only entries (no vendor) come from the Training Data sheet."
+          description="Sourced from the 2026 Training Data (Training Type = TM) and from scheduled TM trainings whose end date has passed. Month-only entries (no vendor) come from the uploaded Training Data."
           headerActions={<SectionExport rows={attendedRows} filename={`tm_attended_${year}`} format="xlsx" label="Excel" />}
         >
           <DataTable
