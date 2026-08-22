@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/DataTable'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { NairaSign } from '@/components/ui/NairaSign'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 interface TMAttendedRecord {
   recordId: string | null; source: 'schedule' | 'record'
@@ -44,6 +45,7 @@ interface TalentMemberFullReport {
 const fmtDate = (d: string) => new Date(d).toLocaleDateString()
 
 export default function TalentMembersPage() {
+  const { isPlatformAdmin } = usePagePermission()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [data, setData] = useState<TalentMemberFullReport | null>(null)
@@ -199,7 +201,7 @@ export default function TalentMembersPage() {
           <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Exempted)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
         </div>
 
-        {data.unresolvedRosterEntries.length > 0 && (
+        {isPlatformAdmin && data.unresolvedRosterEntries.length > 0 && (
           <AlertBadge
             variant="warning"
             message={`${data.unresolvedRosterEntries.length} roster ${data.unresolvedRosterEntries.length === 1 ? 'entry doesn\'t' : 'entries don\'t'} match a current staff member yet (${data.unresolvedRosterEntries.map((e) => e.name || e.staffId || e.email).join(', ')}) — they won't count toward the totals above until they resolve. Check spelling under Admin → Talent Member Roster, or that they're on the uploaded Staff Roster.`}
@@ -213,7 +215,7 @@ export default function TalentMembersPage() {
           />
         )}
 
-        {data.excludedAttendance.length > 0 && (
+        {isPlatformAdmin && data.excludedAttendance.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 space-y-2">
             <div className="flex items-start justify-between gap-3">
               <p className="flex items-start gap-2.5">
@@ -271,7 +273,7 @@ export default function TalentMembersPage() {
                 key: 'vendor', header: 'Vendor',
                 render: (r) => {
                   const row = r as unknown as TMAttendedRecord
-                  if (row.source !== 'record' || !row.recordId) return row.vendor || '—'
+                  if (!isPlatformAdmin || row.source !== 'record' || !row.recordId) return row.vendor || '—'
                   if (editingVendorId === row.recordId) {
                     return (
                       <div className="flex items-center gap-1.5">

@@ -108,6 +108,26 @@ async function reconcileTraining(
   return { newRows, changes }
 }
 
+// Applies one accepted TrainingRecordChange. If the Staff ID itself was corrected, that's
+// propagated to every other TrainingRecord/SubscriptionRecord/KSSRecord still filed under the old
+// ID — not just the one flagged row — since the same malformed ID (e.g. a full company name
+// instead of its short code) tends to appear on every record for that person, not only the one
+// that happened to get re-synced and flagged.
+export async function applyTrainingRecordChange(change: { existingRecordId: string; newData: string; oldData: string }) {
+  const newData = JSON.parse(change.newData) as TrainingRecordSnapshot
+  const oldData = JSON.parse(change.oldData) as TrainingRecordSnapshot
+
+  if (oldData.staffId !== newData.staffId) {
+    await Promise.all([
+      prisma.trainingRecord.updateMany({ where: { staffId: oldData.staffId }, data: { staffId: newData.staffId } }),
+      prisma.subscriptionRecord.updateMany({ where: { staffId: oldData.staffId }, data: { staffId: newData.staffId } }),
+      prisma.kSSRecord.updateMany({ where: { staffId: oldData.staffId }, data: { staffId: newData.staffId } }),
+    ])
+  }
+
+  await prisma.trainingRecord.update({ where: { id: change.existingRecordId }, data: newData })
+}
+
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
   // FeedbackRecord has no staffId field — the closest available fingerprint for "same response".
   const existing = await prisma.feedbackRecord.findMany({

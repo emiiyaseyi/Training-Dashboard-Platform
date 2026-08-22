@@ -11,8 +11,10 @@ import { KPICard } from '@/components/ui/KPICard'
 import { BarChart } from '@/components/charts/BarChart'
 import { type PeriodFilter, filterToQuery } from '@/lib/filter-types'
 import type { YetToAttendReport } from '@/lib/roster-analytics'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 export default function YetToAttendPage() {
+  const { canExport } = usePagePermission()
   const [data, setData] = useState<YetToAttendReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -192,14 +194,16 @@ export default function YetToAttendPage() {
                       <option key={bu} value={bu}>{bu}</option>
                     ))}
                   </select>
-                  <button
-                    onClick={handleExport}
-                    disabled={exporting || filteredList.length === 0}
-                    className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Export
-                  </button>
+                  {canExport && (
+                    <button
+                      onClick={handleExport}
+                      disabled={exporting || filteredList.length === 0}
+                      className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export
+                    </button>
+                  )}
                 </div>
               </div>
 

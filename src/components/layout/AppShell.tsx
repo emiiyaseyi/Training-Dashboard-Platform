@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ShieldAlert, Menu, BookOpen } from 'lucide-react'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { IdleLogout } from '@/components/auth/IdleLogout'
 import { hasAccess, pageKeyForPath, PAGE_LABELS } from '@/lib/permissions'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -52,6 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <IdleLogout />
       <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile-only top bar — the sidebar itself is off-canvas below md, this is how it's reopened */}

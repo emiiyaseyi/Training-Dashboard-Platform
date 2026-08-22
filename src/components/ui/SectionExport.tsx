@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { exportCSV, exportExcel, type ExportSheet } from '@/lib/export'
 import { ImageExport } from './ImageExport'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 export interface SectionExportProps {
   /** Container ref for PNG capture — if omitted, image button is not shown */
@@ -24,6 +25,9 @@ export function SectionExport({
   format = 'csv',
 }: SectionExportProps) {
   const [busy, setBusy] = useState(false)
+  const { canExport } = usePagePermission()
+
+  if (!canExport) return null
 
   async function handleExport() {
     setBusy(true)

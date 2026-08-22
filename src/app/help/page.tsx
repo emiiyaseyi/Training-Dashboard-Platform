@@ -66,7 +66,7 @@ export default function HelpPage() {
             />
             <FAQItem
               q="The numbers on my dashboard look wrong — who do I ask?"
-              a="Reach out to your L&D/Admin team — they can check the underlying uploaded data and Google Sheets sync status."
+              a="Reach out to your L&D/Admin team — they can check the underlying uploaded data."
             />
           </div>
         </SectionCard>
