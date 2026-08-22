@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Split, Loader2, AlertTriangle, CheckCircle, Plus, Trash2, History } from 'lucide-react'
+import { Split, Loader2, AlertTriangle, CheckCircle, Plus, Trash2, History, Download } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 interface TrainingOption { name: string; count: number }
 interface BreakdownRow { businessUnit: string; attendeeCount: number; share: number; perPersonAmount: number }
@@ -31,6 +32,7 @@ function fmtDate(d: string) {
 }
 
 export function GroupCostDistribution() {
+  const { canExport } = usePagePermission()
   const [trainings, setTrainings] = useState<TrainingOption[]>([])
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [selected, setSelected] = useState('')
@@ -42,6 +44,24 @@ export function GroupCostDistribution() {
   const [applied, setApplied] = useState(false)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+
+  const exportAll = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/admin/strategic-initiatives-export')
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Export failed.'); return }
+      if (!data.rows || data.rows.length === 0) { alert('No records currently classified as a Strategic Learning Initiative / Other Investment Budget training.'); return }
+      const { exportExcel } = await import('@/lib/export')
+      await exportExcel(
+        [{ name: 'Strategic Initiatives', rows: data.rows }],
+        `strategic_learning_initiatives_${new Date().toISOString().slice(0, 10)}`
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const load = () => {
     fetch('/api/admin/group-cost')
@@ -121,6 +141,19 @@ export function GroupCostDistribution() {
       icon={Split}
       title="Other Investment Budget"
       description="For a group-wide training (e.g. a Summit or Leadership Cafe already uploaded with attendees but no per-person cost), enter the total amount spent — it's distributed across Business Units proportional to each BU's attendee count for that training, and written back onto those records."
+      headerActions={
+        canExport ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); exportAll() }}
+            disabled={exporting}
+            title="Export every training record currently classified as a Strategic Learning Initiative"
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Export All (Excel)
+          </button>
+        ) : undefined
+      }
     >
       <div className="space-y-4">
       {!applied ? (
