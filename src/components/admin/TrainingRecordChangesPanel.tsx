@@ -43,6 +43,7 @@ export function TrainingRecordChangesPanel() {
   const [loading, setLoading] = useState(true)
   const [actingId, setActingId] = useState<string | null>(null)
   const [acceptingAll, setAcceptingAll] = useState(false)
+  const [acceptAllProgress, setAcceptAllProgress] = useState<{ done: number; total: number } | null>(null)
   const [acceptAllNote, setAcceptAllNote] = useState('')
   const [page, setPage] = useState(1)
 
@@ -78,32 +79,69 @@ export function TrainingRecordChangesPanel() {
     }
   }
 
+  // Each call to the endpoint applies one small chunk (10 records) and returns immediately — this
+  // loops it automatically so clicking once actually finishes the whole list, without the risk of
+  // any single call being large enough to time out. If a chunk makes zero progress twice in a row
+  // (every record in it is genuinely failing, not just temporarily), the loop stops rather than
+  // spinning forever on the same stuck chunk.
   const acceptAll = async () => {
     if (!confirm(`Apply all ${changes.length} detected edits? Where a Staff ID is being corrected, every other record under the old ID (Training Data, Subscriptions, KSS) is updated to the new one too.`)) return
     setAcceptingAll(true)
     setAcceptAllNote('')
+    setAcceptAllProgress({ done: 0, total: changes.length })
+
+    let done = 0
+    let total = changes.length
+    let allFailed: { id: string; message: string }[] = []
+    let stuckStreak = 0
+    let noteSet = false
+
     try {
-      const res = await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok) {
-        const parts: string[] = [`Applied ${data.applied} of ${data.total}.`]
-        if (data.orphaned > 0) parts.push(`${data.orphaned} were for records that no longer exist and were cleared out.`)
-        if (data.failed?.length > 0) parts.push(`${data.failed.length} genuinely failed and were left in place — first error: ${data.failed[0].message}`)
-        if (data.applied < data.total) parts.push('The rest are still pending below — click Accept All again to continue; nothing already applied gets redone.')
-        if (data.applied === data.total && data.orphaned === 0 && (!data.failed || data.failed.length === 0)) {
-          setAcceptAllNote('')
-        } else {
-          setAcceptAllNote(parts.join(' '))
+      while (true) {
+        let data: { appliedThisChunk?: number; orphanedThisChunk?: number; remaining?: number; total?: number; failed?: { id: string; message: string }[]; error?: string }
+        try {
+          const res = await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
+          data = await res.json().catch(() => ({}))
+          if (!res.ok) {
+            setAcceptAllNote(data.error || 'A chunk failed to apply — whatever went through before this point is saved. Click Accept All again to retry the rest.')
+            noteSet = true
+            break
+          }
+        } catch {
+          setAcceptAllNote('Lost connection partway through — whatever went through before this point is saved. Click Accept All again to continue.')
+          noteSet = true
+          break
         }
-      } else {
-        setAcceptAllNote(data.error || 'The request timed out or failed partway through, but whatever went through before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
+
+        total = data.total ?? total
+        const remaining = data.remaining ?? 0
+        const progressedThisChunk = (data.appliedThisChunk ?? 0) + (data.orphanedThisChunk ?? 0)
+        done = total - remaining
+        if (data.failed?.length) allFailed = allFailed.concat(data.failed)
+        setAcceptAllProgress({ done, total })
+
+        if (remaining <= 0) break
+
+        if (progressedThisChunk === 0) {
+          stuckStreak++
+          if (stuckStreak >= 2) {
+            setAcceptAllNote(`Stopped — ${remaining} remaining are failing repeatedly and aren't making progress. First error: ${allFailed[0]?.message ?? 'unknown'}. These are left in place below for review rather than retried forever.`)
+            noteSet = true
+            break
+          }
+        } else {
+          stuckStreak = 0
+        }
       }
-    } catch {
-      setAcceptAllNote('Lost connection before hearing back, but progress made before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
+
+      if (allFailed.length > 0 && !noteSet) {
+        setAcceptAllNote(`Applied ${done} of ${total}. ${allFailed.length} genuinely failed and were left in place — first error: ${allFailed[0].message}`)
+      }
     } finally {
       setPage(1)
       await load()
       setAcceptingAll(false)
+      setAcceptAllProgress(null)
     }
   }
 
@@ -122,7 +160,7 @@ export function TrainingRecordChangesPanel() {
             className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-2.5 py-1.5 hover:bg-navy-700 disabled:opacity-50"
           >
             {acceptingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
-            {acceptingAll ? `Applying ${changes.length}…` : 'Accept All'}
+            {acceptingAll ? `Applying… ${acceptAllProgress?.done ?? 0}/${acceptAllProgress?.total ?? changes.length}` : 'Accept All'}
           </button>
         ) : undefined
       }

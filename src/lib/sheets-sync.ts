@@ -128,30 +128,38 @@ export async function applyTrainingRecordChange(change: { existingRecordId: stri
   await prisma.trainingRecord.update({ where: { id: change.existingRecordId }, data: newData })
 }
 
-// Bulk version of the above for "Accept All" — applying 300+ pending changes one at a time (each
-// its own multi-query round trip) is what made that button appear to hang and then lose all
-// progress when the request finally hit the serverless function's time limit. This cuts the work
-// two ways: propagates each unique old→new Staff ID pair once (not once per flagged row it came
-// from — the same corrected ID often shows up on several rows for one person), and deletes each
-// change's proposal immediately after applying it rather than only at the very end, so a run that
-// gets cut short still leaves genuine, visible progress — the panel's count reflects exactly what
-// went through, and a retry only has the remainder left to do.
-const BATCH_SIZE = 25
+// Bulk "Accept All" for a potentially large pending list, redesigned around one constraint: a
+// single server call must never be able to time out, full stop — not "less likely to", never.
+// Earlier versions tried to process everything (or large batches of it) in one request; even with
+// per-row error isolation, an up-front phase (propagating every unique Staff ID correction before
+// touching any individual row) could itself run long with enough distinct corrections, and because
+// nothing was saved until that phase finished, a slow run still meant zero visible progress.
+//
+// This version processes exactly one small, fully self-contained chunk per call — propagation for
+// just that chunk's IDs, the chunk's own record updates, and the chunk's proposals deleted —
+// so every single call is fast and its result is permanently saved before the call returns. The
+// caller (the admin panel) loops this automatically: click once, it keeps calling until nothing's
+// left, and if the browser is closed partway through, whatever chunks already ran stay applied —
+// reopening the panel shows the true remaining count, and clicking again picks up from there.
+const CHUNK_SIZE = 10
 
-export interface ApplyAllResult {
-  applied: number
+export interface ApplyChunkResult {
+  appliedThisChunk: number
+  orphanedThisChunk: number
+  remaining: number
   total: number
-  orphaned: number // proposals whose target record no longer exists — cleaned up, nothing to apply
-  failed: { id: string; message: string }[] // genuine failures — left in place for investigation
+  failed: { id: string; message: string }[]
 }
 
-// Every step here is isolated so one bad row can never block the rest of the run — the original
-// version used Promise.all() per batch, which fails the *entire* batch (and stalls every batch
-// after it, since the loop never reaches them) the moment a single update rejects for any reason,
-// which is exactly what made "Accept All" appear to do nothing run after run.
-export async function applyAllTrainingRecordChanges(): Promise<ApplyAllResult> {
-  const changes = await prisma.trainingRecordChange.findMany()
-  const parsed = changes.map((c) => ({
+export async function applyNextTrainingRecordChangeChunk(): Promise<ApplyChunkResult> {
+  const total = await prisma.trainingRecordChange.count()
+  const chunk = await prisma.trainingRecordChange.findMany({ take: CHUNK_SIZE, orderBy: { detectedAt: 'asc' } })
+
+  if (chunk.length === 0) {
+    return { appliedThisChunk: 0, orphanedThisChunk: 0, remaining: 0, total, failed: [] }
+  }
+
+  const parsed = chunk.map((c) => ({
     id: c.id,
     existingRecordId: c.existingRecordId,
     oldData: JSON.parse(c.oldData) as TrainingRecordSnapshot,
@@ -170,48 +178,40 @@ export async function applyAllTrainingRecordChanges(): Promise<ApplyAllResult> {
         prisma.kSSRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
       ])
     } catch (err) {
-      console.error('[applyAllTrainingRecordChanges] ID propagation failed', oldId, '->', newId, err)
-      // Don't let a propagation failure block the per-record pass below — the specific flagged
-      // rows still get their own direct update either way.
+      console.error('[applyNextTrainingRecordChangeChunk] ID propagation failed', oldId, '->', newId, err)
     }
   }
 
-  let applied = 0
-  let orphaned = 0
+  const results = await Promise.allSettled(
+    parsed.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData }))
+  )
+
+  let appliedThisChunk = 0
+  let orphanedThisChunk = 0
   const failed: { id: string; message: string }[] = []
+  const toDelete: string[] = []
 
-  for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
-    const batch = parsed.slice(i, i + BATCH_SIZE)
-    const results = await Promise.allSettled(
-      batch.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData }))
-    )
-
-    const toDelete: string[] = []
-    results.forEach((result, idx) => {
-      const c = batch[idx]
-      if (result.status === 'fulfilled') {
+  results.forEach((result, idx) => {
+    const c = parsed[idx]
+    if (result.status === 'fulfilled') {
+      toDelete.push(c.id)
+      appliedThisChunk++
+    } else {
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason)
+      if (message.includes('Record to update not found') || message.includes('P2025')) {
         toDelete.push(c.id)
-        applied++
+        orphanedThisChunk++
       } else {
-        const message = result.reason instanceof Error ? result.reason.message : String(result.reason)
-        // Prisma's "record to update not found" — the flagged TrainingRecord is already gone
-        // (e.g. removed via the stale-row cleanup elsewhere), so this proposal can never be
-        // applied. Nothing left to protect by keeping it around.
-        if (message.includes('Record to update not found') || message.includes('P2025')) {
-          toDelete.push(c.id)
-          orphaned++
-        } else {
-          failed.push({ id: c.id, message })
-        }
+        failed.push({ id: c.id, message })
       }
-    })
-
-    if (toDelete.length > 0) {
-      await prisma.trainingRecordChange.deleteMany({ where: { id: { in: toDelete } } })
     }
+  })
+
+  if (toDelete.length > 0) {
+    await prisma.trainingRecordChange.deleteMany({ where: { id: { in: toDelete } } })
   }
 
-  return { applied, total: changes.length, orphaned, failed }
+  return { appliedThisChunk, orphanedThisChunk, remaining: total - toDelete.length, total, failed }
 }
 
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
