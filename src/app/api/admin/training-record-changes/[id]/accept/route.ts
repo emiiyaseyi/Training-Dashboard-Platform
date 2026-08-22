@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { applyTrainingRecordChange } from '@/lib/sheets-sync'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
@@ -11,15 +12,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const change = await prisma.trainingRecordChange.findUnique({ where: { id } })
     if (!change) return NextResponse.json({ error: 'Change not found — it may have already been resolved.' }, { status: 404 })
 
-    const newData = JSON.parse(change.newData) as {
-      staffId: string; staffName: string; businessUnit: string
-      cost: number; hours: number | null; trainingType: string | null; capability: string | null; month: string
-    }
-
-    await prisma.trainingRecord.update({
-      where: { id: change.existingRecordId },
-      data: newData,
-    })
+    await applyTrainingRecordChange(change)
     await prisma.trainingRecordChange.delete({ where: { id } })
 
     return NextResponse.json({ success: true })

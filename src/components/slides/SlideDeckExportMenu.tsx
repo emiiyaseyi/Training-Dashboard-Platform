@@ -6,6 +6,7 @@ import { buildSlideNodes, SLIDE_TITLES, SLIDE_COUNT } from './index'
 import { exportFullDeckPptx } from '@/lib/pptx-export'
 import { exportSlidesAsPdf, exportSlidesAsJpgZip } from '@/lib/slide-export'
 import type { GroupAnalytics } from '@/lib/analytics'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 interface SlideDeckExportMenuProps {
   data: GroupAnalytics
@@ -16,6 +17,7 @@ interface SlideDeckExportMenuProps {
 // independent of whatever scale the on-screen SlideViewer is using at the current viewport width,
 // so PDF/JPG exports always come out at the deck's native resolution and font sizes, never scaled down.
 export function SlideDeckExportMenu({ data, periodLabel }: SlideDeckExportMenuProps) {
+  const { canExport } = usePagePermission()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<'pptx' | 'pdf' | 'jpg' | null>(null)
   // Offscreen slides (needed for PDF/JPG capture) are expensive to mount — each one carries its
@@ -34,6 +36,8 @@ export function SlideDeckExportMenu({ data, periodLabel }: SlideDeckExportMenuPr
     if (open) document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [open])
+
+  if (!canExport) return null
 
   async function run(kind: 'pptx' | 'pdf' | 'jpg') {
     setBusy(kind)

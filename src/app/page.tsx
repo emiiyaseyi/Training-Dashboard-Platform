@@ -18,10 +18,12 @@ import { SlideDeckExportMenu } from '@/components/slides/SlideDeckExportMenu'
 import type { GroupAnalytics } from '@/lib/analytics'
 import { type PeriodFilter, filterToQuery, filterLabel } from '@/lib/filter-types'
 import { fmt, pct, rating } from '@/lib/slide-format'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 type DashData = GroupAnalytics & { narrative: string[] }
 
 export default function ExecutiveDashboard() {
+  const { isPlatformAdmin } = usePagePermission()
   const [data, setData] = useState<DashData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -102,7 +104,7 @@ export default function ExecutiveDashboard() {
 
       {isEmpty && <div className="px-8 pt-6"><AlertBadge variant="info" message="No data uploaded yet. Go to Upload & Data to import your files." /></div>}
 
-      {data.dataQuality.issues.length > 0 && (
+      {isPlatformAdmin && data.dataQuality.issues.length > 0 && (
         <div className="mx-8 mt-6 no-print rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-1">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-500" />

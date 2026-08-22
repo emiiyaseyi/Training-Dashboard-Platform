@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { GitCompareArrows, Check, X, Loader2, CheckCheck } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface TrainingSnapshot {
   staffId: string
@@ -35,11 +36,14 @@ const FIELD_LABELS: Record<keyof TrainingSnapshot, string> = {
   month: 'Month',
 }
 
+const PAGE_SIZE = 20
+
 export function TrainingRecordChangesPanel() {
   const [changes, setChanges] = useState<PendingChange[]>([])
   const [loading, setLoading] = useState(true)
   const [actingId, setActingId] = useState<string | null>(null)
   const [acceptingAll, setAcceptingAll] = useState(false)
+  const [page, setPage] = useState(1)
 
   const load = async () => {
     setLoading(true)
@@ -74,21 +78,24 @@ export function TrainingRecordChangesPanel() {
   }
 
   const acceptAll = async () => {
-    if (!confirm(`Apply all ${changes.length} detected edits?`)) return
+    if (!confirm(`Apply all ${changes.length} detected edits? Where a Staff ID is being corrected, every other record under the old ID (Training Data, Subscriptions, KSS) is updated to the new one too.`)) return
     setAcceptingAll(true)
     try {
       await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
+      setPage(1)
       await load()
     } finally {
       setAcceptingAll(false)
     }
   }
 
+  const pageItems = paginate(changes, page, PAGE_SIZE)
+
   return (
     <SectionCard
       icon={GitCompareArrows}
       title={`Training Data Changes to Review (${changes.length})`}
-      description="When a re-sync finds a row that looks like an edit to something already imported (same name, training, and month, but other fields differ) it's held here instead of applied automatically — review old vs new and accept or dismiss each one."
+      description="When a re-sync finds a row that looks like an edit to something already imported (same name, training, and month, but other fields differ) it's held here instead of applied automatically. “Previous” is what's stored from the last sync; “Current” is what the sheet says right now. Accepting a Staff ID correction updates it everywhere that ID appears, not just this one row."
       headerActions={
         changes.length > 0 ? (
           <button
@@ -108,15 +115,19 @@ export function TrainingRecordChangesPanel() {
         <p className="text-xs text-slate-400">No pending edits — every synced row matches what&apos;s already imported.</p>
       ) : (
         <div className="space-y-3">
-          {changes.map((c) => (
+          {pageItems.map((c) => (
             <div key={c.id} className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
+              <p className="text-xs font-semibold text-slate-700 mb-2">
+                {c.newData.staffName || c.oldData.staffName}
+                <span className="text-slate-400 font-normal"> — {c.newData.month || c.oldData.month}</span>
+              </p>
               <div className="overflow-x-auto">
                 <table className="text-xs w-full min-w-[420px]">
                   <thead>
                     <tr className="text-slate-400 text-left">
                       <th className="font-medium pb-1.5 pr-3">Field</th>
-                      <th className="font-medium pb-1.5 pr-3">Current</th>
-                      <th className="font-medium pb-1.5">From sheet</th>
+                      <th className="font-medium pb-1.5 pr-3">Previous</th>
+                      <th className="font-medium pb-1.5">Current (in sheet)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -150,6 +161,7 @@ export function TrainingRecordChangesPanel() {
               </div>
             </div>
           ))}
+          <Pagination page={page} totalItems={changes.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       )}
     </SectionCard>
