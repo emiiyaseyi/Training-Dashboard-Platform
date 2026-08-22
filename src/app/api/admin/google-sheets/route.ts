@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { hasServiceAccountCredentials, serviceAccountEmail, privateKeyDiagnostics } from '@/lib/google-sheets'
+import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
       ? await prisma.googleSheetsConfig.update({ where: { id: existing.id }, data })
       : await prisma.googleSheetsConfig.create({ data })
 
+    invalidateComprehensiveStaffListCache()
     return NextResponse.json(updated)
   } catch (err) {
     console.error('[admin/google-sheets POST]', err)

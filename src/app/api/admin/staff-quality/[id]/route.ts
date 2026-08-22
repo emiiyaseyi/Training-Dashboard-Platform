@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { connectToSpreadsheet, updateRowByKey } from '@/lib/google-sheets'
-import { loadRosterDirectory, managerDisplayName } from '@/lib/staff-directory'
+import { loadRosterDirectory, managerDisplayName, invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -69,6 +69,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               sheetSync.reason = `Row found, but couldn't find column(s): ${result.missingColumns.join(', ')}.`
             } else {
               sheetSync.success = true
+              invalidateComprehensiveStaffListCache()
             }
           }
         }

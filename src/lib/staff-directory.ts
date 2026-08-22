@@ -21,11 +21,36 @@ export function managerDisplayName(staff: ResolvedStaff): string {
   return [staff.firstName, staff.lastName].filter(Boolean).join(' ') || staff.name
 }
 
+// loadRosterDirectory() is called from a dozen+ places across the app (nearly every page/API
+// that needs to resolve a staff member) and, until this cache, hit Google Sheets fresh — a live
+// API round-trip plus a full-tab parse — on every single one of those calls. That's what was
+// making the platform feel slow generally, not any one page. A short TTL is enough to collapse
+// the many calls that happen within one user action (or one page's several API calls) into a
+// single fetch, while still picking up sheet edits within a minute.
+const COMPREHENSIVE_LIST_TTL_MS = 60_000
+let comprehensiveListCache: { at: number; map: Map<string, ResolvedStaff> } | null = null
+
+// Called after anything that changes what this cache would return (the sheet config itself, or a
+// direct write into the sheet like the Line Manager Name backfill) so the very next read reflects
+// it immediately instead of waiting out the TTL.
+export function invalidateComprehensiveStaffListCache(): void {
+  comprehensiveListCache = null
+}
+
+async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>> {
+  if (comprehensiveListCache && Date.now() - comprehensiveListCache.at < COMPREHENSIVE_LIST_TTL_MS) {
+    return comprehensiveListCache.map
+  }
+  const map = await fetchComprehensiveStaffList()
+  comprehensiveListCache = { at: Date.now(), map }
+  return map
+}
+
 // Reads the optional "comprehensive staff list" sheet (Admin -> Live Data Source) as a lenient
 // supplement to the uploaded roster — only a Staff ID column is required, since this sheet's
 // exact layout (e.g. a single "Name" column vs separate First/Last) isn't fixed yet and it isn't
 // the primary source. Never throws; returns an empty list on any failure.
-async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>> {
+async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>> {
   const map = new Map<string, ResolvedStaff>()
   try {
     const config = await prisma.googleSheetsConfig.findFirst()
