@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, Plus, Trash2, RefreshCw, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users, Plus, Trash2, RefreshCw, Loader2, CheckCircle2, AlertTriangle, Search, X } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 
 interface RosterEntry {
@@ -16,6 +16,13 @@ interface RosterEntry {
   sheetSyncError: string | null
 }
 
+interface RosterStaff {
+  staffId: string
+  name: string
+  email: string | null
+  businessUnit: string
+}
+
 interface Props {
   onChanged: () => void
 }
@@ -28,11 +35,44 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
 
-  const [mode, setMode] = useState<'individual' | 'bulk'>('individual')
-  const [single, setSingle] = useState({ name: '', staffId: '', email: '' })
+  const [mode, setMode] = useState<'search' | 'bulk'>('search')
+  const [directory, setDirectory] = useState<RosterStaff[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [pending, setPending] = useState<RosterStaff[]>([])
   const [bulkText, setBulkText] = useState('')
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/roster-directory')
+      .then((res) => res.json())
+      .then((data) => setDirectory(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
+
+  const onRosterStaffIds = useMemo(
+    () => new Set(entries.map((e) => e.staffId).filter(Boolean) as string[]),
+    [entries]
+  )
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    const pendingIds = new Set(pending.map((p) => p.staffId))
+    return directory
+      .filter((r) => !pendingIds.has(r.staffId) && !onRosterStaffIds.has(r.staffId))
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [searchQuery, directory, pending, onRosterStaffIds])
+
+  const addToPending = (staff: RosterStaff) => {
+    setPending((prev) => [...prev, staff])
+    setSearchQuery('')
+  }
+
+  const removeFromPending = (staffId: string) => {
+    setPending((prev) => prev.filter((p) => p.staffId !== staffId))
+  }
 
   const retryOne = async (e: RosterEntry) =>
     fetch(`/api/admin/talent-member-roster/${e.id}/retry-sync`, { method: 'POST' }).catch(() => {})
@@ -89,17 +129,17 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     }
   }
 
-  const addSingle = async () => {
-    if (!single.name.trim() && !single.staffId.trim() && !single.email.trim()) return
+  const addSelected = async () => {
+    if (pending.length === 0) return
     setAdding(true)
     try {
       const res = await fetch('/api/admin/talent-member-roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(single),
+        body: JSON.stringify({ identifiers: pending.map((p) => p.staffId) }),
       })
       if (res.ok) {
-        setSingle({ name: '', staffId: '', email: '' })
+        setPending([])
         await fetchEntries()
         onChanged()
       } else {
@@ -158,55 +198,74 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     <SectionCard
       icon={Users}
       title={`Talent Member Roster (${entries.length})`}
-      description="Add or remove Talent Members here — bulk paste (one per line) or one at a time, by name, Staff ID, or email. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
+      description="Add or remove Talent Members here — search the staff directory and select as many as needed, or paste a list. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
       defaultOpen
     >
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-xs">
           <button
-            onClick={() => setMode('individual')}
-            className={`px-3 py-1.5 rounded-lg border font-medium ${mode === 'individual' ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            onClick={() => setMode('search')}
+            className={`px-3 py-1.5 rounded-lg border font-medium ${mode === 'search' ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-500 border-slate-200 hover:bg-slate-50'}`}
           >
-            Add Individually
+            Search Staff
           </button>
           <button
             onClick={() => setMode('bulk')}
             className={`px-3 py-1.5 rounded-lg border font-medium ${mode === 'bulk' ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-500 border-slate-200 hover:bg-slate-50'}`}
           >
-            Add in Bulk
+            Paste a List
           </button>
         </div>
 
-        {mode === 'individual' ? (
+        {mode === 'search' ? (
           <div className="border border-slate-200 rounded-lg p-3 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <input
-                value={single.name}
-                onChange={(e) => setSingle((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Name"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                value={single.staffId}
-                onChange={(e) => setSingle((p) => ({ ...p, staffId: e.target.value }))}
-                placeholder="Staff ID"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="email"
-                value={single.email}
-                onChange={(e) => setSingle((p) => ({ ...p, email: e.target.value }))}
-                placeholder="Email"
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Search by name, email, or Staff ID (add as many as needed)</label>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Type a name, email, or Staff ID…"
+                  className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.staffId}
+                        onClick={() => addToPending(r)}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                      >
+                        <span className="text-slate-700">{r.name}</span>
+                        <span className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''} · {r.businessUnit}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
+
+            {pending.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {pending.map((p) => (
+                  <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                    {p.name}
+                    <button onClick={() => removeFromPending(p.staffId)} className="hover:text-red-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <button
-              onClick={addSingle}
-              disabled={adding || (!single.name.trim() && !single.staffId.trim() && !single.email.trim())}
+              onClick={addSelected}
+              disabled={adding || pending.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-              Add
+              Add {pending.length > 0 ? `${pending.length} ` : ''}Selected
             </button>
           </div>
         ) : (
