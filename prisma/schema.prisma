@@ -442,6 +442,7 @@ model TrainingRecord {
   hours        Float?   // Learning Hours (optional — populated when provided)
   trainingType String?  // References TrainingType.name — null = legacy row, treated as "Internal Training"
   capability   String?  // References DifferentiatingCapability.name
+  vendor       String?  // Training vendor/facilitator — not part of the original upload columns, editable after the fact (e.g. from the Talent Members report for TM-tagged rows)
   batchId      String
   createdAt    DateTime @default(now())
 

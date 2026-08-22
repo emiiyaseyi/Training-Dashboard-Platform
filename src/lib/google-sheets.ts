@@ -326,6 +326,75 @@ export async function updateRowByKey(
   return { rowFound: true, missingColumns }
 }
 
+// Same job as calling updateRowByKey once per row, but does exactly one sheet read and one
+// Sheets API write for the whole batch, instead of one of each per row — for bulk backfills
+// (e.g. "update missing details" over an entire roster) where updateRowByKey's per-call
+// full-tab-read would mean dozens of redundant round-trips.
+export async function batchUpdateRowsByKey(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  keyColumnCandidates: string[],
+  rows_: { keyValue: string; updates: { columnCandidates: string[]; value: string }[] }[]
+): Promise<{ found: number; notFound: string[] }> {
+  const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
+  if (rows.length === 0) return { found: 0, notFound: rows_.map((r) => r.keyValue) }
+
+  const headers = rows[0]
+  const normHeaders = headers.map(normaliseHeader)
+  const normKeyCandidates = keyColumnCandidates.map(normaliseHeader)
+  const keyColIdx = normHeaders.findIndex((h) => normKeyCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+  if (keyColIdx === -1) return { found: 0, notFound: rows_.map((r) => r.keyValue) }
+
+  const rowIndexByKey = new Map<string, number>()
+  rows.slice(1).forEach((r, i) => {
+    const k = normaliseHeader(r[keyColIdx] || '')
+    if (k) rowIndexByKey.set(k, i + 2) // +1 header row, +1 for 1-based indexing
+  })
+
+  const colIdxCache = new Map<string, number>()
+  const colIdxFor = (candidates: string[]) => {
+    const key = candidates.join('|')
+    if (colIdxCache.has(key)) return colIdxCache.get(key)!
+    const normCandidates = candidates.map(normaliseHeader)
+    const idx = normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    colIdxCache.set(key, idx)
+    return idx
+  }
+
+  const data: { range: string; values: string[][] }[] = []
+  const notFound: string[] = []
+  let found = 0
+
+  for (const { keyValue, updates } of rows_) {
+    const sheetRowNumber = rowIndexByKey.get(normaliseHeader(keyValue))
+    if (!sheetRowNumber) { notFound.push(keyValue); continue }
+    found++
+    for (const update of updates) {
+      const colIdx = colIdxFor(update.columnCandidates)
+      if (colIdx === -1) continue
+      data.push({ range: `${sheetName}!${columnLetter(colIdx)}${sheetRowNumber}`, values: [[update.value]] })
+    }
+  }
+
+  if (data.length > 0) {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+      }
+    )
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`Batch update failed on tab "${sheetName}" (${res.status}): ${body.slice(0, 200)}`)
+    }
+  }
+
+  return { found, notFound }
+}
+
 // Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the
 // header row in place when a field has no existing column to land in.
 async function updateSheetRange(
