@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/session-guard'
-import { applyAllTrainingRecordChanges } from '@/lib/sheets-sync'
+import { applyNextTrainingRecordChangeChunk } from '@/lib/sheets-sync'
 
-// Batched + progress-as-it-goes (see applyAllTrainingRecordChanges) so a large pending list
-// doesn't need to finish inside one request to make real, visible progress. Also raises this
-// route's own execution budget, since even batched this can still legitimately take a while
-// over a few hundred rows — re-running "Accept All" simply picks up wherever the last run left off.
-export const maxDuration = 60
-
+// Applies exactly one small chunk (10 records) per call — see applyNextTrainingRecordChangeChunk
+// for why. The admin panel calls this repeatedly in a loop until `remaining` hits 0; each call on
+// its own is fast enough to never risk hitting this route's time limit, and whatever it applies is
+// permanently saved (proposals deleted) before it returns, so the loop being interrupted at any
+// point never loses previously-completed work.
 export async function POST() {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
 
   try {
-    const result = await applyAllTrainingRecordChanges()
+    const result = await applyNextTrainingRecordChangeChunk()
     return NextResponse.json(result)
   } catch (err) {
     console.error('[admin/training-record-changes/accept-all]', err)
-    return NextResponse.json({ error: 'Failed to apply all changes — some may have already gone through; refresh to see current progress.' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to apply this chunk — anything applied before this point is saved; try again.' }, { status: 500 })
   }
 }
