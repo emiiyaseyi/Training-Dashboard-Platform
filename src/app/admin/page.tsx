@@ -17,6 +17,7 @@ import { TrainingRecordChangesPanel } from '@/components/admin/TrainingRecordCha
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
 import { StaffDataQuality } from '@/components/admin/StaffDataQuality'
 import { SmtpSettingsPanel } from '@/components/admin/SmtpSettingsPanel'
+import { SecuritySettingsPanel } from '@/components/admin/SecuritySettingsPanel'
 
 interface BU {
   id: string
@@ -660,6 +661,9 @@ export default function AdminPage() {
 
         {/* SMTP / email settings — platform-wide, used by Survey Automation and beyond */}
         <SmtpSettingsPanel />
+
+        {/* Idle-logout timeout — platform-wide, applies to every signed-in user */}
+        <SecuritySettingsPanel />
 
         {/* Data quality audit */}
         <DataQualityAudit />

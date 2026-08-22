@@ -43,6 +43,7 @@ export function TrainingRecordChangesPanel() {
   const [loading, setLoading] = useState(true)
   const [actingId, setActingId] = useState<string | null>(null)
   const [acceptingAll, setAcceptingAll] = useState(false)
+  const [acceptAllNote, setAcceptAllNote] = useState('')
   const [page, setPage] = useState(1)
 
   const load = async () => {
@@ -80,11 +81,20 @@ export function TrainingRecordChangesPanel() {
   const acceptAll = async () => {
     if (!confirm(`Apply all ${changes.length} detected edits? Where a Staff ID is being corrected, every other record under the old ID (Training Data, Subscriptions, KSS) is updated to the new one too.`)) return
     setAcceptingAll(true)
+    setAcceptAllNote('')
     try {
-      await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
+      const res = await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.applied < data.total) {
+        setAcceptAllNote(`Applied ${data.applied} of ${data.total} — the rest are still pending below. Click Accept All again to continue; nothing already applied gets redone.`)
+      } else if (!res.ok) {
+        setAcceptAllNote('The request timed out or failed partway through, but whatever went through before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
+      }
+    } catch {
+      setAcceptAllNote('Lost connection before hearing back, but progress made before that is saved — the count below reflects what actually remains. Click Accept All again to continue.')
+    } finally {
       setPage(1)
       await load()
-    } finally {
       setAcceptingAll(false)
     }
   }
@@ -104,11 +114,14 @@ export function TrainingRecordChangesPanel() {
             className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-2.5 py-1.5 hover:bg-navy-700 disabled:opacity-50"
           >
             {acceptingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
-            Accept All
+            {acceptingAll ? `Applying ${changes.length}…` : 'Accept All'}
           </button>
         ) : undefined
       }
     >
+      {acceptAllNote && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">{acceptAllNote}</p>
+      )}
       {loading ? (
         <p className="text-xs text-slate-400">Loading…</p>
       ) : changes.length === 0 ? (
