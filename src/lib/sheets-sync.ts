@@ -138,7 +138,18 @@ export async function applyTrainingRecordChange(change: { existingRecordId: stri
 // went through, and a retry only has the remainder left to do.
 const BATCH_SIZE = 25
 
-export async function applyAllTrainingRecordChanges(): Promise<{ applied: number; total: number }> {
+export interface ApplyAllResult {
+  applied: number
+  total: number
+  orphaned: number // proposals whose target record no longer exists — cleaned up, nothing to apply
+  failed: { id: string; message: string }[] // genuine failures — left in place for investigation
+}
+
+// Every step here is isolated so one bad row can never block the rest of the run — the original
+// version used Promise.all() per batch, which fails the *entire* batch (and stalls every batch
+// after it, since the loop never reaches them) the moment a single update rejects for any reason,
+// which is exactly what made "Accept All" appear to do nothing run after run.
+export async function applyAllTrainingRecordChanges(): Promise<ApplyAllResult> {
   const changes = await prisma.trainingRecordChange.findMany()
   const parsed = changes.map((c) => ({
     id: c.id,
@@ -152,22 +163,55 @@ export async function applyAllTrainingRecordChanges(): Promise<{ applied: number
     if (c.oldData.staffId !== c.newData.staffId) idPairs.set(c.oldData.staffId, c.newData.staffId)
   }
   for (const [oldId, newId] of idPairs) {
-    await Promise.all([
-      prisma.trainingRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
-      prisma.subscriptionRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
-      prisma.kSSRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
-    ])
+    try {
+      await Promise.all([
+        prisma.trainingRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+        prisma.subscriptionRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+        prisma.kSSRecord.updateMany({ where: { staffId: oldId }, data: { staffId: newId } }),
+      ])
+    } catch (err) {
+      console.error('[applyAllTrainingRecordChanges] ID propagation failed', oldId, '->', newId, err)
+      // Don't let a propagation failure block the per-record pass below — the specific flagged
+      // rows still get their own direct update either way.
+    }
   }
 
   let applied = 0
+  let orphaned = 0
+  const failed: { id: string; message: string }[] = []
+
   for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
     const batch = parsed.slice(i, i + BATCH_SIZE)
-    await Promise.all(batch.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData })))
-    await prisma.trainingRecordChange.deleteMany({ where: { id: { in: batch.map((c) => c.id) } } })
-    applied += batch.length
+    const results = await Promise.allSettled(
+      batch.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData }))
+    )
+
+    const toDelete: string[] = []
+    results.forEach((result, idx) => {
+      const c = batch[idx]
+      if (result.status === 'fulfilled') {
+        toDelete.push(c.id)
+        applied++
+      } else {
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason)
+        // Prisma's "record to update not found" — the flagged TrainingRecord is already gone
+        // (e.g. removed via the stale-row cleanup elsewhere), so this proposal can never be
+        // applied. Nothing left to protect by keeping it around.
+        if (message.includes('Record to update not found') || message.includes('P2025')) {
+          toDelete.push(c.id)
+          orphaned++
+        } else {
+          failed.push({ id: c.id, message })
+        }
+      }
+    })
+
+    if (toDelete.length > 0) {
+      await prisma.trainingRecordChange.deleteMany({ where: { id: { in: toDelete } } })
+    }
   }
 
-  return { applied, total: changes.length }
+  return { applied, total: changes.length, orphaned, failed }
 }
 
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
