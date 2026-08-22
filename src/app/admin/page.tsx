@@ -10,6 +10,7 @@ import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } 
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
+import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
@@ -671,7 +672,10 @@ export default function AdminPage() {
         {/* Budget calculation settings */}
         <BudgetSettingsPanel />
 
-        {/* Talent Member (TM) exemptions — the TM roster itself comes from the comprehensive staff list's "Is Talent Member" column, not admin-entered here */}
+        {/* Talent Member (TM) roster — who counts as a TM at all; admin-only, not shown on the (wider-audience) Talent Members report page */}
+        <TalentMemberRosterPanel onChanged={() => {}} />
+
+        {/* Talent Member (TM) exemptions — staff excused from this year's TM Trainings requirement */}
         <TalentMemberExemptionPanel />
 
         {/* Other Investment Budget — group training cost distribution */}

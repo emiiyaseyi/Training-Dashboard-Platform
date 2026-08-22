@@ -9,7 +9,6 @@ import { DataTable } from '@/components/ui/DataTable'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { NairaSign } from '@/components/ui/NairaSign'
-import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
 
 interface TMAttendedRecord {
   staffId: string; staffName: string; businessUnit: string; trainingName: string
@@ -135,22 +134,6 @@ export default function TalentMembersPage() {
       />
 
       <div className="p-8 space-y-6">
-        <TalentMemberRosterPanel onChanged={() => load(year)} />
-
-        {data.unresolvedRosterEntries.length > 0 && (
-          <AlertBadge
-            variant="warning"
-            message={`${data.unresolvedRosterEntries.length} roster ${data.unresolvedRosterEntries.length === 1 ? 'entry doesn\'t' : 'entries don\'t'} match a current staff member yet (${data.unresolvedRosterEntries.map((e) => e.name || e.staffId || e.email).join(', ')}) — they won't count toward the totals below until they resolve. Check spelling, or that they're on the uploaded Staff Roster / comprehensive staff list.`}
-          />
-        )}
-
-        {data.totalTalentMembers === 0 && (
-          <AlertBadge
-            variant="info"
-            message="No Talent Members on the roster yet — add them above, individually or in bulk."
-          />
-        )}
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <KPICard title="Total Talent Members" value={data.totalTalentMembers.toLocaleString()} subtitle="Current TM roster" icon={Users} color="blue" />
           <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${year} TM training attendance`} icon={UserCheck} color="green" />
@@ -160,10 +143,24 @@ export default function TalentMembersPage() {
           <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Exempted)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
         </div>
 
+        {data.unresolvedRosterEntries.length > 0 && (
+          <AlertBadge
+            variant="warning"
+            message={`${data.unresolvedRosterEntries.length} roster ${data.unresolvedRosterEntries.length === 1 ? 'entry doesn\'t' : 'entries don\'t'} match a current staff member yet (${data.unresolvedRosterEntries.map((e) => e.name || e.staffId || e.email).join(', ')}) — they won't count toward the totals above until they resolve. Check spelling under Admin → Talent Member Roster, or that they're on the uploaded Staff Roster.`}
+          />
+        )}
+
+        {data.totalTalentMembers === 0 && (
+          <AlertBadge
+            variant="info"
+            message="No Talent Members on the roster yet — add them under Admin → Talent Member Roster."
+          />
+        )}
+
         <SectionCard
           icon={CalendarCheck}
           title={`TMs That Attended a Training (${data.attended.length})`}
-          description="Training name, date, and vendor per attended TM training — sourced from scheduled trainings whose end date has passed."
+          description="Sourced from the 2026 Training Data (Training Type = TM) and from scheduled TM trainings whose end date has passed. Month-only entries (no vendor) come from the Training Data sheet."
           headerActions={<SectionExport rows={attendedRows} filename={`tm_attended_${year}`} format="xlsx" label="Excel" />}
         >
           <DataTable
