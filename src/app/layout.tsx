@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { AppShell } from '@/components/layout/AppShell'
@@ -19,6 +19,14 @@ const reportSerif = Playfair_Display({
 export const metadata: Metadata = {
   title: 'Learning Intelligence Dashboard',
   description: 'Enterprise training & professional development analytics platform',
+}
+
+// Without this, mobile browsers assume a ~980px desktop-width layout and zoom/pan the whole page
+// to fit — which is what "dragging left/right on the phone" actually was, not a per-page overflow
+// bug. This pins the layout viewport to the device's real width.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
