@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2 } from 'lucide-react'
+import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2, AlertTriangle, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { KPICard } from '@/components/ui/KPICard'
@@ -38,7 +38,7 @@ interface TalentMemberFullReport {
   exempted: TMExemptedRecord[]
   yetToAttend: TMYetToAttendRecord[]
   unresolvedRosterEntries: { id: string; staffId: string | null; name: string | null; email: string | null }[]
-  excludedAttendance: { staffId: string; staffName: string; training: string; month: string }[]
+  excludedAttendance: { id: string; staffId: string; staffName: string; training: string; month: string }[]
 }
 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString()
@@ -52,6 +52,7 @@ export default function TalentMembersPage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null)
   const [vendorDraft, setVendorDraft] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
 
   const load = useCallback(async (y: number) => {
     setLoading(true)
@@ -88,6 +89,18 @@ export default function TalentMembersPage() {
     }
   }
 
+  const deleteStaleRecord = async (id: string) => {
+    if (!confirm('Remove this record? Only do this once the corrected version (with the right Staff ID) is already showing up elsewhere in the data.')) return
+    setDeletingRecordId(id)
+    try {
+      const res = await fetch(`/api/admin/training-record/${id}`, { method: 'DELETE' })
+      if (res.ok) await load(year)
+      else alert('Failed to remove record.')
+    } finally {
+      setDeletingRecordId(null)
+    }
+  }
+
   const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i)
 
   if (loading) return (
@@ -97,7 +110,7 @@ export default function TalentMembersPage() {
   )
 
   if (error) return (
-    <div className="p-8 space-y-4">
+    <div className="p-4 sm:p-8 space-y-4">
       <AlertBadge variant="error" message={error} />
       <button onClick={() => load(year)} className="text-sm text-blue-600 flex items-center gap-1.5">
         <RefreshCw className="w-3.5 h-3.5" /> Retry
@@ -157,7 +170,7 @@ export default function TalentMembersPage() {
         }
       />
 
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <KPICard title="Total Talent Members" value={data.totalTalentMembers.toLocaleString()} subtitle="Current TM roster" icon={Users} color="blue" />
           <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${year} TM training attendance`} icon={UserCheck} color="green" />
@@ -182,10 +195,33 @@ export default function TalentMembersPage() {
         )}
 
         {data.excludedAttendance.length > 0 && (
-          <AlertBadge
-            variant="warning"
-            message={`${data.excludedAttendance.length} row${data.excludedAttendance.length === 1 ? '' : 's'} in the 2026 Training Data tagged Training Type = TM didn't count toward Staff Trained because the Staff ID doesn't match anyone currently on the TM roster: ${data.excludedAttendance.map((e) => `${e.staffName} (${e.staffId}) — ${e.training}`).join('; ')}.`}
-          />
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 space-y-2">
+            <p className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+              <span>
+                {data.excludedAttendance.length} row{data.excludedAttendance.length === 1 ? '' : 's'} in the 2026 Training Data tagged
+                Training Type = TM didn&apos;t count toward Staff Trained — the Staff ID doesn&apos;t match anyone currently on the TM
+                roster. If you&apos;ve already corrected the Staff ID in the sheet and re-synced, this is the old row: syncing only adds
+                new rows, it never updates or removes an existing one, so the corrected version exists as a separate row now and this
+                one is safe to remove.
+              </span>
+            </p>
+            <div className="space-y-1.5 pl-6">
+              {data.excludedAttendance.map((e) => (
+                <div key={e.id} className="flex items-center justify-between gap-3 bg-white border border-amber-100 rounded-lg px-3 py-2 text-xs">
+                  <span className="text-slate-700">{e.staffName} ({e.staffId}) — {e.training}, {e.month}</span>
+                  <button
+                    onClick={() => deleteStaleRecord(e.id)}
+                    disabled={deletingRecordId === e.id}
+                    className="flex items-center gap-1 text-red-600 hover:text-red-800 shrink-0 disabled:opacity-50"
+                  >
+                    {deletingRecordId === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         <SectionCard

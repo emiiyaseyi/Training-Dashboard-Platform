@@ -18,7 +18,7 @@ export default function HelpPage() {
     <div className="flex flex-col">
       <PageHeader title="Help & FAQ" subtitle="How the platform works, and who to contact if something looks wrong" />
 
-      <div className="p-8 space-y-6 max-w-4xl">
+      <div className="p-4 sm:p-8 space-y-6 max-w-4xl">
         <SectionCard icon={Mail} title="Survey Emails" description="Pre-, Post-1, and Post-2 training surveys" defaultOpen>
           <div>
             <FAQItem

@@ -81,7 +81,7 @@ export default function SubscriptionsDashboard() {
         }
       />
 
-      <div className="p-8 space-y-8">
+      <div className="p-4 sm:p-8 space-y-8">
         {isEmpty && <AlertBadge variant="info" message="No subscription data uploaded yet." />}
 
         <div ref={kpiRef}>

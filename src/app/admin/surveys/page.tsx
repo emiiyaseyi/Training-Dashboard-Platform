@@ -27,7 +27,7 @@ export default function AdminSurveysPage() {
           </Link>
         }
       />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-8 space-y-6">
         <SurveyResponseMirrorPanel />
         <TrainingDataMirrorPanel />
         <AlreadyAttendedTrainingsPanel onScheduleCreated={() => setScheduleRefreshKey((k) => k + 1)} />

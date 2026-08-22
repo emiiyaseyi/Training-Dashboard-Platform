@@ -80,7 +80,7 @@ export default function YetToAttendPage() {
   )
 
   if (error) return (
-    <div className="p-8 space-y-4">
+    <div className="p-4 sm:p-8 space-y-4">
       <AlertBadge variant="error" message={error} />
       <button onClick={() => load(filter)} className="text-sm text-blue-600 flex items-center gap-1.5">
         <RefreshCw className="w-3.5 h-3.5" /> Retry
@@ -105,7 +105,7 @@ export default function YetToAttendPage() {
         }
       />
 
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-8 space-y-6">
         {!data.hasRosterData ? (
           <AlertBadge
             variant="info"
