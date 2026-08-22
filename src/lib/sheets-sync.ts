@@ -30,6 +30,84 @@ async function dedupeTraining(rows: TrainingRow[]): Promise<TrainingRow[]> {
   return rows.filter((r) => !seen.has(key(r.staffId, r.training, r.cost)))
 }
 
+export interface TrainingRecordSnapshot {
+  staffId: string
+  staffName: string
+  businessUnit: string
+  cost: number
+  hours: number | null
+  trainingType: string | null
+  capability: string | null
+  month: string
+}
+
+const TRACKED_TRAINING_FIELDS: (keyof TrainingRecordSnapshot)[] = [
+  'staffId', 'staffName', 'businessUnit', 'cost', 'hours', 'trainingType', 'capability', 'month',
+]
+
+function trainingLooseKey(staffName: string, training: string, month: string): string {
+  return `${staffName.trim().toLowerCase()}|${training.trim().toLowerCase()}|${(month || '').trim().toLowerCase()}`
+}
+
+export interface TrainingRecordChangeCandidate {
+  existingRecordId: string
+  oldData: TrainingRecordSnapshot
+  newData: TrainingRecordSnapshot
+  changedFields: string[]
+}
+
+// Splits incoming sheet rows into genuinely new rows (import directly, same as before) and
+// probable edits to an already-imported row (staged for review rather than silently applied,
+// since the match is by name+training+month — Staff ID itself is excluded from the match key
+// precisely because it's sometimes the field being corrected — and could occasionally be a false
+// positive, e.g. two different people with the same name in the same training).
+async function reconcileTraining(
+  rows: TrainingRow[],
+  year: number
+): Promise<{ newRows: TrainingRow[]; changes: TrainingRecordChangeCandidate[] }> {
+  const existing = await prisma.trainingRecord.findMany({ where: { year } })
+
+  const exactKey = (staffId: string, training: string, cost: number) =>
+    `${normalizeStaffIdKey(staffId)}|${training.trim().toLowerCase()}|${roundNum(cost, 2)}`
+  const exactSeen = new Set(existing.map((r) => exactKey(r.staffId, r.training, r.cost)))
+
+  const looseMap = new Map<string, (typeof existing)[number]>()
+  for (const r of existing) {
+    const k = trainingLooseKey(r.staffName, r.training, r.month)
+    if (!looseMap.has(k)) looseMap.set(k, r) // first wins — ambiguous duplicates aren't worth resolving here
+  }
+
+  const newRows: TrainingRow[] = []
+  const changes: TrainingRecordChangeCandidate[] = []
+  const claimed = new Set<string>()
+
+  for (const row of rows) {
+    if (exactSeen.has(exactKey(row.staffId, row.training, row.cost))) continue // unchanged, already imported
+
+    const match = looseMap.get(trainingLooseKey(row.staffName, row.training, row.month))
+    if (match && !claimed.has(match.id)) {
+      claimed.add(match.id)
+      const oldData: TrainingRecordSnapshot = {
+        staffId: match.staffId, staffName: match.staffName, businessUnit: match.businessUnit,
+        cost: match.cost, hours: match.hours, trainingType: match.trainingType, capability: match.capability, month: match.month,
+      }
+      const newData: TrainingRecordSnapshot = {
+        staffId: row.staffId, staffName: row.staffName, businessUnit: normalizeBUName(row.businessUnit),
+        cost: row.cost, hours: row.hours || null, trainingType: row.trainingType || null, capability: row.capability || null, month: row.month,
+      }
+      const changedFields = TRACKED_TRAINING_FIELDS.filter((f) => String(oldData[f] ?? '') !== String(newData[f] ?? ''))
+      if (changedFields.length > 0) {
+        changes.push({ existingRecordId: match.id, oldData, newData, changedFields })
+      }
+      continue
+    }
+
+    newRows.push(row) // no match at all, loose or exact — a genuinely new row
+  }
+
+  return { newRows, changes }
+}
+
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
   // FeedbackRecord has no staffId field — the closest available fingerprint for "same response".
   const existing = await prisma.feedbackRecord.findMany({
@@ -162,6 +240,7 @@ export interface SyncResult {
   success: boolean
   imported: Record<string, number>
   errors: { sheet: string; message: string }[]
+  changesDetected: number
 }
 
 // Writes to the database — call after the admin has reviewed previewGoogleSheetsSync()'s output
@@ -170,12 +249,13 @@ export interface SyncResult {
 export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'manual'): Promise<SyncResult> {
   const config = await prisma.googleSheetsConfig.findFirst()
   if (!config?.spreadsheetUrl) {
-    return { success: false, imported: {}, errors: [{ sheet: 'Connection', message: 'No Google Sheet configured yet.' }] }
+    return { success: false, imported: {}, errors: [{ sheet: 'Connection', message: 'No Google Sheet configured yet.' }], changesDetected: 0 }
   }
 
   const errors: { sheet: string; message: string }[] = []
   const imported: Record<string, number> = {}
   const batchIds: string[] = []
+  let changesDetected = 0
 
   let connection: SheetsConnection
   try {
@@ -185,6 +265,7 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
       success: false,
       imported: {},
       errors: [{ sheet: 'Connection', message: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.' }],
+      changesDetected: 0,
     }
   }
 
@@ -209,7 +290,25 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
         const { rows, errors: parseErrors, warnings } = parseTrainingExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const newRows = await dedupeTraining(rows)
+
+        const year = new Date().getFullYear()
+        const { newRows, changes } = await reconcileTraining(rows, year)
+
+        // Refresh, not append — re-detecting the same edit on a later sync should update the
+        // proposal (or clear it if it's since resolved), not pile up duplicate proposals.
+        await prisma.trainingRecordChange.deleteMany({ where: { existingRecordId: { in: changes.map((c) => c.existingRecordId) } } })
+        if (changes.length > 0) {
+          await prisma.trainingRecordChange.createMany({
+            data: changes.map((c) => ({
+              existingRecordId: c.existingRecordId,
+              oldData: JSON.stringify(c.oldData),
+              newData: JSON.stringify(c.newData),
+              changedFields: JSON.stringify(c.changedFields),
+            })),
+          })
+        }
+        changesDetected += changes.length
+
         if (newRows.length === 0) { imported.training = 0; continue }
         const result = await importTrainingRows(newRows, filename, null, warnings)
         imported.training = result.recordCount
@@ -279,5 +378,5 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
     await prisma.googleSheetsSyncLog.deleteMany({ where: { id: { in: staleLogEntries.map((e) => e.id) } } })
   }
 
-  return { success, imported, errors }
+  return { success, imported, errors, changesDetected }
 }

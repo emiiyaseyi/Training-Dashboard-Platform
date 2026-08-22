@@ -13,6 +13,7 @@ import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemp
 import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
 import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
+import { TrainingRecordChangesPanel } from '@/components/admin/TrainingRecordChangesPanel'
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
 import { StaffDataQuality } from '@/components/admin/StaffDataQuality'
 import { SmtpSettingsPanel } from '@/components/admin/SmtpSettingsPanel'
@@ -668,6 +669,9 @@ export default function AdminPage() {
 
         {/* Live Google Sheets data source */}
         <GoogleSheetsPanel />
+
+        {/* Edits a re-sync detected in already-imported Training Data, held for accept/dismiss */}
+        <TrainingRecordChangesPanel />
 
         {/* Budget calculation settings */}
         <BudgetSettingsPanel />

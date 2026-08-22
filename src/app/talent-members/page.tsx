@@ -53,6 +53,7 @@ export default function TalentMembersPage() {
   const [vendorDraft, setVendorDraft] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
+  const [rechecking, setRechecking] = useState(false)
 
   const load = useCallback(async (y: number) => {
     setLoading(true)
@@ -86,6 +87,24 @@ export default function TalentMembersPage() {
       }
     } finally {
       setSavingVendor(false)
+    }
+  }
+
+  const refreshFromSource = async () => {
+    setRechecking(true)
+    try {
+      const res = await fetch('/api/admin/google-sheets/sync', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      await load(year)
+      if (!res.ok) {
+        alert(data.error || 'Refresh failed — you may not have permission to trigger a sync (Admin → Live Data Source access is required).')
+      } else if (data.changesDetected > 0) {
+        alert(`Re-synced. ${data.changesDetected} edit${data.changesDetected === 1 ? '' : 's'} to already-imported Training Data ${data.changesDetected === 1 ? 'was' : 'were'} detected — review under Admin → Training Data Changes to Review.`)
+      }
+    } catch {
+      alert('Failed to refresh from the source sheet.')
+    } finally {
+      setRechecking(false)
     }
   }
 
@@ -196,16 +215,26 @@ export default function TalentMembersPage() {
 
         {data.excludedAttendance.length > 0 && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800 space-y-2">
-            <p className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-              <span>
-                {data.excludedAttendance.length} row{data.excludedAttendance.length === 1 ? '' : 's'} in the 2026 Training Data tagged
-                Training Type = TM didn&apos;t count toward Staff Trained — the Staff ID doesn&apos;t match anyone currently on the TM
-                roster. If you&apos;ve already corrected the Staff ID in the sheet and re-synced, this is the old row: syncing only adds
-                new rows, it never updates or removes an existing one, so the corrected version exists as a separate row now and this
-                one is safe to remove.
-              </span>
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                <span>
+                  {data.excludedAttendance.length} row{data.excludedAttendance.length === 1 ? '' : 's'} in the 2026 Training Data tagged
+                  Training Type = TM didn&apos;t count toward Staff Trained — the Staff ID doesn&apos;t match anyone currently on the TM
+                  roster. If you&apos;ve corrected this in the sheet, click Refresh — a stale row won&apos;t clear on its own (syncing only
+                  adds new rows, it never updates or removes an existing one), but once the corrected version is confirmed present, Remove
+                  clears the old one out.
+                </span>
+              </p>
+              <button
+                onClick={refreshFromSource}
+                disabled={rechecking}
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50 shrink-0"
+              >
+                {rechecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Refresh &amp; Recheck
+              </button>
+            </div>
             <div className="space-y-1.5 pl-6">
               {data.excludedAttendance.map((e) => (
                 <div key={e.id} className="flex items-center justify-between gap-3 bg-white border border-amber-100 rounded-lg px-3 py-2 text-xs">
