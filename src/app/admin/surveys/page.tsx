@@ -28,12 +28,12 @@ export default function AdminSurveysPage() {
         }
       />
       <div className="p-4 sm:p-8 space-y-6">
+        <SurveyInsightsPanel />
         <SurveyResponseMirrorPanel />
         <TrainingDataMirrorPanel />
         <AlreadyAttendedTrainingsPanel onScheduleCreated={() => setScheduleRefreshKey((k) => k + 1)} />
         <SurveyAutomationPanel key={scheduleRefreshKey} />
         <SurveyQuestionEditor />
-        <SurveyInsightsPanel />
         <SurveySendLogPanel />
       </div>
     </div>
