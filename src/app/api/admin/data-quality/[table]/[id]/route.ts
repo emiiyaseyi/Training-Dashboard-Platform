@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { isBlankStaffId, hasMatchingIssue } from '@/lib/data-quality-audit'
 
 // Fixes one flagged Data Quality Audit record in place, and optionally propagates the same fix
 // to every other record in the same table that has the exact same issue. "Same" is judged by
@@ -16,13 +17,11 @@ import { normalizeBUName } from '@/lib/bu-normalizer'
 //    touched — nothing is ever auto-applied silently.
 // Feedback has no Staff ID at all, so it matches by the exact (old) Training Title instead, and
 // only for propagating a Business Unit fix.
+// The "does this OTHER record show the same issue" rule itself (hasMatchingIssue) is shared and
+// unit-tested in src/lib/data-quality-audit.test.ts, rather than re-verified once per table here.
 
 type Updates = Record<string, string>
 interface FixResult { updated: number; similarCount: number; matchedBy?: 'staffId' | 'name' }
-
-function isBlankStaffId(id: string): boolean {
-  return !id || id.startsWith('UNKNOWN_')
-}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ table: string; id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
@@ -78,11 +77,7 @@ async function fixTraining(id: string, updates: Updates, applyToSimilar: boolean
   })
   const similarIds = candidates
     .filter((c) => c.id !== id)
-    .filter((c) =>
-      (data.staffId !== undefined && isBlankStaffId(c.staffId)) ||
-      (data.businessUnit !== undefined && !c.businessUnit) ||
-      (data.training !== undefined && !c.training)
-    )
+    .filter((c) => hasMatchingIssue(c, Object.keys(data)))
     .map((c) => c.id)
 
   if (!applyToSimilar || similarIds.length === 0) {
@@ -111,11 +106,7 @@ async function fixSubscription(id: string, updates: Updates, applyToSimilar: boo
   })
   const similarIds = candidates
     .filter((c) => c.id !== id)
-    .filter((c) =>
-      (data.staffId !== undefined && isBlankStaffId(c.staffId)) ||
-      (data.businessUnit !== undefined && !c.businessUnit) ||
-      (data.membershipOrg !== undefined && !c.membershipOrg)
-    )
+    .filter((c) => hasMatchingIssue(c, Object.keys(data)))
     .map((c) => c.id)
 
   if (!applyToSimilar || similarIds.length === 0) {
@@ -143,7 +134,7 @@ async function fixKSS(id: string, updates: Updates, applyToSimilar: boolean): Pr
   })
   const similarIds = candidates
     .filter((c) => c.id !== id)
-    .filter((c) => (data.staffId !== undefined && isBlankStaffId(c.staffId)) || (data.businessUnit !== undefined && !c.businessUnit))
+    .filter((c) => hasMatchingIssue(c, Object.keys(data)))
     .map((c) => c.id)
 
   if (!applyToSimilar || similarIds.length === 0) {
@@ -171,7 +162,7 @@ async function fixManagerReview(id: string, updates: Updates, applyToSimilar: bo
   })
   const similarIds = candidates
     .filter((c) => c.id !== id)
-    .filter((c) => (data.staffId !== undefined && isBlankStaffId(c.staffId)) || (data.businessUnit !== undefined && !c.businessUnit))
+    .filter((c) => hasMatchingIssue(c, Object.keys(data)))
     .map((c) => c.id)
 
   if (!applyToSimilar || similarIds.length === 0) {
@@ -201,7 +192,10 @@ async function fixFeedback(id: string, updates: Updates, applyToSimilar: boolean
     where: { trainingTitle: current.trainingTitle },
     select: { id: true, businessUnit: true },
   })
-  const similarIds = candidates.filter((c) => c.id !== id && !c.businessUnit).map((c) => c.id)
+  const similarIds = candidates
+    .filter((c) => c.id !== id)
+    .filter((c) => hasMatchingIssue(c, ['businessUnit']))
+    .map((c) => c.id)
 
   if (!applyToSimilar || similarIds.length === 0) {
     return { updated: 1, similarCount: applyToSimilar ? 0 : similarIds.length }
