@@ -528,28 +528,31 @@ export async function pushVendorUpdatesToSheet(): Promise<PushVendorResult> {
   const year = new Date().getFullYear()
   const records = await prisma.trainingRecord.findMany({
     where: { year, vendor: { not: null } },
-    select: { staffName: true, training: true, month: true, vendor: true },
+    select: { staffId: true, staffName: true, training: true, month: true, vendor: true },
   })
   if (records.length === 0) {
     return { success: true, updated: 0, notFound: 0 }
   }
 
+  // Staff ID is the key here (not staffName, unlike reconcileTraining's loose key) — vendor
+  // fixes never touch Staff ID, so it's trustworthy, and it's far less collision-prone than a
+  // full-name match (no risk of two different "Name" formats between the DB and the sheet).
   try {
-    const { found, notFound } = await batchUpdateRowsByCompoundKey(
+    const { found, notFound, error } = await batchUpdateRowsByCompoundKey(
       connection.spreadsheetId,
       sheetName,
       connection.accessToken,
       [
-        ['name', 'staffname', 'employeename', 'fullname'],
+        ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'],
         ['training', 'trainingname', 'trainingtitle', 'course', 'programme'],
         ['month', 'period', 'trainingmonth'],
       ],
       records.map((r) => ({
-        keyParts: [r.staffName, r.training, r.month],
+        keyParts: [r.staffId, r.training, r.month],
         updates: [{ columnCandidates: ['vendor', 'trainingvendor', 'provider', 'facilitator', 'trainer'], value: r.vendor || '' }],
       }))
     )
-    return { success: true, updated: found, notFound }
+    return { success: !error, updated: found, notFound, error }
   } catch (err) {
     return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
   }
