@@ -1,11 +1,21 @@
 import { prisma } from '@/lib/prisma'
 
+export interface TableAuditSample {
+  id: string
+  summary: string
+  issues: string[]
+  // Current values of the fields this table's checks can flag, keyed by field name — lets the
+  // admin fix a flagged record in place instead of just seeing that it's broken. Omitted (left
+  // undefined) for tables with no in-place fix UI yet.
+  fields?: Record<string, string>
+}
+
 export interface TableAudit {
   table: string
   label: string
   totalRecords: number
   issueCount: number
-  samples: { summary: string; issues: string[] }[]
+  samples: TableAuditSample[]
 }
 
 // Flags the specific, common failure patterns this app is known to produce when a source file
@@ -42,12 +52,14 @@ async function auditTraining(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: `${r.staffName || '(no name)'} — ${r.training || '(no training name)'}`,
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
         !r.training && 'Training name missing',
       ].filter((x): x is string => !!x),
+      fields: { staffId: r.staffId.startsWith('UNKNOWN_') ? '' : r.staffId, businessUnit: r.businessUnit, training: r.training },
     })),
   }
 }
@@ -65,8 +77,10 @@ async function auditFeedback(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: r.trainingTitle || '(no training title)',
       issues: [!r.businessUnit && 'Business Unit missing', !r.trainingTitle && 'Training Title missing'].filter((x): x is string => !!x),
+      fields: { businessUnit: r.businessUnit, trainingTitle: r.trainingTitle },
     })),
   }
 }
@@ -86,12 +100,14 @@ async function auditSubscription(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: `${r.staffName || '(no name)'} — ${r.membershipOrg || '(no organization)'}`,
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
         !r.membershipOrg && 'Membership Organization missing',
       ].filter((x): x is string => !!x),
+      fields: { staffId: r.staffId.startsWith('UNKNOWN_') ? '' : r.staffId, businessUnit: r.businessUnit, membershipOrg: r.membershipOrg },
     })),
   }
 }
@@ -111,11 +127,13 @@ async function auditKSS(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: r.staffName || '(no name)',
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
       ].filter((x): x is string => !!x),
+      fields: { staffId: r.staffId.startsWith('UNKNOWN_') ? '' : r.staffId, businessUnit: r.businessUnit },
     })),
   }
 }
@@ -133,18 +151,23 @@ async function auditRoster(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: [r.firstName, r.lastName].filter(Boolean).join(' ') || '(no name)',
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
         !r.email && 'Email missing (blocks Survey Automation for this person)',
       ].filter((x): x is string => !!x),
+      // No `fields` here — fixed via the dedicated Staff Data Quality panel above, which already
+      // has full click-to-edit (including Line Manager lookup) for this same table.
     })),
   }
 }
 
 async function auditManagerReview(): Promise<TableAudit> {
-  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { impactScore: { lte: 0 } }] }
+  // Impact Score, like Training Cost, has no way to distinguish a deliberate 0 from a blank
+  // cell — see the comment in auditTraining. No longer flagged for the same reason.
+  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] }
   const [total, issueCount, problems] = await Promise.all([
     prisma.managerReviewRecord.count(),
     prisma.managerReviewRecord.count({ where }),
@@ -156,12 +179,13 @@ async function auditManagerReview(): Promise<TableAudit> {
     totalRecords: total,
     issueCount,
     samples: problems.map((r) => ({
+      id: r.id,
       summary: `${r.staffName || '(no name)'} — ${r.training || '(no training)'}`,
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
-        r.impactScore <= 0 && 'Impact Score is zero or missing',
       ].filter((x): x is string => !!x),
+      fields: { staffId: r.staffId.startsWith('UNKNOWN_') ? '' : r.staffId, businessUnit: r.businessUnit },
     })),
   }
 }
