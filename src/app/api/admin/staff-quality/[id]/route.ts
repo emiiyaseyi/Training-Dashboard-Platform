@@ -13,9 +13,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { staffId, firstName, middleName, lastName, email, businessUnit, lineManagerStaffId } = body as {
+    const { staffId, firstName, middleName, lastName, email, businessUnit, lineManagerStaffId, department, role, employmentType, active } = body as {
       staffId?: string; firstName?: string; middleName?: string; lastName?: string
       email?: string; businessUnit?: string; lineManagerStaffId?: string
+      department?: string; role?: string; employmentType?: string; active?: boolean
     }
 
     const record = await prisma.staffRosterRecord.update({
@@ -28,6 +29,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(email !== undefined && { email: email.trim() || null }),
         ...(businessUnit !== undefined && { businessUnit: normalizeBUName(businessUnit.trim()) }),
         ...(lineManagerStaffId !== undefined && { lineManagerStaffId: lineManagerStaffId.trim() || null }),
+        ...(department !== undefined && { department: department.trim() || null }),
+        ...(role !== undefined && { role: role.trim() || null }),
+        ...(employmentType !== undefined && { employmentType: employmentType.trim() || null }),
+        ...(active !== undefined && { active }),
       },
     })
     invalidateComprehensiveStaffListCache() // this DB edit alone changes what loadRosterDirectory() returns, regardless of the sheet sync below
@@ -84,5 +89,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch (err) {
     console.error('[admin/staff-quality/[id] PUT]', err)
     return NextResponse.json({ error: 'Failed to update staff record.' }, { status: 500 })
+  }
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await requirePermission('admin-settings', 'admin')
+  if (gate instanceof NextResponse) return gate
+
+  try {
+    const { id } = await params
+    await prisma.staffRosterRecord.delete({ where: { id } })
+    invalidateComprehensiveStaffListCache()
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('[admin/staff-quality/[id] DELETE]', err)
+    return NextResponse.json({ error: 'Failed to delete staff record.' }, { status: 500 })
   }
 }
