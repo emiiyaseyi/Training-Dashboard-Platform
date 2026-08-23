@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
-import { VendorPicker } from '@/components/ui/VendorPicker'
 
 interface TrainingRecordRow {
   id: string
@@ -40,6 +39,8 @@ interface RosterStaff {
   businessUnit: string
 }
 
+interface NamedOption { id: string; name: string }
+
 export function TrainingRecordsTab() {
   const [groups, setGroups] = useState<TrainingGroup[]>([])
   const [total, setTotal] = useState(0)
@@ -62,7 +63,11 @@ export function TrainingRecordsTab() {
   // Pre/Post-1/Post-2 sends, not just a static data row).
   const [addingNew, setAddingNew] = useState(false)
   const [directory, setDirectory] = useState<RosterStaff[]>([])
-  const [newTraining, setNewTraining] = useState({ trainingName: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+  const [businessUnits, setBusinessUnits] = useState<NamedOption[]>([])
+  const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
+  const [capabilities, setCapabilities] = useState<NamedOption[]>([])
+  const [vendors, setVendors] = useState<NamedOption[]>([])
+  const [newTraining, setNewTraining] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
   const [attendeeQuery, setAttendeeQuery] = useState('')
   const [pendingAttendees, setPendingAttendees] = useState<RosterStaff[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
@@ -88,6 +93,10 @@ export function TrainingRecordsTab() {
 
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setDirectory(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/training-types').then((r) => r.json()).then((d) => setTrainingTypes(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/capabilities').then((r) => r.json()).then((d) => setCapabilities(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/vendors').then((r) => r.json()).then((d) => setVendors(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
   const attendeeResults = useMemo(() => {
@@ -98,15 +107,24 @@ export function TrainingRecordsTab() {
   }, [attendeeQuery, directory, pendingAttendees])
 
   const resetNewTrainingForm = () => {
-    setNewTraining({ trainingName: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+    setNewTraining({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
     setPendingAttendees([])
     setAttendeeQuery('')
     setAddingNew(false)
     setCreateError('')
   }
 
+  // First attendee picked sets the Business Unit automatically, same convention as Survey
+  // Automation's own form — still editable via the dropdown in case a training intentionally
+  // spans multiple BUs.
+  const addAttendee = (s: RosterStaff) => {
+    setPendingAttendees((prev) => [...prev, s])
+    setAttendeeQuery('')
+    setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: s.businessUnit }))
+  }
+
   const createSchedule = async () => {
-    if (!newTraining.trainingName.trim() || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0) return
+    if (!newTraining.trainingName.trim() || !newTraining.businessUnit || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0) return
     setCreatingSchedule(true)
     setCreateError('')
     try {
@@ -115,7 +133,7 @@ export function TrainingRecordsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           trainingName: newTraining.trainingName.trim(),
-          businessUnit: pendingAttendees[0].businessUnit,
+          businessUnit: newTraining.businessUnit,
           startDate: newTraining.startDate, endDate: newTraining.endDate,
           hours: newTraining.hours ? Number(newTraining.hours) : undefined,
           costPerAttendee: newTraining.costPerAttendee ? Number(newTraining.costPerAttendee) : undefined,
@@ -269,42 +287,24 @@ export function TrainingRecordsTab() {
             <Calendar className="w-4 h-4 text-slate-400" /> New Training Schedule
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Training Name</label>
-              <input value={newTraining.trainingName} onChange={(e) => setNewTraining({ ...newTraining, trainingName: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">Start Date</label>
-                <input type="date" value={newTraining.startDate} onChange={(e) => setNewTraining({ ...newTraining, startDate: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1.5">End Date</label>
-                <input type="date" value={newTraining.endDate} onChange={(e) => setNewTraining({ ...newTraining, endDate: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Hours</label>
-              <input type="number" value={newTraining.hours} onChange={(e) => setNewTraining({ ...newTraining, hours: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Cost / Attendee</label>
-              <input type="number" value={newTraining.costPerAttendee} onChange={(e) => setNewTraining({ ...newTraining, costPerAttendee: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Training Type</label>
-              <input value={newTraining.trainingType} onChange={(e) => setNewTraining({ ...newTraining, trainingType: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Vendor</label>
-              <VendorPicker value={newTraining.vendor} onChange={(v) => setNewTraining({ ...newTraining, vendor: v })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
-            </div>
+            <input
+              placeholder="Training name"
+              value={newTraining.trainingName}
+              onChange={(e) => setNewTraining({ ...newTraining, trainingName: e.target.value })}
+              className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+            />
+            <select
+              value={newTraining.businessUnit}
+              onChange={(e) => setNewTraining({ ...newTraining, businessUnit: e.target.value })}
+              className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+            >
+              <option value="">Business Unit — auto-fills once you add an attendee below</option>
+              {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+            </select>
           </div>
 
           <div className="relative">
-            <label className="block text-xs font-medium text-slate-600 mb-1.5">Attendees — search by name, email, or Staff ID</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">Attendees — search by name, email, or Staff ID (add as many as are going)</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
@@ -316,7 +316,7 @@ export function TrainingRecordsTab() {
               {attendeeResults.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {attendeeResults.map((s) => (
-                    <button key={s.staffId} onClick={() => { setPendingAttendees([...pendingAttendees, s]); setAttendeeQuery('') }} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2">
+                    <button key={s.staffId} onClick={() => addAttendee(s)} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2">
                       <span className="text-slate-700">{s.name}</span>
                       <span className="text-slate-400">{s.staffId} · {s.businessUnit}</span>
                     </button>
@@ -336,11 +336,57 @@ export function TrainingRecordsTab() {
             )}
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="text-xs text-slate-500">
+              Start date
+              <input type="date" value={newTraining.startDate} onChange={(e) => setNewTraining({ ...newTraining, startDate: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+            </label>
+            <label className="text-xs text-slate-500">
+              End date
+              <input type="date" value={newTraining.endDate} onChange={(e) => setNewTraining({ ...newTraining, endDate: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+            </label>
+            <label className="text-xs text-slate-500">
+              Hours
+              <input type="number" value={newTraining.hours} onChange={(e) => setNewTraining({ ...newTraining, hours: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <label className="text-xs text-slate-500">
+              Cost per attendee
+              <input type="number" value={newTraining.costPerAttendee} onChange={(e) => setNewTraining({ ...newTraining, costPerAttendee: e.target.value })} placeholder="Applied to every attendee's row" className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+            </label>
+            <label className="text-xs text-slate-500">
+              Training Type
+              <select value={newTraining.trainingType} onChange={(e) => setNewTraining({ ...newTraining, trainingType: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1">
+                <option value="">Select…</option>
+                {trainingTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-slate-500">
+              Differentiating Capability
+              <select value={newTraining.capability} onChange={(e) => setNewTraining({ ...newTraining, capability: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1">
+                <option value="">Select…</option>
+                {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-slate-500">
+              Vendor
+              <select value={newTraining.vendor} onChange={(e) => setNewTraining({ ...newTraining, vendor: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1">
+                <option value="">Select…</option>
+                {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+              </select>
+            </label>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Cost, type, and capability feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added.
+            Vendor is used by the Talent Members report (Admin → Vendors manages this list). All are set once here and apply to the whole schedule.
+          </p>
+
           {createError && <p className="text-xs text-red-600">{createError}</p>}
           <div className="flex items-center gap-2">
             <button
               onClick={createSchedule}
-              disabled={creatingSchedule || !newTraining.trainingName.trim() || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0}
+              disabled={creatingSchedule || !newTraining.trainingName.trim() || !newTraining.businessUnit || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {creatingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
@@ -404,10 +450,23 @@ export function TrainingRecordsTab() {
                                     <td className="px-2.5 py-1.5"><input value={draft.training} onChange={(e) => setDraft({ ...draft, training: e.target.value })} className="w-36 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input type="number" value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className="w-20 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input type="number" value={draft.hours} onChange={(e) => setDraft({ ...draft, hours: e.target.value })} className="w-16 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5"><input value={draft.trainingType} onChange={(e) => setDraft({ ...draft, trainingType: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5"><input value={draft.capability} onChange={(e) => setDraft({ ...draft, capability: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5 relative">
-                                      <VendorPicker value={draft.vendor} onChange={(v) => setDraft({ ...draft, vendor: v })} className="w-28 border border-slate-200 rounded px-1.5 py-1 text-xs" />
+                                    <td className="px-2.5 py-1.5">
+                                      <select value={draft.trainingType} onChange={(e) => setDraft({ ...draft, trainingType: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1">
+                                        <option value="">—</option>
+                                        {trainingTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                      </select>
+                                    </td>
+                                    <td className="px-2.5 py-1.5">
+                                      <select value={draft.capability} onChange={(e) => setDraft({ ...draft, capability: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1">
+                                        <option value="">—</option>
+                                        {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                      </select>
+                                    </td>
+                                    <td className="px-2.5 py-1.5">
+                                      <select value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="w-28 border border-slate-200 rounded px-1.5 py-1">
+                                        <option value="">—</option>
+                                        {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                                      </select>
                                     </td>
                                     <td className="px-2.5 py-1.5">
                                       <div className="flex items-center gap-1 justify-end">

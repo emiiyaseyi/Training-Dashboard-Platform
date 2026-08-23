@@ -21,6 +21,7 @@ function attendeeMirrorFields(attendee: TrainingScheduleAttendee, schedule: Trai
     { label: 'Learning Hours', candidates: ['hoursoflearning', 'learningduration', 'traininghours', 'durationhours'], value: schedule.hours ?? 0 },
     { label: 'Differentiating Capability', candidates: ['capability', 'competency'], value: schedule.capability || '' },
     { label: 'Training Type', candidates: ['type', 'category'], value: schedule.trainingType || '' },
+    { label: 'Vendor', candidates: ['vendor', 'provider', 'facilitator', 'trainer'], value: schedule.vendor || '' },
     { label: 'Start Date', candidates: [], value: schedule.startDate.toISOString().slice(0, 10) },
     { label: 'End Date', candidates: [], value: schedule.endDate.toISOString().slice(0, 10) },
   ]

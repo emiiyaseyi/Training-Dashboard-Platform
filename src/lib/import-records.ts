@@ -66,6 +66,7 @@ export async function importTrainingRows(rows: TrainingRow[], filename: string, 
       hours: r.hours > 0 ? r.hours : null,
       trainingType: r.trainingType || null,
       capability: r.capability || null,
+      vendor: r.vendor || null,
       batchId: batch.id,
     })),
   })
