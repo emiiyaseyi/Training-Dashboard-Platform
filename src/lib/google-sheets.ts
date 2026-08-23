@@ -208,13 +208,21 @@ export async function fetchSheetHeaderRow(spreadsheetId: string, sheetName: stri
 // submissions into a Google Sheet for the admin's own visibility, alongside the database write.
 // Requires the spreadsheet to be shared with the service account as Editor, not just Viewer.
 export async function appendRowToSheet(spreadsheetId: string, sheetName: string, accessToken: string, values: (string | number)[]): Promise<void> {
+  return appendRowsToSheet(spreadsheetId, sheetName, accessToken, [values])
+}
+
+// Appends multiple rows in one API call — used wherever several rows need mirroring at once (e.g.
+// every attendee added to a training schedule in one go), so the cost is one round-trip for the
+// whole batch instead of one per row.
+export async function appendRowsToSheet(spreadsheetId: string, sheetName: string, accessToken: string, rows: (string | number)[][]): Promise<void> {
+  if (rows.length === 0) return
   const range = `${sheetName}!A1`
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [values] }),
+      body: JSON.stringify({ values: rows }),
     }
   )
   if (!res.ok) {
@@ -475,6 +483,72 @@ export async function appendMirrorRow(
   }
 
   await appendRowToSheet(spreadsheetId, sheetName, accessToken, row)
+}
+
+// Batch sibling of appendMirrorRow — for mirroring several rows that all share the same field
+// shape (e.g. every attendee just added to one training schedule) in one read-headers +
+// (at most one) extend-headers + one append, instead of repeating that whole sequence per row.
+// Column alignment is computed once from the first row's fields, since every row in a batch call
+// has identical labels/candidates and only the values differ.
+export async function appendMirrorRows(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  fieldsList: MirrorField[][]
+): Promise<void> {
+  if (fieldsList.length === 0) return
+
+  const existingHeaders = await fetchSheetHeaderRow(spreadsheetId, sheetName, accessToken)
+  const normHeaders = existingHeaders.map(normaliseHeader)
+  const fields = fieldsList[0]
+  const fieldCandidates = fields.map((f) => [normaliseHeader(f.label), ...f.candidates.map(normaliseHeader)].filter(Boolean))
+  const used = new Set<number>()
+  const colForField: number[] = new Array(fields.length).fill(-1)
+
+  const matchFor = (h: string, allowSubstring: boolean): number => {
+    for (let i = 0; i < fields.length; i++) {
+      if (used.has(i)) continue
+      const cands = fieldCandidates[i]
+      if (cands.some((c) => c === h)) return i
+      if (allowSubstring && cands.some((c) => c.length >= 4 && (h.includes(c) || c.includes(h)))) return i
+    }
+    return -1
+  }
+
+  normHeaders.forEach((h, idx) => {
+    const m = matchFor(h, false)
+    if (m >= 0) { colForField[m] = idx; used.add(m) }
+  })
+  normHeaders.forEach((h, idx) => {
+    if (colForField.includes(idx)) return
+    const m = matchFor(h, true)
+    if (m >= 0) { colForField[m] = idx; used.add(m) }
+  })
+
+  const unmatchedFieldIdx = fields.map((_, i) => i).filter((i) => !used.has(i))
+  let totalCols = existingHeaders.length
+  if (unmatchedFieldIdx.length > 0) {
+    const startCol = columnLetter(existingHeaders.length)
+    const endCol = columnLetter(existingHeaders.length + unmatchedFieldIdx.length - 1)
+    await updateSheetRange(
+      spreadsheetId, sheetName, accessToken,
+      `${sheetName}!${startCol}1:${endCol}1`,
+      [unmatchedFieldIdx.map((i) => fields[i].label)]
+    )
+    unmatchedFieldIdx.forEach((fieldIdx, k) => { colForField[fieldIdx] = totalCols + k })
+    totalCols += unmatchedFieldIdx.length
+  }
+
+  const rows = fieldsList.map((rowFields) => {
+    const row: (string | number)[] = new Array(totalCols).fill('')
+    rowFields.forEach((f, i) => {
+      const col = colForField[i]
+      if (col >= 0) row[col] = f.value
+    })
+    return row
+  })
+
+  await appendRowsToSheet(spreadsheetId, sheetName, accessToken, rows)
 }
 
 // Checks that at least one of `candidates` appears (as substring, either direction) among `headers`.
