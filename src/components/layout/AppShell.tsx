@@ -34,14 +34,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMobileNavOpen(false) }, [pathname])
 
   if (isPublicPage) {
-    return <main className="w-full min-h-screen overflow-y-auto">{children}</main>
+    return <main className="w-full min-h-screen overflow-y-auto overflow-x-hidden">{children}</main>
   }
 
   if (status === 'loading' || status === 'unauthenticated' || !session?.user) {
     return (
       <>
         <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-        <main className="flex-1 overflow-y-auto flex items-center justify-center">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
         </main>
       </>
@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-sm font-semibold text-slate-800 truncate">Learning Intel</span>
         </div>
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {allowed ? (
             children
           ) : (
