@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaff, resolveLineManager } from '@/lib/staff-directory'
-import { mirrorAttendeeToTrainingData } from '@/lib/training-data-mirror'
+import { mirrorAttendeesToTrainingData } from '@/lib/training-data-mirror'
 import type { TrainingScheduleAttendee } from '@prisma/client'
 
 // Accepts a list of Staff IDs or emails, resolves each against the roster (name, email, line
@@ -52,22 +52,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (!staff.email) noEmail.push(staff.name)
     }
 
-    // Mirror each newly-added attendee into the Training Data sheet. Outcome is persisted on the
-    // attendee itself (not just logged) so a failure is visible to the admin and retryable —
-    // this schedule is just another way of getting rows into that same tab, not a separate
-    // pipeline, so no direct TrainingRecord write or dedup handling is needed here.
+    // Mirror all newly-added attendees into the Training Data sheet in one batch call — one
+    // connect + read-headers + append round trip for the whole group, not one per attendee (which
+    // is what made adding several people to a schedule slow). Outcome is persisted per attendee
+    // (not just logged) so a failure is visible to the admin and retryable — this schedule is just
+    // another way of getting rows into that same tab, not a separate pipeline, so no direct
+    // TrainingRecord write or dedup handling is needed here.
     // Skipped for schedules sourced from Already Attended Trainings — those attendees came FROM
     // an existing Training Data row, so mirroring them again would create a duplicate.
-    if (!schedule.sourcedFromHistoricalData) {
-      for (const attendee of createdAttendees) {
-        const result = await mirrorAttendeeToTrainingData(attendee, schedule)
-        if (result.attempted) {
-          await prisma.trainingScheduleAttendee.update({
+    if (!schedule.sourcedFromHistoricalData && createdAttendees.length > 0) {
+      const results = await mirrorAttendeesToTrainingData(createdAttendees, schedule)
+      await Promise.all(
+        createdAttendees.map((attendee) => {
+          const result = results.get(attendee.id)
+          if (!result?.attempted) return null
+          return prisma.trainingScheduleAttendee.update({
             where: { id: attendee.id },
             data: { trainingDataSyncedAt: result.success ? new Date() : null, trainingDataSyncError: result.success ? null : result.message },
           })
-        }
-      }
+        })
+      )
     }
 
     return NextResponse.json({ added: added.length, notFound, noEmail })
