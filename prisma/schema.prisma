@@ -260,6 +260,8 @@ model StaffRosterRecord {
   businessUnit      String
   role              String?
   department        String?
+  employmentType    String? // "Full-Time" | "Part-Time" | "Intern" | "Contract" — set via the Employees page, not part of the original Excel upload columns
+  active            Boolean   @default(true) // toggled via "Deactivate"/"Reactivate" on the Employees page — a leaver is deactivated, not deleted, so historical training/analytics referencing them stays intact
   employmentDate    DateTime?
   confirmed         Boolean   @default(true)
   batchId           String
