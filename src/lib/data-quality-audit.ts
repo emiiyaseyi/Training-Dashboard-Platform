@@ -18,6 +18,26 @@ export interface TableAudit {
   samples: TableAuditSample[]
 }
 
+// A Staff ID that fell back to the upload-time "UNKNOWN_N" placeholder isn't a real identifier —
+// it's assigned per row, not per person, so two different people can share one. Used both to
+// decide whether a Staff ID is trustworthy enough to match OTHER records by (see
+// hasMatchingIssue below), and by the audit functions above to flag it as missing in the first place.
+export function isBlankStaffId(id: string): boolean {
+  return !id || id.startsWith('UNKNOWN_')
+}
+
+// Shared by every "click to fix, optionally propagate" fix function in
+// src/app/api/admin/data-quality/[table]/[id]/route.ts: given a candidate record and the list of
+// field names just fixed on another record, does this candidate show the SAME issue for any of
+// those fields (so it's a legitimate propagation target), or does it already have a real value
+// (so propagating would overwrite something legitimately different)?
+export function hasMatchingIssue(candidate: Record<string, unknown>, fixedFields: string[]): boolean {
+  return fixedFields.some((field) => {
+    if (field === 'staffId') return isBlankStaffId(String(candidate.staffId ?? ''))
+    return !candidate[field]
+  })
+}
+
 // Flags the specific, common failure patterns this app is known to produce when a source file
 // is missing a column or has blank cells: a staffId that fell back to "UNKNOWN_N", a blank
 // Business Unit, a zero/blank amount, etc. One row can have several flags at once.
