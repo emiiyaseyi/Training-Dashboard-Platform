@@ -355,6 +355,20 @@ export default function AdminPage() {
         {/* ── Tab: Business Units & Budget ── */}
         {tab === 'business-units' && (
           <div className="space-y-8">
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
+              <div className="flex items-start gap-3">
+                <Settings className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Configuration Guide</p>
+                  <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                    Set the approved annual training budget and total headcount for each business unit. These values power the budget utilisation,
+                    coverage ratio, and forecasting calculations across all dashboards. Business Units are auto-created when data is uploaded —
+                    set their values here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div id="bu-budget" className={sectionWrapClass('bu-budget')}>
               {loading ? (
                 <div className="flex items-center gap-2 text-sm text-slate-400">
