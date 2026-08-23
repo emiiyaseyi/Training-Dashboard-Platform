@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
-import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail } from 'lucide-react'
+import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail, Search } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -34,6 +34,41 @@ interface CSVRow { name: string; staffCount: number; budget: number }
 interface CSVImportResult { imported: number; skipped: number; errors: string[] }
 interface YearConfig { id: string; buName: string; year: number; budget: number; staffCount: number }
 
+type TabKey = 'business-units' | 'taxonomies' | 'data-quality' | 'people' | 'communication'
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'business-units', label: 'Business Units & Budget' },
+  { key: 'taxonomies', label: 'Taxonomies' },
+  { key: 'data-quality', label: 'Data & Quality' },
+  { key: 'people', label: 'People & Talent' },
+  { key: 'communication', label: 'Communication & Security' },
+]
+
+// Search index — one entry per section on the page, used only to jump to (and briefly highlight)
+// the right tab + section. Kept in sync by hand with the sections rendered below; there are few
+// enough of these that a generated index would be more machinery than it's worth.
+const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
+  { id: 'bu-budget', label: 'Annual Budget & Headcount by Year', tab: 'business-units' },
+  { id: 'bu-csv-import', label: 'Bulk Import via CSV / Excel', tab: 'business-units' },
+  { id: 'bu-export', label: 'Export Business Unit Data', tab: 'business-units' },
+  { id: 'budget-settings', label: 'Budget Settings', tab: 'business-units' },
+  { id: 'group-cost-distribution', label: 'Other Investment Budget / Group Cost Distribution', tab: 'business-units' },
+  { id: 'training-types', label: 'Training Types', tab: 'taxonomies' },
+  { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
+  { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
+  { id: 'google-sheets', label: 'Live Data Source — Google Sheets', tab: 'data-quality' },
+  { id: 'training-record-changes', label: 'Training Data Changes to Review', tab: 'data-quality' },
+  { id: 'data-quality-audit', label: 'Data Quality Audit', tab: 'data-quality' },
+  { id: 'staff-data-quality', label: 'Staff Data Quality', tab: 'data-quality' },
+  { id: 'user-access', label: 'User Access', tab: 'people' },
+  { id: 'talent-member-roster', label: 'Talent Member Roster', tab: 'people' },
+  { id: 'talent-member-exemptions', label: 'Talent Member Exemptions', tab: 'people' },
+  { id: 'survey-automation', label: 'Survey Automation', tab: 'communication' },
+  { id: 'smtp-settings', label: 'SMTP / Email Settings', tab: 'communication' },
+  { id: 'security-settings', label: 'Security Settings', tab: 'communication' },
+  { id: 'pdf-signature', label: 'PDF Signature Block', tab: 'communication' },
+]
+
 export default function AdminPage() {
   const [units, setUnits] = useState<BU[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +91,35 @@ export default function AdminPage() {
   const [yearConfigs, setYearConfigs] = useState<YearConfig[]>([])
   const [deleting, setDeleting] = useState<string | null>(null)
   const availableYears = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i) // 2 past + current + 3 future
+
+  // Tabs + search-to-jump
+  const [tab, setTab] = useState<TabKey>('business-units')
+  const [search, setSearch] = useState('')
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return []
+    return SECTIONS.filter((s) => s.label.toLowerCase().includes(q))
+  }, [search])
+
+  const jumpTo = (section: (typeof SECTIONS)[number]) => {
+    setSearch('')
+    setTab(section.tab)
+    setHighlightId(section.id)
+  }
+
+  useEffect(() => {
+    if (!highlightId) return
+    const scrollTimer = setTimeout(() => {
+      document.getElementById(highlightId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+    const clearTimer = setTimeout(() => setHighlightId(null), 2000)
+    return () => { clearTimeout(scrollTimer); clearTimeout(clearTimer) }
+  }, [highlightId, tab])
+
+  const sectionWrapClass = (id: string) =>
+    `rounded-xl transition-shadow ${highlightId === id ? 'ring-2 ring-navy-400 ring-offset-2' : ''}`
 
   const load = async () => {
     setLoading(true)
@@ -239,7 +303,7 @@ export default function AdminPage() {
     <div className="flex flex-col">
       <PageHeader
         title="Admin Settings"
-        subtitle="Configure business unit budgets and staff counts"
+        subtitle="Configure business unit budgets, taxonomies, data sync, access, and more"
         actions={
           <button onClick={load} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -247,458 +311,524 @@ export default function AdminPage() {
         }
       />
 
-      <div className="p-4 sm:p-8 space-y-8">
-        {/* Guide */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
-          <div className="flex items-start gap-3">
-            <Settings className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Configuration Guide</p>
-              <p className="text-sm text-slate-500 mt-1 leading-relaxed">
-                Set the approved annual training budget and total headcount for each business unit. These values power the budget utilisation,
-                coverage ratio, and forecasting calculations across all dashboards. Business Units are auto-created when data is uploaded —
-                set their values here.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
-            Loading…
-          </div>
-        ) : (
-          <SectionCard
-            icon={Building2}
-            title="Annual Budget & Headcount by Year"
-            description="Set budget and staff count per year for historical accuracy and multi-year analytics."
-            headerActions={
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <label className="text-xs font-medium text-slate-600">Year:</label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <div className="p-4 sm:p-8 space-y-6">
+        {/* Search — jumps to (and briefly highlights) the tab + section that matches */}
+        <div className="relative max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search settings (e.g. Vendors, Security, Google Sheets)…"
+            className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm"
+          />
+          {searchResults.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+              {searchResults.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => jumpTo(s)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2"
                 >
-                  {availableYears.map((y) => (
-                    <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
-                  ))}
-                </select>
-              </div>
-            }
-          >
-          <div className="space-y-4">
-            {units.length === 0 && (
-              <AlertBadge
-                variant="info"
-                message="No business units found. Upload training or subscription data first — business units are auto-detected from your data."
-              />
-            )}
-
-            {units.map((unit) => {
-              const vals = editMap[unit.id] ?? { budget: '0', staffCount: '0' }
-              const isSaving = saving === unit.id
-              const isSaved = saved === unit.id
-              const budget = parseFloat(vals.budget) || 0
-              const staffCount = parseInt(vals.staffCount) || 0
-              const changed = budget !== unit.budget || staffCount !== unit.staffCount
-
-              return (
-                <div key={unit.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                        <Building2 className="w-4.5 h-4.5 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-800">{unit.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          Current: Budget ₦{fmt(unit.budget)} · Staff {unit.staffCount.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {isSaved && <span className="text-xs text-green-600 font-medium">Saved</span>}
-                      <button
-                        onClick={() => save(unit)}
-                        disabled={isSaving || !changed}
-                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          changed && !isSaving
-                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {isSaving ? (
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Save className="w-3.5 h-3.5" />
-                        )}
-                        Save
-                      </button>
-                      <button
-                        onClick={() => deleteBU(unit)}
-                        disabled={deleting === unit.id}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40"
-                        title="Delete this business unit"
-                      >
-                        {deleting === unit.id
-                          ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                          : <Trash2 className="w-3.5 h-3.5" />}
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Annual Training Budget (₦)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1000"
-                        value={vals.budget}
-                        onChange={(e) => updateEdit(unit.id, 'budget', e.target.value)}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">
-                        Total Headcount (Staff)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={vals.staffCount}
-                        onChange={(e) => updateEdit(unit.id, 'staffCount', e.target.value)}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-
-            {/* Add new BU */}
-            {!addingNew ? (
-              <button
-                onClick={() => setAddingNew(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-sm text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors w-full justify-center"
-              >
-                <Plus className="w-4 h-4" />
-                Add Business Unit Manually
-              </button>
-            ) : (
-              <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-5 space-y-4">
-                <p className="text-sm font-semibold text-slate-800">Add Business Unit</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={newBU.name}
-                      onChange={(e) => setNewBU((p) => ({ ...p, name: e.target.value }))}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g. Risk Management"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Budget (₦)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={newBU.budget}
-                      onChange={(e) => setNewBU((p) => ({ ...p, budget: e.target.value }))}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Staff Count</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={newBU.staffCount}
-                      onChange={(e) => setNewBU((p) => ({ ...p, staffCount: e.target.value }))}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={addBU}
-                    disabled={!newBU.name.trim() || addSaving}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {addSaving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    Add Unit
-                  </button>
-                  <button onClick={() => setAddingNew(false)} className="text-sm text-slate-500 hover:text-slate-700">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          </SectionCard>
-        )}
-
-        {/* CSV bulk upload */}
-        <SectionCard
-          icon={Upload}
-          title="Bulk Import via CSV / Excel"
-          accentClassName="border-blue-100 bg-blue-50"
-          description={
-            <>Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong>. Select the year this data applies to — values will be saved to the year-specific config.</>
-          }
-        >
-          <div className="space-y-4">
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-blue-800">Year:</label>
-              <select
-                value={csvYear}
-                onChange={(e) => setCsvYear(parseInt(e.target.value))}
-                className="text-sm border border-blue-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {availableYears.map((y) => (
-                  <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={() => csvRef.current?.click()}
-              disabled={csvImporting}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {csvImporting
-                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <FileText className="w-4 h-4" />}
-              {csvImporting ? 'Importing…' : 'Choose File'}
-            </button>
-            <p className="text-xs text-blue-600">.csv, .xlsx, or .xls accepted</p>
-            <input
-              ref={csvRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCSVImport(f) }}
-            />
-          </div>
-
-          {/* Sample format */}
-          <div className="rounded-lg bg-white border border-blue-100 p-3 overflow-x-auto">
-            <p className="text-xs font-semibold text-slate-600 mb-2">Sample file format:</p>
-            <table className="text-xs text-slate-600 w-full">
-              <thead><tr className="border-b border-slate-100">{['Business Unit','Staff Count','Budget'].map((h) => <th key={h} className="text-left py-1 pr-6 font-semibold">{h}</th>)}</tr></thead>
-              <tbody>
-                <tr><td className="py-1 pr-6">Meristem Securities Limited</td><td className="py-1 pr-6">45</td><td>15000000</td></tr>
-                <tr><td className="py-1 pr-6">Meristem Stockbrokers Limited</td><td className="py-1 pr-6">30</td><td>10000000</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Import result */}
-          {csvResult && (
-            <div className={`rounded-lg border p-3 space-y-1 ${csvResult.errors.length > 0 && csvResult.imported === 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
-              <div className="flex items-center gap-2">
-                {csvResult.imported > 0
-                  ? <CheckCircle className="w-4 h-4 text-green-600" />
-                  : <XCircle className="w-4 h-4 text-red-500" />}
-                <p className="text-sm font-medium text-slate-800">
-                  {csvResult.imported} business unit{csvResult.imported !== 1 ? 's' : ''} imported for {csvYear}
-                  {csvResult.skipped > 0 && `, ${csvResult.skipped} row${csvResult.skipped !== 1 ? 's' : ''} skipped`}
-                </p>
-              </div>
-              {csvResult.errors.map((e, i) => <p key={i} className="text-xs text-red-700 ml-6">• {e}</p>)}
+                  <span className="text-slate-700">{s.label}</span>
+                  <span className="text-xs text-slate-400">{TABS.find((t) => t.key === s.tab)?.label}</span>
+                </button>
+              ))}
             </div>
           )}
-          </div>
-        </SectionCard>
-
-        {/* ── Export BU data ── */}
-        <SectionCard
-          icon={Download}
-          title="Export Business Unit Data"
-          description="Download all configured business units with their budgets and staff counts as a CSV file."
-          headerActions={
-            <button
-              onClick={async (e) => {
-                e.stopPropagation()
-                const XLSXmod = await import('xlsx')
-                const XLSX = XLSXmod.default ?? XLSXmod
-                const rows = units.map((u) => ({
-                  'Business Unit': u.name,
-                  'Staff Count': u.staffCount,
-                  'Annual Budget (₦)': u.budget,
-                }))
-                const wb = XLSX.utils.book_new()
-                const ws = XLSX.utils.json_to_sheet(rows)
-                ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 20 }]
-                XLSX.utils.book_append_sheet(wb, ws, 'Business Units')
-                XLSX.writeFile(wb, `Business_Units_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: 'csv' })
-              }}
-              disabled={units.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors shrink-0"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export CSV
-            </button>
-          }
-        >
-          <p className="text-xs text-slate-400">{units.length === 0 ? 'No business units configured yet.' : `${units.length} business unit${units.length === 1 ? '' : 's'} ready to export.`}</p>
-        </SectionCard>
-
-        {/* ── Signature Settings ── */}
-        <SectionCard
-          icon={PenLine}
-          title="PDF Signature Block"
-          description="These names and titles appear at the bottom of every exported Business Unit PDF report."
-        >
-          <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Title</label>
-              <input type="text" value={sig.primaryTitle} onChange={(e) => setSig((p) => ({ ...p, primaryTitle: e.target.value }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Head, Learning & Development" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
-              <input type="text" value={sig.primaryName} onChange={(e) => setSig((p) => ({ ...p, primaryName: e.target.value }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Title <span className="text-slate-400 font-normal">(optional)</span></label>
-              <input type="text" value={sig.secondaryTitle} onChange={(e) => setSig((p) => ({ ...p, secondaryTitle: e.target.value }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Business Unit Head" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
-              <input type="text" value={sig.secondaryName} onChange={(e) => setSig((p) => ({ ...p, secondaryName: e.target.value }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Organisation Line <span className="text-slate-400 font-normal">(appears at the foot of the signature block)</span></label>
-            <input type="text" value={sig.organisationLine} onChange={(e) => setSig((p) => ({ ...p, organisationLine: e.target.value }))}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Meristem Learning & Development" />
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => { saveSignatureSettings(sig); setSigSaved(true); setTimeout(() => setSigSaved(false), 2500) }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              <Save className="w-3.5 h-3.5" /> Save Signature Settings
-            </button>
-            {sigSaved && <span className="text-xs text-green-600 font-medium">Saved — will appear on next PDF export.</span>}
-          </div>
-          </div>
-        </SectionCard>
-
-        {/* Training Type & Differentiating Capability taxonomies */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TaxonomyPanel
-            title="Training Types"
-            description="Classifies training spend as Formal Training (Internal/External) or a Strategic Learning Initiative (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learning Initiatives cards, and populates the Training Type column on the upload template."
-            endpoint="/api/training-types"
-            withClassification
-            namePlaceholder="e.g. Summit"
-          />
-          <TaxonomyPanel
-            title="Differentiating Capabilities"
-            description="The set of capabilities tracked for coverage reporting. Tag training records against these via the Capability column on upload — coverage is the % of total staff trained per capability."
-            endpoint="/api/capabilities"
-            namePlaceholder="e.g. Risk Management"
-          />
-          <TaxonomyPanel
-            title="Vendors"
-            description="Training vendors/facilitators, selectable when creating a Training Schedule. Used by the Talent Members report to show which vendor ran each TM training."
-            endpoint="/api/vendors"
-            namePlaceholder="e.g. Lagos Business School"
-          />
         </div>
 
-        {/* User access & permissions */}
-        <Link
-          href="/admin/users"
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-start gap-3">
-            <Users className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-slate-800">User Access</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Manage who can sign in, which pages they see, and their permission level per page.
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
-        </Link>
-
-        {/* Survey automation */}
-        <Link
-          href="/admin/surveys"
-          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-start gap-3">
-            <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Survey Automation</p>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Training schedules, survey questions, and pre/post-training survey email triggers.
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
-        </Link>
-
-        {/* SMTP / email settings — platform-wide, used by Survey Automation and beyond */}
-        <SmtpSettingsPanel />
-
-        {/* Idle-logout timeout — platform-wide, applies to every signed-in user */}
-        <SecuritySettingsPanel />
-
-        {/* Data quality audit */}
-        <DataQualityAudit />
-
-        {/* Staff roster quality: missing fields, duplicates, inline edit */}
-        <StaffDataQuality />
-
-        {/* Live Google Sheets data source */}
-        <GoogleSheetsPanel />
-
-        {/* Edits a re-sync detected in already-imported Training Data, held for accept/dismiss */}
-        <TrainingRecordChangesPanel />
-
-        {/* Budget calculation settings */}
-        <BudgetSettingsPanel />
-
-        {/* Talent Member (TM) roster — who counts as a TM at all; admin-only, not shown on the (wider-audience) Talent Members report page */}
-        <TalentMemberRosterPanel onChanged={() => {}} />
-
-        {/* Talent Member (TM) exemptions — staff excused from this year's TM Trainings requirement */}
-        <TalentMemberExemptionPanel />
-
-        {/* Other Investment Budget — group training cost distribution */}
-        <GroupCostDistribution />
-
-        {/* Info box */}
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <p className="text-sm font-semibold text-slate-700 mb-2">How analytics use these values</p>
-          <ul className="space-y-1.5 text-sm text-slate-500">
-            <li>• <strong className="text-slate-700">Budget</strong> powers budget utilisation, overspend alerts, and annual forecasting.</li>
-            <li>• <strong className="text-slate-700">Staff Count</strong> powers coverage ratio (how much of the team is being trained).</li>
-            <li>• <strong className="text-slate-700">Investment per Staff</strong> is calculated group-wide using total headcount.</li>
-            <li>• Business Units without budgets are shown as &quot;Not set&quot; in dashboards — no alerts are triggered.</li>
-          </ul>
+        {/* Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                tab === t.key ? 'border-navy-600 text-navy-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
+
+        {/* ── Tab: Business Units & Budget ── */}
+        {tab === 'business-units' && (
+          <div className="space-y-8">
+            <div id="bu-budget" className={sectionWrapClass('bu-budget')}>
+              {loading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+                  Loading…
+                </div>
+              ) : (
+                <SectionCard
+                  icon={Building2}
+                  title="Annual Budget & Headcount by Year"
+                  description="Set budget and staff count per year for historical accuracy and multi-year analytics."
+                  headerActions={
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <label className="text-xs font-medium text-slate-600">Year:</label>
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {availableYears.map((y) => (
+                          <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  }
+                >
+                  <div className="space-y-4">
+                    {units.length === 0 && (
+                      <AlertBadge
+                        variant="info"
+                        message="No business units found. Upload training or subscription data first — business units are auto-detected from your data."
+                      />
+                    )}
+
+                    {units.map((unit) => {
+                      const vals = editMap[unit.id] ?? { budget: '0', staffCount: '0' }
+                      const isSaving = saving === unit.id
+                      const isSaved = saved === unit.id
+                      const budget = parseFloat(vals.budget) || 0
+                      const staffCount = parseInt(vals.staffCount) || 0
+                      const changed = budget !== unit.budget || staffCount !== unit.staffCount
+
+                      return (
+                        <div key={unit.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                                <Building2 className="w-4.5 h-4.5 text-blue-500" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-slate-800">{unit.name}</p>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  Current: Budget ₦{fmt(unit.budget)} · Staff {unit.staffCount.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isSaved && <span className="text-xs text-green-600 font-medium">Saved</span>}
+                              <button
+                                onClick={() => save(unit)}
+                                disabled={isSaving || !changed}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                  changed && !isSaving
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                }`}
+                              >
+                                {isSaving ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Save className="w-3.5 h-3.5" />
+                                )}
+                                Save
+                              </button>
+                              <button
+                                onClick={() => deleteBU(unit)}
+                                disabled={deleting === unit.id}
+                                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors disabled:opacity-40"
+                                title="Delete this business unit"
+                              >
+                                {deleting === unit.id
+                                  ? <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                  : <Trash2 className="w-3.5 h-3.5" />}
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Annual Training Budget (₦)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1000"
+                                value={vals.budget}
+                                onChange={(e) => updateEdit(unit.id, 'budget', e.target.value)}
+                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
+                                placeholder="0"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Total Headcount (Staff)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={vals.staffCount}
+                                onChange={(e) => updateEdit(unit.id, 'staffCount', e.target.value)}
+                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Add new BU */}
+                    {!addingNew ? (
+                      <button
+                        onClick={() => setAddingNew(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-slate-200 text-sm text-slate-500 hover:border-blue-300 hover:text-blue-600 transition-colors w-full justify-center"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Business Unit Manually
+                      </button>
+                    ) : (
+                      <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-5 space-y-4">
+                        <p className="text-sm font-semibold text-slate-800">Add Business Unit</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
+                            <input
+                              type="text"
+                              value={newBU.name}
+                              onChange={(e) => setNewBU((p) => ({ ...p, name: e.target.value }))}
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g. Risk Management"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Budget (₦)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newBU.budget}
+                              onChange={(e) => setNewBU((p) => ({ ...p, budget: e.target.value }))}
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Staff Count</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newBU.staffCount}
+                              onChange={(e) => setNewBU((p) => ({ ...p, staffCount: e.target.value }))}
+                              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={addBU}
+                            disabled={!newBU.name.trim() || addSaving}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                          >
+                            {addSaving ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            Add Unit
+                          </button>
+                          <button onClick={() => setAddingNew(false)} className="text-sm text-slate-500 hover:text-slate-700">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
+              )}
+            </div>
+
+            <div id="bu-csv-import" className={sectionWrapClass('bu-csv-import')}>
+              <SectionCard
+                icon={Upload}
+                title="Bulk Import via CSV / Excel"
+                accentClassName="border-blue-100 bg-blue-50"
+                description={
+                  <>Upload a spreadsheet with columns: <strong>Business Unit</strong>, <strong>Staff Count</strong>, <strong>Budget</strong>. Select the year this data applies to — values will be saved to the year-specific config.</>
+                }
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-blue-800">Year:</label>
+                      <select
+                        value={csvYear}
+                        onChange={(e) => setCsvYear(parseInt(e.target.value))}
+                        className="text-sm border border-blue-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {availableYears.map((y) => (
+                          <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => csvRef.current?.click()}
+                      disabled={csvImporting}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {csvImporting
+                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        : <FileText className="w-4 h-4" />}
+                      {csvImporting ? 'Importing…' : 'Choose File'}
+                    </button>
+                    <p className="text-xs text-blue-600">.csv, .xlsx, or .xls accepted</p>
+                    <input
+                      ref={csvRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCSVImport(f) }}
+                    />
+                  </div>
+
+                  {/* Sample format */}
+                  <div className="rounded-lg bg-white border border-blue-100 p-3 overflow-x-auto">
+                    <p className="text-xs font-semibold text-slate-600 mb-2">Sample file format:</p>
+                    <table className="text-xs text-slate-600 w-full">
+                      <thead><tr className="border-b border-slate-100">{['Business Unit', 'Staff Count', 'Budget'].map((h) => <th key={h} className="text-left py-1 pr-6 font-semibold">{h}</th>)}</tr></thead>
+                      <tbody>
+                        <tr><td className="py-1 pr-6">Meristem Securities Limited</td><td className="py-1 pr-6">45</td><td>15000000</td></tr>
+                        <tr><td className="py-1 pr-6">Meristem Stockbrokers Limited</td><td className="py-1 pr-6">30</td><td>10000000</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Import result */}
+                  {csvResult && (
+                    <div className={`rounded-lg border p-3 space-y-1 ${csvResult.errors.length > 0 && csvResult.imported === 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                      <div className="flex items-center gap-2">
+                        {csvResult.imported > 0
+                          ? <CheckCircle className="w-4 h-4 text-green-600" />
+                          : <XCircle className="w-4 h-4 text-red-500" />}
+                        <p className="text-sm font-medium text-slate-800">
+                          {csvResult.imported} business unit{csvResult.imported !== 1 ? 's' : ''} imported for {csvYear}
+                          {csvResult.skipped > 0 && `, ${csvResult.skipped} row${csvResult.skipped !== 1 ? 's' : ''} skipped`}
+                        </p>
+                      </div>
+                      {csvResult.errors.map((e, i) => <p key={i} className="text-xs text-red-700 ml-6">• {e}</p>)}
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+            </div>
+
+            <div id="bu-export" className={sectionWrapClass('bu-export')}>
+              <SectionCard
+                icon={Download}
+                title="Export Business Unit Data"
+                description="Download all configured business units with their budgets and staff counts as a CSV file."
+                headerActions={
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      const XLSXmod = await import('xlsx')
+                      const XLSX = XLSXmod.default ?? XLSXmod
+                      const rows = units.map((u) => ({
+                        'Business Unit': u.name,
+                        'Staff Count': u.staffCount,
+                        'Annual Budget (₦)': u.budget,
+                      }))
+                      const wb = XLSX.utils.book_new()
+                      const ws = XLSX.utils.json_to_sheet(rows)
+                      ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 20 }]
+                      XLSX.utils.book_append_sheet(wb, ws, 'Business Units')
+                      XLSX.writeFile(wb, `Business_Units_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: 'csv' })
+                    }}
+                    disabled={units.length === 0}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export CSV
+                  </button>
+                }
+              >
+                <p className="text-xs text-slate-400">{units.length === 0 ? 'No business units configured yet.' : `${units.length} business unit${units.length === 1 ? '' : 's'} ready to export.`}</p>
+              </SectionCard>
+            </div>
+
+            <div id="budget-settings" className={sectionWrapClass('budget-settings')}>
+              <BudgetSettingsPanel />
+            </div>
+
+            <div id="group-cost-distribution" className={sectionWrapClass('group-cost-distribution')}>
+              <GroupCostDistribution />
+            </div>
+
+            {/* Info box */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-700 mb-2">How analytics use these values</p>
+              <ul className="space-y-1.5 text-sm text-slate-500">
+                <li>• <strong className="text-slate-700">Budget</strong> powers budget utilisation, overspend alerts, and annual forecasting.</li>
+                <li>• <strong className="text-slate-700">Staff Count</strong> powers coverage ratio (how much of the team is being trained).</li>
+                <li>• <strong className="text-slate-700">Investment per Staff</strong> is calculated group-wide using total headcount.</li>
+                <li>• Business Units without budgets are shown as &quot;Not set&quot; in dashboards — no alerts are triggered.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Taxonomies ── */}
+        {tab === 'taxonomies' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div id="training-types" className={sectionWrapClass('training-types')}>
+              <TaxonomyPanel
+                title="Training Types"
+                description="Classifies training spend as Formal Training (Internal/External) or a Strategic Learning Initiative (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learning Initiatives cards, and populates the Training Type column on the upload template."
+                endpoint="/api/training-types"
+                withClassification
+                namePlaceholder="e.g. Summit"
+              />
+            </div>
+            <div id="capabilities" className={sectionWrapClass('capabilities')}>
+              <TaxonomyPanel
+                title="Differentiating Capabilities"
+                description="The set of capabilities tracked for coverage reporting. Tag training records against these via the Capability column on upload — coverage is the % of total staff trained per capability."
+                endpoint="/api/capabilities"
+                namePlaceholder="e.g. Risk Management"
+              />
+            </div>
+            <div id="vendors" className={sectionWrapClass('vendors')}>
+              <TaxonomyPanel
+                title="Vendors"
+                description="Training vendors/facilitators, selectable when creating a Training Schedule. Used by the Talent Members report to show which vendor ran each TM training."
+                endpoint="/api/vendors"
+                namePlaceholder="e.g. Lagos Business School"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Data & Quality ── */}
+        {tab === 'data-quality' && (
+          <div className="space-y-8">
+            <div id="google-sheets" className={sectionWrapClass('google-sheets')}>
+              <GoogleSheetsPanel />
+            </div>
+            <div id="training-record-changes" className={sectionWrapClass('training-record-changes')}>
+              <TrainingRecordChangesPanel />
+            </div>
+            <div id="data-quality-audit" className={sectionWrapClass('data-quality-audit')}>
+              <DataQualityAudit />
+            </div>
+            <div id="staff-data-quality" className={sectionWrapClass('staff-data-quality')}>
+              <StaffDataQuality />
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: People & Talent ── */}
+        {tab === 'people' && (
+          <div className="space-y-8">
+            <div id="user-access" className={sectionWrapClass('user-access')}>
+              <Link
+                href="/admin/users"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <Users className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">User Access</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Manage who can sign in, which pages they see, and their permission level per page.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+              </Link>
+            </div>
+
+            <div id="talent-member-roster" className={sectionWrapClass('talent-member-roster')}>
+              <TalentMemberRosterPanel onChanged={() => {}} />
+            </div>
+
+            <div id="talent-member-exemptions" className={sectionWrapClass('talent-member-exemptions')}>
+              <TalentMemberExemptionPanel />
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Communication & Security ── */}
+        {tab === 'communication' && (
+          <div className="space-y-8">
+            <div id="survey-automation" className={sectionWrapClass('survey-automation')}>
+              <Link
+                href="/admin/surveys"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Survey Automation</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Training schedules, survey questions, and pre/post-training survey email triggers.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+              </Link>
+            </div>
+
+            <div id="smtp-settings" className={sectionWrapClass('smtp-settings')}>
+              <SmtpSettingsPanel />
+            </div>
+
+            <div id="security-settings" className={sectionWrapClass('security-settings')}>
+              <SecuritySettingsPanel />
+            </div>
+
+            <div id="pdf-signature" className={sectionWrapClass('pdf-signature')}>
+              <SectionCard
+                icon={PenLine}
+                title="PDF Signature Block"
+                description="These names and titles appear at the bottom of every exported Business Unit PDF report."
+              >
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Title</label>
+                      <input type="text" value={sig.primaryTitle} onChange={(e) => setSig((p) => ({ ...p, primaryTitle: e.target.value }))}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Head, Learning & Development" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Primary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <input type="text" value={sig.primaryName} onChange={(e) => setSig((p) => ({ ...p, primaryName: e.target.value }))}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Title <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <input type="text" value={sig.secondaryTitle} onChange={(e) => setSig((p) => ({ ...p, secondaryTitle: e.target.value }))}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Business Unit Head" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Secondary Signer Name <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <input type="text" value={sig.secondaryName} onChange={(e) => setSig((p) => ({ ...p, secondaryName: e.target.value }))}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Full name" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Organisation Line <span className="text-slate-400 font-normal">(appears at the foot of the signature block)</span></label>
+                    <input type="text" value={sig.organisationLine} onChange={(e) => setSig((p) => ({ ...p, organisationLine: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Meristem Learning & Development" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => { saveSignatureSettings(sig); setSigSaved(true); setTimeout(() => setSigSaved(false), 2500) }}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      <Save className="w-3.5 h-3.5" /> Save Signature Settings
+                    </button>
+                    {sigSaved && <span className="text-xs text-green-600 font-medium">Saved — will appear on next PDF export.</span>}
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
