@@ -5,6 +5,7 @@ import type { SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { mirrorSurveyResponse } from '@/lib/survey-mirror'
 import { rateLimit } from '@/lib/rate-limit'
+import { getOrCreateNativeBatch } from '@/lib/import-records'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -22,12 +23,6 @@ const SENT_FIELD = {
 
 function currentMonthName(): string {
   return MONTHS[new Date().getMonth()]
-}
-
-async function getOrCreateNativeBatch(type: string, filename: string) {
-  const existing = await prisma.uploadBatch.findFirst({ where: { type, filename } })
-  if (existing) return existing
-  return prisma.uploadBatch.create({ data: { type, filename, recordCount: 0 } })
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string; stage: string }> }) {
