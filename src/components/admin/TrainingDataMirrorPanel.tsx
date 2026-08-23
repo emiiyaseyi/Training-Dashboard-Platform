@@ -23,6 +23,13 @@ export function TrainingDataMirrorPanel() {
   const retryOne = async (r: AttendeeRow) =>
     fetch(`/api/admin/training-schedule/${r.scheduleId}/attendees/${r.id}/retry-training-data-mirror`, { method: 'POST' }).catch(() => {})
 
+  const retryBatch = async (rows: AttendeeRow[]) =>
+    fetch('/api/admin/training-data-mirror-status/retry-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendeeIds: rows.map((r) => r.id) }),
+    }).catch(() => {})
+
   const fetchRows = async (): Promise<AttendeeRow[] | null> => {
     setLoadError('')
     try {
@@ -47,7 +54,7 @@ export function TrainingDataMirrorPanel() {
       setLoading(false)
       if (initial && initial.length > 0) {
         setAutoResolving(true)
-        for (const r of initial) await retryOne(r)
+        await retryBatch(initial)
         await fetchRows()
         setAutoResolving(false)
       }
@@ -67,7 +74,7 @@ export function TrainingDataMirrorPanel() {
   const retryAll = async () => {
     setRetryingAll(true)
     try {
-      for (const r of rows || []) await retryOne(r)
+      await retryBatch(rows || [])
       await fetchRows()
     } finally {
       setRetryingAll(false)

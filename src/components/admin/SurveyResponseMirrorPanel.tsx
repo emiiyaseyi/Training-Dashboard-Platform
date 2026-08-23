@@ -39,6 +39,13 @@ export function SurveyResponseMirrorPanel() {
     }
   }
 
+  const retryBatch = async (ids: string[]) =>
+    fetch('/api/admin/survey-responses/retry-mirror-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).catch(() => {})
+
   // On mount: load, then automatically retry anything not yet confirmed synced — no manual click
   // needed for the common case (a transient failure, or a response that predates sync tracking).
   useEffect(() => {
@@ -49,9 +56,7 @@ export function SurveyResponseMirrorPanel() {
       const pending = (initial || []).filter((r) => !r.mirrorSyncedAt)
       if (pending.length > 0) {
         setAutoResolving(true)
-        for (const r of pending) {
-          await fetch(`/api/admin/survey-responses/${r.id}/retry-mirror`, { method: 'POST' }).catch(() => {})
-        }
+        await retryBatch(pending.map((r) => r.id))
         await fetchResponses()
         setAutoResolving(false)
       }
@@ -80,9 +85,7 @@ export function SurveyResponseMirrorPanel() {
   const retryAll = async () => {
     setRetryingAll(true)
     try {
-      for (const r of needsAttention) {
-        await fetch(`/api/admin/survey-responses/${r.id}/retry-mirror`, { method: 'POST' })
-      }
+      await retryBatch(needsAttention.map((r) => r.id))
       await fetchResponses()
     } finally {
       setRetryingAll(false)
