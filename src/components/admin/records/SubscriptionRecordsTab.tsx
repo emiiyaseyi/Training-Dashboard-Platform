@@ -79,20 +79,42 @@ export function SubscriptionRecordsTab() {
     setDraft({ staffName: r.staffName, businessUnit: r.businessUnit, membershipOrg: r.membershipOrg, amount: String(r.amount), month: r.month || '' })
   }
 
-  const saveEdit = async (id: string) => {
+  const saveEdit = async (r: SubscriptionRow) => {
     if (!draft) return
     setSaving(true)
     try {
-      const res = await fetch(`/api/admin/records/subscriptions/${id}`, {
+      const newAmount = parseFloat(draft.amount) || 0
+      const changedIdentity = {
+        membershipOrg: draft.membershipOrg.trim() !== r.membershipOrg ? draft.membershipOrg.trim() : undefined,
+        amount: newAmount !== r.amount ? newAmount : undefined,
+      }
+      const changes = Object.fromEntries(Object.entries(changedIdentity).filter(([, v]) => v !== undefined))
+
+      const res = await fetch(`/api/admin/records/subscriptions/${r.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staffName: draft.staffName, businessUnit: draft.businessUnit, membershipOrg: draft.membershipOrg,
-          amount: parseFloat(draft.amount) || 0, month: draft.month || null,
+          amount: newAmount, month: draft.month || null,
         }),
       })
-      if (res.ok) { setEditingId(null); setDraft(null); await load() }
-      else alert('Failed to save.')
+      if (!res.ok) { alert('Failed to save.'); return }
+
+      setEditingId(null); setDraft(null)
+
+      if (Object.keys(changes).length > 0) {
+        const fieldNames = Object.keys(changes).join(', ')
+        if (confirm(`Apply this ${fieldNames} change to every other subscription record under "${r.membershipOrg}" too?`)) {
+          const applyRes = await fetch('/api/admin/records/subscriptions/apply-to-similar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ originalMembershipOrg: r.membershipOrg, excludeId: r.id, changes }),
+          })
+          const applyData = await applyRes.json().catch(() => ({}))
+          if (applyRes.ok) alert(`Applied to ${applyData.updated} other record${applyData.updated === 1 ? '' : 's'}.`)
+        }
+      }
+      await load()
     } finally {
       setSaving(false)
     }
@@ -252,7 +274,7 @@ export function SubscriptionRecordsTab() {
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5 justify-end">
-                          <button onClick={() => saveEdit(r.id)} disabled={saving} className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+                          <button onClick={() => saveEdit(r)} disabled={saving} className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
                             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                           </button>
                           <button onClick={() => { setEditingId(null); setDraft(null) }} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><X className="w-3.5 h-3.5" /></button>
