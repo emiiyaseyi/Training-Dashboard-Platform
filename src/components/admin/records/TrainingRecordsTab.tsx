@@ -40,6 +40,7 @@ interface RosterStaff {
 }
 
 interface NamedOption { id: string; name: string }
+interface VendorOption extends NamedOption { order: number }
 
 export function TrainingRecordsTab() {
   const [groups, setGroups] = useState<TrainingGroup[]>([])
@@ -66,7 +67,10 @@ export function TrainingRecordsTab() {
   const [businessUnits, setBusinessUnits] = useState<NamedOption[]>([])
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
-  const [vendors, setVendors] = useState<NamedOption[]>([])
+  const [vendors, setVendors] = useState<VendorOption[]>([])
+  const [addingVendorForId, setAddingVendorForId] = useState<string | null>(null)
+  const [newVendorInput, setNewVendorInput] = useState('')
+  const [savingNewVendor, setSavingNewVendor] = useState(false)
   const [newTraining, setNewTraining] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
   const [attendeeQuery, setAttendeeQuery] = useState('')
   const [pendingAttendees, setPendingAttendees] = useState<RosterStaff[]>([])
@@ -168,6 +172,37 @@ export function TrainingRecordsTab() {
     setExpandedKey(expandedKey === key ? null : key)
     setEditingId(null)
     setConfirmingGroupKey(null)
+  }
+
+  const saveNewVendor = async (rowId: string) => {
+    const name = newVendorInput.trim()
+    if (!name) return
+    // Same name, different case/spacing — just select the existing one instead of creating a duplicate.
+    const existing = vendors.find((v) => v.name.trim().toLowerCase() === name.toLowerCase())
+    if (existing) {
+      setDraft((d) => (d ? { ...d, vendor: existing.name } : d))
+      setAddingVendorForId(null)
+      setNewVendorInput('')
+      return
+    }
+    setSavingNewVendor(true)
+    try {
+      const nextOrder = vendors.length > 0 ? Math.max(...vendors.map((v) => v.order)) + 1 : 0
+      const res = await fetch('/api/vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, order: nextOrder }),
+      })
+      if (res.ok) {
+        const fresh = await fetch('/api/vendors').then((r) => r.json()).catch(() => [])
+        setVendors(Array.isArray(fresh) ? fresh : [])
+        setDraft((d) => (d ? { ...d, vendor: name } : d))
+      }
+    } finally {
+      setSavingNewVendor(false)
+      setAddingVendorForId(null)
+      setNewVendorInput('')
+    }
   }
 
   const startEdit = (r: TrainingRecordRow, g: TrainingGroup) => {
@@ -463,10 +498,41 @@ export function TrainingRecordsTab() {
                                       </select>
                                     </td>
                                     <td className="px-2.5 py-1.5">
-                                      <select value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="w-28 border border-slate-200 rounded px-1.5 py-1">
-                                        <option value="">—</option>
-                                        {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
-                                      </select>
+                                      {addingVendorForId === r.id ? (
+                                        <div className="flex items-center gap-1">
+                                          <input
+                                            autoFocus
+                                            value={newVendorInput}
+                                            onChange={(e) => setNewVendorInput(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') saveNewVendor(r.id) }}
+                                            placeholder="New vendor name"
+                                            className="w-24 border border-slate-200 rounded px-1.5 py-1"
+                                          />
+                                          <button
+                                            onClick={() => saveNewVendor(r.id)}
+                                            disabled={savingNewVendor || !newVendorInput.trim()}
+                                            className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                          >
+                                            {savingNewVendor ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                          </button>
+                                          <button onClick={() => { setAddingVendorForId(null); setNewVendorInput('') }} className="p-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50">
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <select
+                                          value={draft.vendor}
+                                          onChange={(e) => {
+                                            if (e.target.value === '__add_new__') { setNewVendorInput(''); setAddingVendorForId(r.id); return }
+                                            setDraft({ ...draft, vendor: e.target.value })
+                                          }}
+                                          className="w-28 border border-slate-200 rounded px-1.5 py-1"
+                                        >
+                                          <option value="">—</option>
+                                          {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                                          <option value="__add_new__">+ Add new vendor…</option>
+                                        </select>
+                                      )}
                                     </td>
                                     <td className="px-2.5 py-1.5">
                                       <div className="flex items-center gap-1 justify-end">
