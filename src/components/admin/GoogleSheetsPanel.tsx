@@ -94,6 +94,8 @@ export function GoogleSheetsPanel() {
   const [history, setHistory] = useState<SyncLogEntry[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [undoingId, setUndoingId] = useState<string | null>(null)
+  const [pushingVendors, setPushingVendors] = useState(false)
+  const [pushVendorResult, setPushVendorResult] = useState<{ success: boolean; updated: number; notFound: number; error?: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -209,6 +211,17 @@ export function GoogleSheetsPanel() {
       await loadHistory()
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const pushVendors = async () => {
+    setPushingVendors(true)
+    setPushVendorResult(null)
+    try {
+      const res = await fetch('/api/admin/google-sheets/push-vendors', { method: 'POST' })
+      setPushVendorResult(await res.json())
+    } finally {
+      setPushingVendors(false)
     }
   }
 
@@ -400,7 +413,31 @@ export function GoogleSheetsPanel() {
               {previewing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Preview Sync
             </button>
+            <button
+              onClick={pushVendors}
+              disabled={pushingVendors || !state.spreadsheetUrl.trim()}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+              title="Write this year's Vendor values from the platform into the sheet's Vendor column — for rows already fixed here but not yet updated in the sheet."
+            >
+              {pushingVendors && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Push Vendors to Sheet
+            </button>
           </div>
+
+          {pushVendorResult && (
+            <div
+              className={`text-xs rounded-lg px-3 py-2.5 border ${
+                pushVendorResult.success
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                  : 'text-red-700 bg-red-50 border-red-100'
+              }`}
+            >
+              {pushVendorResult.error
+                ? pushVendorResult.error
+                : `Vendor pushed to ${pushVendorResult.updated} matching row${pushVendorResult.updated === 1 ? '' : 's'} in the sheet.` +
+                  (pushVendorResult.notFound > 0 ? ` ${pushVendorResult.notFound} record(s) had no matching row in the sheet (Name + Training + Month didn't match).` : '')}
+            </div>
+          )}
 
           {preview && (
             <div className="rounded-lg border border-navy-200 bg-navy-50/40 p-4 space-y-3">

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { connectToSpreadsheet, fetchSheetAsBuffer, type SheetsConnection } from '@/lib/google-sheets'
+import { connectToSpreadsheet, fetchSheetAsBuffer, batchUpdateRowsByCompoundKey, type SheetsConnection } from '@/lib/google-sheets'
 import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
 import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
@@ -38,11 +38,12 @@ export interface TrainingRecordSnapshot {
   hours: number | null
   trainingType: string | null
   capability: string | null
+  vendor: string | null
   month: string
 }
 
 const TRACKED_TRAINING_FIELDS: (keyof TrainingRecordSnapshot)[] = [
-  'staffId', 'staffName', 'businessUnit', 'cost', 'hours', 'trainingType', 'capability', 'month',
+  'staffId', 'staffName', 'businessUnit', 'cost', 'hours', 'trainingType', 'capability', 'vendor', 'month',
 ]
 
 function trainingLooseKey(staffName: string, training: string, month: string): string {
@@ -61,15 +62,18 @@ export interface TrainingRecordChangeCandidate {
 // since the match is by name+training+month — Staff ID itself is excluded from the match key
 // precisely because it's sometimes the field being corrected — and could occasionally be a false
 // positive, e.g. two different people with the same name in the same training).
+//
+// Every row that matches an existing one this way is compared field-by-field across ALL tracked
+// fields (not just staffId/training/cost) — a row is only "genuinely unchanged" if nothing in it
+// differs; otherwise it's a change candidate, even if only e.g. vendor differs. An earlier version
+// short-circuited on a staffId+training+cost match before ever comparing the rest, which meant a
+// vendor-only edit in the sheet (or any field not in that narrower identity) was silently ignored
+// as "already imported" and never reached review.
 async function reconcileTraining(
   rows: TrainingRow[],
   year: number
 ): Promise<{ newRows: TrainingRow[]; changes: TrainingRecordChangeCandidate[] }> {
   const existing = await prisma.trainingRecord.findMany({ where: { year } })
-
-  const exactKey = (staffId: string, training: string, cost: number) =>
-    `${normalizeStaffIdKey(staffId)}|${training.trim().toLowerCase()}|${roundNum(cost, 2)}`
-  const exactSeen = new Set(existing.map((r) => exactKey(r.staffId, r.training, r.cost)))
 
   const looseMap = new Map<string, (typeof existing)[number]>()
   for (const r of existing) {
@@ -82,18 +86,18 @@ async function reconcileTraining(
   const claimed = new Set<string>()
 
   for (const row of rows) {
-    if (exactSeen.has(exactKey(row.staffId, row.training, row.cost))) continue // unchanged, already imported
-
     const match = looseMap.get(trainingLooseKey(row.staffName, row.training, row.month))
     if (match && !claimed.has(match.id)) {
       claimed.add(match.id)
       const oldData: TrainingRecordSnapshot = {
         staffId: match.staffId, staffName: match.staffName, businessUnit: match.businessUnit,
-        cost: match.cost, hours: match.hours, trainingType: match.trainingType, capability: match.capability, month: match.month,
+        cost: match.cost, hours: match.hours, trainingType: match.trainingType, capability: match.capability,
+        vendor: match.vendor, month: match.month,
       }
       const newData: TrainingRecordSnapshot = {
         staffId: row.staffId, staffName: row.staffName, businessUnit: normalizeBUName(row.businessUnit),
-        cost: row.cost, hours: row.hours || null, trainingType: row.trainingType || null, capability: row.capability || null, month: row.month,
+        cost: row.cost, hours: row.hours || null, trainingType: row.trainingType || null, capability: row.capability || null,
+        vendor: row.vendor || null, month: row.month,
       }
       const changedFields = TRACKED_TRAINING_FIELDS.filter((f) => String(oldData[f] ?? '') !== String(newData[f] ?? ''))
       if (changedFields.length > 0) {
@@ -102,7 +106,7 @@ async function reconcileTraining(
       continue
     }
 
-    newRows.push(row) // no match at all, loose or exact — a genuinely new row
+    newRows.push(row) // no match at all — a genuinely new row
   }
 
   return { newRows, changes }
@@ -485,4 +489,68 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
   }
 
   return { success, imported, errors, changesDetected }
+}
+
+export interface PushVendorResult {
+  success: boolean
+  updated: number
+  notFound: number
+  error?: string
+}
+
+// Vendor is often fixed on the platform (Manage Records, Data Quality Audit fixes, Talent
+// Members) after a row was already imported, or fixed retroactively straight in the sheet for
+// old rows the admin is backfilling by hand. Either way the OTHER side can end up stale. This
+// pushes the platform's current vendor values for every TrainingRecord that has one back into the
+// live sheet's Vendor column, matched by the same loose key (Name + Training + Month) reconcile
+// uses — Staff ID can't be the key here since it's sometimes the very field being corrected.
+export async function pushVendorUpdatesToSheet(): Promise<PushVendorResult> {
+  const config = await prisma.googleSheetsConfig.findFirst()
+  if (!config?.spreadsheetUrl) {
+    return { success: false, updated: 0, notFound: 0, error: 'No Google Sheet configured yet.' }
+  }
+  if (!config.trainingSheetName?.trim()) {
+    return { success: false, updated: 0, notFound: 0, error: 'No Training Cost tab name configured.' }
+  }
+
+  let connection: SheetsConnection
+  try {
+    connection = await connectToSpreadsheet(config.spreadsheetUrl)
+  } catch (err) {
+    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.' }
+  }
+
+  const sheetName = config.trainingSheetName.trim()
+  if (!connection.tabTitles.includes(sheetName)) {
+    return { success: false, updated: 0, notFound: 0, error: `Tab "${sheetName}" not found in the spreadsheet.` }
+  }
+
+  const year = new Date().getFullYear()
+  const records = await prisma.trainingRecord.findMany({
+    where: { year, vendor: { not: null } },
+    select: { staffName: true, training: true, month: true, vendor: true },
+  })
+  if (records.length === 0) {
+    return { success: true, updated: 0, notFound: 0 }
+  }
+
+  try {
+    const { found, notFound } = await batchUpdateRowsByCompoundKey(
+      connection.spreadsheetId,
+      sheetName,
+      connection.accessToken,
+      [
+        ['name', 'staffname', 'employeename', 'fullname'],
+        ['training', 'trainingname', 'trainingtitle', 'course', 'programme'],
+        ['month', 'period', 'trainingmonth'],
+      ],
+      records.map((r) => ({
+        keyParts: [r.staffName, r.training, r.month],
+        updates: [{ columnCandidates: ['vendor', 'trainingvendor', 'provider', 'facilitator', 'trainer'], value: r.vendor || '' }],
+      }))
+    )
+    return { success: true, updated: found, notFound }
+  } catch (err) {
+    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
+  }
 }

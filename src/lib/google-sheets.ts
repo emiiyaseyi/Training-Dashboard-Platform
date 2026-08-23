@@ -403,6 +403,79 @@ export async function batchUpdateRowsByKey(
   return { found, notFound }
 }
 
+// Same job as batchUpdateRowsByKey, but the row identity is a combination of several columns
+// (e.g. Name + Training + Month) rather than one — needed wherever no single column is unique
+// enough on its own (a recurring training means the same Name+Training pair repeats every month;
+// Staff ID can't be used at all here since it's sometimes the very field being corrected).
+export async function batchUpdateRowsByCompoundKey(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  keyPartsCandidates: string[][],
+  rows_: { keyParts: string[]; updates: { columnCandidates: string[]; value: string }[] }[]
+): Promise<{ found: number; notFound: number }> {
+  const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
+  if (rows.length === 0) return { found: 0, notFound: rows_.length }
+
+  const headers = rows[0]
+  const normHeaders = headers.map(normaliseHeader)
+  const keyColIdxs = keyPartsCandidates.map((candidates) => {
+    const normCandidates = candidates.map(normaliseHeader)
+    return normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+  })
+  if (keyColIdxs.some((idx) => idx === -1)) return { found: 0, notFound: rows_.length }
+
+  const compoundKey = (parts: string[]) => parts.map(normaliseHeader).join('|')
+
+  const rowIndexByKey = new Map<string, number>()
+  rows.slice(1).forEach((r, i) => {
+    const parts = keyColIdxs.map((idx) => r[idx] || '')
+    if (parts.every(Boolean)) rowIndexByKey.set(compoundKey(parts), i + 2) // +1 header row, +1 for 1-based indexing
+  })
+
+  const colIdxCache = new Map<string, number>()
+  const colIdxFor = (candidates: string[]) => {
+    const key = candidates.join('|')
+    if (colIdxCache.has(key)) return colIdxCache.get(key)!
+    const normCandidates = candidates.map(normaliseHeader)
+    const idx = normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    colIdxCache.set(key, idx)
+    return idx
+  }
+
+  const data: { range: string; values: string[][] }[] = []
+  let found = 0
+  let notFound = 0
+
+  for (const { keyParts, updates } of rows_) {
+    const sheetRowNumber = rowIndexByKey.get(compoundKey(keyParts))
+    if (!sheetRowNumber) { notFound++; continue }
+    found++
+    for (const update of updates) {
+      const colIdx = colIdxFor(update.columnCandidates)
+      if (colIdx === -1) continue
+      data.push({ range: `${sheetName}!${columnLetter(colIdx)}${sheetRowNumber}`, values: [[update.value]] })
+    }
+  }
+
+  if (data.length > 0) {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+      }
+    )
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`Batch update failed on tab "${sheetName}" (${res.status}): ${body.slice(0, 200)}`)
+    }
+  }
+
+  return { found, notFound }
+}
+
 // Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the
 // header row in place when a field has no existing column to land in.
 async function updateSheetRange(
