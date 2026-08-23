@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
+import { VendorPicker } from '@/components/ui/VendorPicker'
 
 interface TrainingRecordRow {
   id: string
@@ -298,7 +299,7 @@ export function TrainingRecordsTab() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Vendor</label>
-              <input value={newTraining.vendor} onChange={(e) => setNewTraining({ ...newTraining, vendor: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+              <VendorPicker value={newTraining.vendor} onChange={(v) => setNewTraining({ ...newTraining, vendor: v })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
             </div>
           </div>
 
@@ -405,7 +406,9 @@ export function TrainingRecordsTab() {
                                     <td className="px-2.5 py-1.5"><input type="number" value={draft.hours} onChange={(e) => setDraft({ ...draft, hours: e.target.value })} className="w-16 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input value={draft.trainingType} onChange={(e) => setDraft({ ...draft, trainingType: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input value={draft.capability} onChange={(e) => setDraft({ ...draft, capability: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5"><input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
+                                    <td className="px-2.5 py-1.5 relative">
+                                      <VendorPicker value={draft.vendor} onChange={(v) => setDraft({ ...draft, vendor: v })} className="w-28 border border-slate-200 rounded px-1.5 py-1 text-xs" />
+                                    </td>
                                     <td className="px-2.5 py-1.5">
                                       <div className="flex items-center gap-1 justify-end">
                                         <button onClick={() => saveEdit(r, g)} disabled={saving || applyingToSimilar} className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">

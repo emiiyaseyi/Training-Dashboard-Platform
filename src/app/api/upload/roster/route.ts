@@ -4,6 +4,7 @@ import { parseRosterExcel } from '@/lib/excel-parser'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { requirePermission } from '@/lib/session-guard'
 import { validateUploadFile } from '@/lib/upload-validation'
+import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('upload-data', 'admin')
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
       })),
     })
 
+    invalidateComprehensiveStaffListCache()
     return NextResponse.json({
       success: true,
       batchId: batch.id,
