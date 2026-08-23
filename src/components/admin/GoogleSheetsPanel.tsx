@@ -435,7 +435,7 @@ export function GoogleSheetsPanel() {
               {pushVendorResult.error
                 ? pushVendorResult.error
                 : `Vendor pushed to ${pushVendorResult.updated} matching row${pushVendorResult.updated === 1 ? '' : 's'} in the sheet.` +
-                  (pushVendorResult.notFound > 0 ? ` ${pushVendorResult.notFound} record(s) had no matching row in the sheet (Name + Training + Month didn't match).` : '')}
+                  (pushVendorResult.notFound > 0 ? ` ${pushVendorResult.notFound} record(s) had no matching row in the sheet (Staff ID + Training + Month didn't match).` : '')}
             </div>
           )}
 

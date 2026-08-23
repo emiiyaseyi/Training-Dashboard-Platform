@@ -413,9 +413,9 @@ export async function batchUpdateRowsByCompoundKey(
   accessToken: string,
   keyPartsCandidates: string[][],
   rows_: { keyParts: string[]; updates: { columnCandidates: string[]; value: string }[] }[]
-): Promise<{ found: number; notFound: number }> {
+): Promise<{ found: number; notFound: number; error?: string }> {
   const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
-  if (rows.length === 0) return { found: 0, notFound: rows_.length }
+  if (rows.length === 0) return { found: 0, notFound: rows_.length, error: 'The tab has no rows.' }
 
   const headers = rows[0]
   const normHeaders = headers.map(normaliseHeader)
@@ -423,7 +423,14 @@ export async function batchUpdateRowsByCompoundKey(
     const normCandidates = candidates.map(normaliseHeader)
     return normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
   })
-  if (keyColIdxs.some((idx) => idx === -1)) return { found: 0, notFound: rows_.length }
+  if (keyColIdxs.some((idx) => idx === -1)) {
+    const missingIdx = keyColIdxs.findIndex((idx) => idx === -1)
+    return {
+      found: 0,
+      notFound: rows_.length,
+      error: `Could not find a column in the sheet matching any of: ${keyPartsCandidates[missingIdx].join(', ')}. Sheet columns found: ${headers.join(', ')}.`,
+    }
+  }
 
   const compoundKey = (parts: string[]) => parts.map(normaliseHeader).join('|')
 
@@ -458,6 +465,17 @@ export async function batchUpdateRowsByCompoundKey(
     }
   }
 
+  // Headers matched, but not one row matched by value — almost always means the key values
+  // themselves differ between the DB and the sheet (a name spelled differently, a month written
+  // as "March 2026" in the sheet vs "March" in the DB, etc). Surface a few real examples of both
+  // sides so the mismatch is diagnosable without needing direct access to the sheet.
+  let error: string | undefined
+  if (found === 0 && notFound > 0) {
+    const wanted = rows_.slice(0, 3).map((r) => compoundKey(r.keyParts))
+    const actual = [...rowIndexByKey.keys()].slice(0, 3)
+    error = `No rows matched by value. Looked for keys like: ${wanted.join(' | ')}. Sheet has keys like: ${actual.join(' | ')}.`
+  }
+
   if (data.length > 0) {
     const res = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
@@ -473,7 +491,7 @@ export async function batchUpdateRowsByCompoundKey(
     }
   }
 
-  return { found, notFound }
+  return { found, notFound, error }
 }
 
 // Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the
