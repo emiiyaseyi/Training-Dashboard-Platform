@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaff, resolveLineManager } from '@/lib/staff-directory'
@@ -7,6 +8,10 @@ import { getOrCreateNativeBatch } from '@/lib/import-records'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { MONTHS } from '@/lib/filter-types'
 import type { TrainingScheduleAttendee } from '@prisma/client'
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+}
 
 // Accepts a list of Staff IDs or emails, resolves each against the roster (name, email, line
 // manager name/email) and adds them as attendees. Unresolvable identifiers are reported back
@@ -29,6 +34,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const added: string[] = []
     const notFound: string[] = []
     const noEmail: string[] = []
+    const alreadyAdded: string[] = []
+    const inactive: string[] = []
     const createdAttendees: TrainingScheduleAttendee[] = []
 
     for (const raw of identifiers) {
@@ -39,20 +46,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         notFound.push(identifier)
         continue
       }
+      // The search-to-add dropdown already excludes deactivated staff, but this also catches an
+      // exact Staff ID/email typed in directly, bypassing that dropdown.
+      if (!staff.active) {
+        inactive.push(staff.name)
+        continue
+      }
       const manager = resolveLineManager(staff, directory)
-      const attendee = await prisma.trainingScheduleAttendee.create({
-        data: {
-          scheduleId: id,
-          staffId: staff.staffId,
-          staffName: staff.name,
-          email: staff.email,
-          lineManagerName: manager?.name || null,
-          lineManagerEmail: manager?.email || null,
-        },
-      })
-      added.push(staff.name)
-      createdAttendees.push(attendee)
-      if (!staff.email) noEmail.push(staff.name)
+      try {
+        const attendee = await prisma.trainingScheduleAttendee.create({
+          data: {
+            scheduleId: id,
+            staffId: staff.staffId,
+            staffName: staff.name,
+            email: staff.email,
+            lineManagerName: manager?.name || null,
+            lineManagerEmail: manager?.email || null,
+          },
+        })
+        added.push(staff.name)
+        createdAttendees.push(attendee)
+        if (!staff.email) noEmail.push(staff.name)
+      } catch (err) {
+        // Same person already on this schedule — most often a retried request after an earlier
+        // partial failure below, not a real duplicate the admin is trying to create on purpose.
+        if (isUniqueConstraintError(err)) { alreadyAdded.push(staff.name); continue }
+        throw err
+      }
     }
 
     // Mirror all newly-added attendees into the Training Data sheet in one batch call — one
@@ -61,6 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // (not just logged) so a failure is visible to the admin and retryable.
     // Skipped for schedules sourced from Already Attended Trainings — those attendees came FROM
     // an existing Training Data row, so mirroring them again would create a duplicate.
+    let trainingRecordError: string | undefined
     if (!schedule.sourcedFromHistoricalData && createdAttendees.length > 0) {
       const results = await mirrorAttendeesToTrainingData(createdAttendees, schedule)
       await Promise.all(
@@ -82,26 +103,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // loose-key match (staffName+training+month) recognizes this as the row already being
       // imported — no duplicate, and no spurious "change" flagged unless something genuinely
       // differs in between.
-      const batch = await getOrCreateNativeBatch('training', 'Training Schedule attendees')
-      await prisma.trainingRecord.createMany({
-        data: createdAttendees.map((a) => ({
-          staffName: a.staffName,
-          staffId: a.staffId,
-          training: schedule.trainingName,
-          businessUnit: normalizeBUName(schedule.businessUnit),
-          month: MONTHS[schedule.startDate.getMonth()],
-          year: new Date().getFullYear(),
-          cost: schedule.costPerAttendee ?? 0,
-          hours: schedule.hours,
-          trainingType: schedule.trainingType,
-          capability: schedule.capability,
-          vendor: schedule.vendor,
-          batchId: batch.id,
-        })),
-      })
+      // Linked back onto the attendee (linkedTrainingRecordId) so removing the attendee later can
+      // also remove this record instead of leaving a phantom row behind. Created one at a time
+      // (not createMany) specifically so each new id can be captured for that link.
+      // Kept in its own try/catch: the attendees themselves and the sheet mirror already succeeded
+      // by this point, so a failure here — Business Unit lookup, a transient DB error — shouldn't
+      // turn the whole request into an error the admin has to retry (which would re-attempt
+      // already-succeeded work). It's surfaced in the response instead.
+      try {
+        const batch = await getOrCreateNativeBatch('training', 'Training Schedule attendees')
+        for (const a of createdAttendees) {
+          const record = await prisma.trainingRecord.create({
+            data: {
+              staffName: a.staffName,
+              staffId: a.staffId,
+              training: schedule.trainingName,
+              businessUnit: normalizeBUName(schedule.businessUnit),
+              month: MONTHS[schedule.startDate.getMonth()],
+              year: new Date().getFullYear(),
+              cost: schedule.costPerAttendee ?? 0,
+              hours: schedule.hours,
+              trainingType: schedule.trainingType,
+              capability: schedule.capability,
+              vendor: schedule.vendor,
+              batchId: batch.id,
+            },
+          })
+          await prisma.trainingScheduleAttendee.update({ where: { id: a.id }, data: { linkedTrainingRecordId: record.id } })
+        }
+      } catch (err) {
+        console.error('[admin/training-schedule/attendees POST] TrainingRecord write failed', err)
+        trainingRecordError = 'Attendees were added, but creating their Manage Records entry failed — they will still appear after the next Google Sheets sync.'
+      }
     }
 
-    return NextResponse.json({ added: added.length, notFound, noEmail })
+    return NextResponse.json({ added: added.length, notFound, noEmail, alreadyAdded, inactive, trainingRecordError })
   } catch (err) {
     console.error('[admin/training-schedule/attendees POST]', err)
     return NextResponse.json({ error: 'Failed to add attendees.' }, { status: 500 })

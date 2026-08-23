@@ -430,11 +430,20 @@ model TrainingScheduleAttendee {
   trainingDataSyncedAt DateTime?
   trainingDataSyncError String?
 
+  // The TrainingRecord created alongside this attendee (same plain-string-reference convention as
+  // staffId elsewhere in this schema, not a real FK) — lets removing this attendee also remove the
+  // record it produced, instead of leaving a phantom row behind in Manage Records/analytics. Null
+  // for attendees added before this linkage existed, or if that write failed.
+  linkedTrainingRecordId String?
+
   createdAt DateTime @default(now())
 
   schedule  TrainingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   responses SurveyResponse[]
 
+  // Prevents a retried/duplicate "add attendee" request (e.g. after a partial failure further
+  // down the same request) from silently creating a second attendee row for the same person.
+  @@unique([scheduleId, staffId])
   @@index([scheduleId])
   @@index([staffId])
 }
