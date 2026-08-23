@@ -495,6 +495,7 @@ export interface PushVendorResult {
   success: boolean
   updated: number
   notFound: number
+  year: number
   error?: string
 }
 
@@ -504,34 +505,39 @@ export interface PushVendorResult {
 // pushes the platform's current vendor values for every TrainingRecord that has one back into the
 // live sheet's Vendor column, matched by the same loose key (Name + Training + Month) reconcile
 // uses — Staff ID can't be the key here since it's sometimes the very field being corrected.
-export async function pushVendorUpdatesToSheet(): Promise<PushVendorResult> {
+// Scoped to one year at a time (defaulting to the current year) since the configured sheet tab is
+// itself one year's data (e.g. "2026 Training Data") — pushing a prior year's fixes needs that
+// year explicitly requested, not assumed.
+export async function pushVendorUpdatesToSheet(year: number = new Date().getFullYear()): Promise<PushVendorResult> {
   const config = await prisma.googleSheetsConfig.findFirst()
   if (!config?.spreadsheetUrl) {
-    return { success: false, updated: 0, notFound: 0, error: 'No Google Sheet configured yet.' }
+    return { success: false, updated: 0, notFound: 0, year, error: 'No Google Sheet configured yet.' }
   }
   if (!config.trainingSheetName?.trim()) {
-    return { success: false, updated: 0, notFound: 0, error: 'No Training Cost tab name configured.' }
+    return { success: false, updated: 0, notFound: 0, year, error: 'No Training Cost tab name configured.' }
   }
 
   let connection: SheetsConnection
   try {
     connection = await connectToSpreadsheet(config.spreadsheetUrl)
   } catch (err) {
-    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.' }
+    return { success: false, updated: 0, notFound: 0, year, error: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.' }
   }
 
   const sheetName = config.trainingSheetName.trim()
   if (!connection.tabTitles.includes(sheetName)) {
-    return { success: false, updated: 0, notFound: 0, error: `Tab "${sheetName}" not found in the spreadsheet.` }
+    return { success: false, updated: 0, notFound: 0, year, error: `Tab "${sheetName}" not found in the spreadsheet.` }
   }
 
-  const year = new Date().getFullYear()
+  // Excludes '' as well as null — a vendor that was cleared back to blank on the platform
+  // shouldn't overwrite a value that's still genuinely present in the sheet; only a real vendor
+  // value gets pushed.
   const records = await prisma.trainingRecord.findMany({
-    where: { year, vendor: { not: null } },
+    where: { year, vendor: { not: null }, NOT: { vendor: '' } },
     select: { staffId: true, staffName: true, training: true, month: true, vendor: true },
   })
   if (records.length === 0) {
-    return { success: true, updated: 0, notFound: 0 }
+    return { success: true, updated: 0, notFound: 0, year }
   }
 
   // Staff ID is the key here (not staffName, unlike reconcileTraining's loose key) — vendor
@@ -552,8 +558,8 @@ export async function pushVendorUpdatesToSheet(): Promise<PushVendorResult> {
         updates: [{ columnCandidates: ['vendor', 'trainingvendor', 'provider', 'facilitator', 'trainer'], value: r.vendor || '' }],
       }))
     )
-    return { success: !error, updated: found, notFound, error }
+    return { success: !error, updated: found, notFound, year, error }
   } catch (err) {
-    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
+    return { success: false, updated: 0, notFound: 0, year, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
   }
 }
