@@ -13,6 +13,12 @@ export interface ResolvedStaff {
   email: string | null
   lineManagerStaffId: string | null
   businessUnit: string
+  // Deactivated (Employees page) staff still resolve here — this directory is also used for
+  // historical lookups (an old training record's attendee shouldn't fail to resolve just because
+  // they've since left) — but callers adding someone to something NEW (a training schedule, the
+  // Talent Member roster) should check this and refuse if false. Comprehensive-list-only entries
+  // (no matching roster record at all) default true — that sheet has no concept of deactivation.
+  active: boolean
 }
 
 // "First Last" only, no middle name — used specifically for the Line Manager Name column written
@@ -106,6 +112,7 @@ async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>
         email: col.email ? norm(r[col.email]).toLowerCase() || null : null,
         lineManagerStaffId: col.lineManager ? norm(r[col.lineManager]).toUpperCase() || null : null,
         businessUnit: col.bu ? normalizeBUName(norm(r[col.bu])) : '',
+        active: true,
       })
     }
   } catch (err) {
@@ -138,6 +145,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       email: r.email,
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
+      active: r.active,
     })
   }
 
@@ -155,6 +163,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
         email: existing.email || extra.email,
         lineManagerStaffId: existing.lineManagerStaffId || extra.lineManagerStaffId,
         businessUnit: existing.businessUnit || extra.businessUnit,
+        active: existing.active,
       })
     }
   }
