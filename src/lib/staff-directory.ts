@@ -22,23 +22,27 @@ export function managerDisplayName(staff: ResolvedStaff): string {
 }
 
 // loadRosterDirectory() is called from a dozen+ places across the app (nearly every page/API
-// that needs to resolve a staff member) and, until this cache, hit Google Sheets fresh — a live
-// API round-trip plus a full-tab parse — on every single one of those calls. That's what was
-// making the platform feel slow generally, not any one page. A short TTL is enough to collapse
-// the many calls that happen within one user action (or one page's several API calls) into a
-// single fetch, while still picking up sheet edits within a minute.
-const COMPREHENSIVE_LIST_TTL_MS = 60_000
+// that needs to resolve a staff member). Two things made it expensive on every single call: the
+// comprehensive staff list supplement hit Google Sheets fresh (a live API round-trip plus a
+// full-tab parse), and the base roster query scans StaffRosterRecord in full — a table that only
+// ever grows (each re-upload adds new rows rather than replacing old ones; Admin → Staff Data
+// Quality → Clean trims it, but only when run). Both are cached together here with a short TTL,
+// long enough to collapse the many calls one user action (or one page's several API calls)
+// triggers into a single fetch, short enough to still pick up an upload or sheet edit quickly.
+const DIRECTORY_TTL_MS = 60_000
+let directoryCache: { at: number; map: Map<string, ResolvedStaff> } | null = null
 let comprehensiveListCache: { at: number; map: Map<string, ResolvedStaff> } | null = null
 
-// Called after anything that changes what this cache would return (the sheet config itself, or a
-// direct write into the sheet like the Line Manager Name backfill) so the very next read reflects
-// it immediately instead of waiting out the TTL.
+// Called after anything that changes what this cache would return (a roster upload/clean, the
+// sheet config itself, or a direct write into the sheet like the Line Manager Name backfill) so
+// the very next read reflects it immediately instead of waiting out the TTL.
 export function invalidateComprehensiveStaffListCache(): void {
   comprehensiveListCache = null
+  directoryCache = null
 }
 
 async function loadComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>> {
-  if (comprehensiveListCache && Date.now() - comprehensiveListCache.at < COMPREHENSIVE_LIST_TTL_MS) {
+  if (comprehensiveListCache && Date.now() - comprehensiveListCache.at < DIRECTORY_TTL_MS) {
     return comprehensiveListCache.map
   }
   const map = await fetchComprehensiveStaffList()
@@ -119,6 +123,10 @@ async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>
 // at all — without replacing anything the roster already has, since that sheet isn't the primary
 // source of truth yet.
 export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>> {
+  if (directoryCache && Date.now() - directoryCache.at < DIRECTORY_TTL_MS) {
+    return directoryCache.map
+  }
+
   const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
   const map = new Map<string, ResolvedStaff>()
   for (const r of all) {
@@ -151,6 +159,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
     }
   }
 
+  directoryCache = { at: Date.now(), map }
   return map
 }
 

@@ -26,17 +26,16 @@ export async function runDataQualityAudit(): Promise<TableAudit[]> {
 }
 
 async function auditTraining(): Promise<TableAudit> {
+  // Cost has no "not entered" state distinct from a deliberate 0 — it's a required numeric
+  // column, so a genuinely blank cell and an admin intentionally recording a free/zero-cost
+  // training both end up stored as the same 0. Flagging every 0 as an "issue" meant every
+  // legitimately free training got reported as broken data, so this no longer checks cost at all.
+  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { training: '' }] }
   const [total, problems] = await Promise.all([
     prisma.trainingRecord.count(),
-    prisma.trainingRecord.findMany({
-      where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { training: '' }, { cost: { lte: 0 } }] },
-      take: 200,
-      orderBy: { createdAt: 'desc' },
-    }),
+    prisma.trainingRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
   ])
-  const issueCount = await prisma.trainingRecord.count({
-    where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { training: '' }, { cost: { lte: 0 } }] },
-  })
+  const issueCount = await prisma.trainingRecord.count({ where })
   return {
     table: 'training',
     label: 'Training Cost',
@@ -48,7 +47,6 @@ async function auditTraining(): Promise<TableAudit> {
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
         !r.training && 'Training name missing',
-        r.cost <= 0 && 'Cost is zero or missing',
       ].filter((x): x is string => !!x),
     })),
   }
@@ -74,7 +72,9 @@ async function auditFeedback(): Promise<TableAudit> {
 }
 
 async function auditSubscription(): Promise<TableAudit> {
-  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { membershipOrg: '' }, { amount: { lte: 0 } }] }
+  // Amount, like Training Cost, has no way to distinguish a deliberate 0 from a blank cell — see
+  // the comment in auditTraining.
+  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { membershipOrg: '' }] }
   const [total, issueCount, problems] = await Promise.all([
     prisma.subscriptionRecord.count(),
     prisma.subscriptionRecord.count({ where }),
@@ -91,14 +91,15 @@ async function auditSubscription(): Promise<TableAudit> {
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
         !r.membershipOrg && 'Membership Organization missing',
-        r.amount <= 0 && 'Amount is zero or missing',
       ].filter((x): x is string => !!x),
     })),
   }
 }
 
 async function auditKSS(): Promise<TableAudit> {
-  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { durationMinutes: { lte: 0 } }] }
+  // Duration, like Training Cost, has no way to distinguish a deliberate 0 from a blank cell —
+  // see the comment in auditTraining.
+  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] }
   const [total, issueCount, problems] = await Promise.all([
     prisma.kSSRecord.count(),
     prisma.kSSRecord.count({ where }),
@@ -114,7 +115,6 @@ async function auditKSS(): Promise<TableAudit> {
       issues: [
         r.staffId.startsWith('UNKNOWN_') && 'Staff ID missing (no match on upload)',
         !r.businessUnit && 'Business Unit missing',
-        r.durationMinutes <= 0 && 'Duration is zero or missing',
       ].filter((x): x is string => !!x),
     })),
   }

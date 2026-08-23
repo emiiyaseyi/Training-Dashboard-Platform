@@ -30,6 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(lineManagerStaffId !== undefined && { lineManagerStaffId: lineManagerStaffId.trim() || null }),
       },
     })
+    invalidateComprehensiveStaffListCache() // this DB edit alone changes what loadRosterDirectory() returns, regardless of the sheet sync below
 
     // If a Line Manager ID was set/changed, resolve that manager and write their derived Name +
     // Email back into the comprehensive staff list sheet, on this staff member's own row — so the
