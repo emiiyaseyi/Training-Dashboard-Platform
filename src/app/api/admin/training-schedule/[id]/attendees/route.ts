@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaff, resolveLineManager } from '@/lib/staff-directory'
 import { mirrorAttendeesToTrainingData } from '@/lib/training-data-mirror'
+import { getOrCreateNativeBatch } from '@/lib/import-records'
+import { normalizeBUName } from '@/lib/bu-normalizer'
+import { MONTHS } from '@/lib/filter-types'
 import type { TrainingScheduleAttendee } from '@prisma/client'
 
 // Accepts a list of Staff IDs or emails, resolves each against the roster (name, email, line
@@ -55,9 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Mirror all newly-added attendees into the Training Data sheet in one batch call — one
     // connect + read-headers + append round trip for the whole group, not one per attendee (which
     // is what made adding several people to a schedule slow). Outcome is persisted per attendee
-    // (not just logged) so a failure is visible to the admin and retryable — this schedule is just
-    // another way of getting rows into that same tab, not a separate pipeline, so no direct
-    // TrainingRecord write or dedup handling is needed here.
+    // (not just logged) so a failure is visible to the admin and retryable.
     // Skipped for schedules sourced from Already Attended Trainings — those attendees came FROM
     // an existing Training Data row, so mirroring them again would create a duplicate.
     if (!schedule.sourcedFromHistoricalData && createdAttendees.length > 0) {
@@ -72,6 +73,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           })
         })
       )
+
+      // Also write a matching TrainingRecord for each attendee right now, using the exact same
+      // field values just mirrored to the sheet — otherwise this schedule is invisible in Manage
+      // Records (and every dashboard/analytics that reads TrainingRecord) until a Google Sheets
+      // sync happens to run, which could be up to a day away on the free-tier cron. Using the same
+      // values that were just mirrored means when a sheet sync DOES eventually run, reconcileTraining's
+      // loose-key match (staffName+training+month) recognizes this as the row already being
+      // imported — no duplicate, and no spurious "change" flagged unless something genuinely
+      // differs in between.
+      const batch = await getOrCreateNativeBatch('training', 'Training Schedule attendees')
+      await prisma.trainingRecord.createMany({
+        data: createdAttendees.map((a) => ({
+          staffName: a.staffName,
+          staffId: a.staffId,
+          training: schedule.trainingName,
+          businessUnit: normalizeBUName(schedule.businessUnit),
+          month: MONTHS[schedule.startDate.getMonth()],
+          year: new Date().getFullYear(),
+          cost: schedule.costPerAttendee ?? 0,
+          hours: schedule.hours,
+          trainingType: schedule.trainingType,
+          capability: schedule.capability,
+          vendor: schedule.vendor,
+          batchId: batch.id,
+        })),
+      })
     }
 
     return NextResponse.json({ added: added.length, notFound, noEmail })
