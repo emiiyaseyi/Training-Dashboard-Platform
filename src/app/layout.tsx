@@ -21,12 +21,15 @@ export const metadata: Metadata = {
   description: 'Enterprise training & professional development analytics platform',
 }
 
-// Without this, mobile browsers assume a ~980px desktop-width layout and zoom/pan the whole page
-// to fit — which is what "dragging left/right on the phone" actually was, not a per-page overflow
-// bug. This pins the layout viewport to the device's real width.
+// width/initialScale alone fixed the initial "assumes ~980px desktop layout" zoom-out, but still
+// let a pinch-zoom (even a small accidental one) leave the page pannable left/right afterward —
+// maximumScale/userScalable locks it so the layout can never be zoomed away from its correctly-
+// fitted state in the first place.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
