@@ -21,6 +21,7 @@ import {
   Award,
   HelpCircle,
   X,
+  Database,
 } from 'lucide-react'
 import { hasAccess, type PageKey } from '@/lib/permissions'
 
@@ -36,6 +37,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/talent-members', label: 'Talent Members',          icon: Award,           page: 'talent-members' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
   { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
+  { href: '/admin/records',  label: 'Manage Records',          icon: Database,        page: 'admin-settings' },
   { href: '/admin/surveys',  label: 'Survey Automation',       icon: Mail,            page: 'admin-settings' },
   { href: '/admin',          label: 'Admin Settings',          icon: Settings,        page: 'admin-settings' },
 ]

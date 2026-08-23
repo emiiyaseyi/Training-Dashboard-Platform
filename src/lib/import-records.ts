@@ -14,6 +14,16 @@ async function ensureBusinessUnits(names: string[]) {
   }
 }
 
+// Shared across every "records created one at a time through the UI rather than an Excel upload"
+// path (native survey responses, manually-added KSS/Subscription records) — every TrainingRecord/
+// FeedbackRecord/etc. row requires a batchId, so these get grouped under one reusable batch per
+// (type, label) pair instead of creating a new empty batch for every single manual record.
+export async function getOrCreateNativeBatch(type: string, filename: string) {
+  const existing = await prisma.uploadBatch.findFirst({ where: { type, filename } })
+  if (existing) return existing
+  return prisma.uploadBatch.create({ data: { type, filename, recordCount: 0 } })
+}
+
 export interface ImportResult {
   batchId: string
   recordCount: number
