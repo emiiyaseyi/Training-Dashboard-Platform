@@ -95,7 +95,10 @@ export function GoogleSheetsPanel() {
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [undoingId, setUndoingId] = useState<string | null>(null)
   const [pushingVendors, setPushingVendors] = useState(false)
-  const [pushVendorResult, setPushVendorResult] = useState<{ success: boolean; updated: number; notFound: number; error?: string } | null>(null)
+  const [pushVendorYear, setPushVendorYear] = useState(new Date().getFullYear())
+  const [pushVendorResult, setPushVendorResult] = useState<{ success: boolean; updated: number; notFound: number; year: number; error?: string } | null>(null)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ created: number; alreadyMatched: number; total: number } | { error: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -218,10 +221,25 @@ export function GoogleSheetsPanel() {
     setPushingVendors(true)
     setPushVendorResult(null)
     try {
-      const res = await fetch('/api/admin/google-sheets/push-vendors', { method: 'POST' })
+      const res = await fetch('/api/admin/google-sheets/push-vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: pushVendorYear }),
+      })
       setPushVendorResult(await res.json())
     } finally {
       setPushingVendors(false)
+    }
+  }
+
+  const runBackfill = async () => {
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const res = await fetch('/api/admin/training-schedule/backfill-records', { method: 'POST' })
+      setBackfillResult(await res.json())
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -413,14 +431,33 @@ export function GoogleSheetsPanel() {
               {previewing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Preview Sync
             </button>
+            <select
+              value={pushVendorYear}
+              onChange={(e) => setPushVendorYear(parseInt(e.target.value))}
+              className="text-xs border border-slate-300 rounded-lg px-2 py-1.5"
+              title="Which year's Training Cost records to push Vendor values from"
+            >
+              {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 2 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
             <button
               onClick={pushVendors}
               disabled={pushingVendors || !state.spreadsheetUrl.trim()}
               className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
-              title="Write this year's Vendor values from the platform into the sheet's Vendor column — for rows already fixed here but not yet updated in the sheet."
+              title="Write the selected year's Vendor values from the platform into the sheet's Vendor column — for rows already fixed here but not yet updated in the sheet."
             >
               {pushingVendors && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Push Vendors to Sheet
+            </button>
+            <button
+              onClick={runBackfill}
+              disabled={backfilling}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+              title="Creates the Manage Records entry for any Training Schedule attendee added before that started happening automatically — a one-time catch-up, safe to run repeatedly."
+            >
+              {backfilling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Backfill Missing Training Records
             </button>
           </div>
 
@@ -434,8 +471,18 @@ export function GoogleSheetsPanel() {
             >
               {pushVendorResult.error
                 ? pushVendorResult.error
-                : `Vendor pushed to ${pushVendorResult.updated} matching row${pushVendorResult.updated === 1 ? '' : 's'} in the sheet.` +
+                : `Vendor pushed to ${pushVendorResult.updated} matching row${pushVendorResult.updated === 1 ? '' : 's'} in the sheet for ${pushVendorResult.year}.` +
                   (pushVendorResult.notFound > 0 ? ` ${pushVendorResult.notFound} record(s) had no matching row in the sheet (Staff ID + Training + Month didn't match).` : '')}
+            </div>
+          )}
+
+          {backfillResult && (
+            <div className="text-xs rounded-lg px-3 py-2.5 border text-emerald-700 bg-emerald-50 border-emerald-100">
+              {'error' in backfillResult
+                ? backfillResult.error
+                : backfillResult.total === 0
+                  ? 'Nothing to backfill — every schedule attendee already has a Manage Records entry.'
+                  : `Checked ${backfillResult.total} attendee(s): ${backfillResult.created} new record${backfillResult.created === 1 ? '' : 's'} created, ${backfillResult.alreadyMatched} already had one from a prior sync.`}
             </div>
           )}
 

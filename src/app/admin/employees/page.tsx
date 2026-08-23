@@ -220,7 +220,7 @@ export default function EmployeesPage() {
   }
 
   const deleteEmployee = async (e: Employee) => {
-    if (!confirm(`Remove ${e.name || e.staffId} from the staff roster? This cannot be undone.`)) return
+    if (!confirm(`Remove ${e.name || e.staffId} from the staff roster? This cannot be undone, and they will no longer be found by name/Staff ID/email anywhere in the platform (e.g. when adding attendees to a new training). Their existing training/subscription/KSS history is not affected. If they may return, use Deactivate instead.`)) return
     setBusyId(e.id)
     try {
       await fetch(`/api/admin/staff-quality/${e.id}`, { method: 'DELETE' })
