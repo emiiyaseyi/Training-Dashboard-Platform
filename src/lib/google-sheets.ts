@@ -1,6 +1,7 @@
 import { JWT } from 'google-auth-library'
 import { createPrivateKey } from 'crypto'
 import * as XLSX from 'xlsx'
+import { findHeader } from '@/lib/excel-parser'
 
 // Read+write — the sync engine only ever reads, but native survey form submissions append rows
 // (Post-1/Post-2/Pre-Training), which needs write access. The spreadsheet must be shared with
@@ -418,10 +419,16 @@ export async function batchUpdateRowsByCompoundKey(
   if (rows.length === 0) return { found: 0, notFound: rows_.length, error: 'The tab has no rows.' }
 
   const headers = rows[0]
-  const normHeaders = headers.map(normaliseHeader)
+  // findHeader() tries an exact match across ALL headers before ever falling back to substring
+  // matching — critical here, since a per-header substring scan (checked one header at a time,
+  // in sheet column order) can match a broad candidate like "trainingname" against a plain
+  // "Name" column that happens to sit before the real "Training" column, before the scan ever
+  // reaches the actual exact match. That's not hypothetical — it's exactly what happened against
+  // this app's own "Training Cost" sheet (S/N, Staff ID, Name, Training, ..., Month, ...): "Name"
+  // got matched as the Training key part, and "Training" got matched as the Month key part.
   const keyColIdxs = keyPartsCandidates.map((candidates) => {
-    const normCandidates = candidates.map(normaliseHeader)
-    return normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    const header = findHeader(headers, candidates)
+    return header === undefined ? -1 : headers.indexOf(header)
   })
   if (keyColIdxs.some((idx) => idx === -1)) {
     const missingIdx = keyColIdxs.findIndex((idx) => idx === -1)
@@ -444,8 +451,8 @@ export async function batchUpdateRowsByCompoundKey(
   const colIdxFor = (candidates: string[]) => {
     const key = candidates.join('|')
     if (colIdxCache.has(key)) return colIdxCache.get(key)!
-    const normCandidates = candidates.map(normaliseHeader)
-    const idx = normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    const header = findHeader(headers, candidates)
+    const idx = header === undefined ? -1 : headers.indexOf(header)
     colIdxCache.set(key, idx)
     return idx
   }
