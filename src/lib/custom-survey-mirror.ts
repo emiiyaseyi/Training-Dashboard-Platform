@@ -15,9 +15,13 @@ export interface MirrorResult {
   message: string
 }
 
-// Mirrors one Custom Survey response into its configured Google Sheet tab — same best-effort,
-// self-aligning-headers pattern as mirrorSurveyResponse (survey-mirror.ts). A failure here never
-// blocks the submission itself; the database write is the source of truth.
+// Mirrors one Custom Survey response into a SINGLE shared tab used by EVERY Custom Survey (not
+// one tab per survey) — same best-effort, self-aligning-headers pattern as mirrorSurveyResponse
+// (survey-mirror.ts). Question columns are generic (Q1, Q2, ...) rather than the actual question
+// text, since different surveys ask different questions but all share the same sheet — the
+// Survey Name column is what tells rows from different surveys apart; the admin cross-references
+// that survey's own question list (in-app) to know what Q1..Qn mean for that row. A failure here
+// never blocks the submission itself; the database write is the source of truth.
 export async function mirrorCustomSurveyResponse(
   survey: CustomSurvey,
   recipient: CustomSurveyRecipient,
@@ -25,30 +29,36 @@ export async function mirrorCustomSurveyResponse(
   questions: CustomSurveyQuestion[],
   submittedAt: Date
 ): Promise<MirrorResult> {
+  const settings = await prisma.surveySettings.findFirst()
   const config = await prisma.googleSheetsConfig.findFirst()
-  if (!survey.mirrorSheetName || !config?.spreadsheetUrl) {
-    return { attempted: false, success: false, message: 'Mirroring not configured for this survey.' }
+  const sheetName = settings?.customSurveyMirrorSheetName
+  if (!sheetName || !config?.spreadsheetUrl) {
+    return { attempted: false, success: false, message: 'Mirroring not configured for Custom Surveys yet.' }
   }
 
   const recordStatus = async (success: boolean, message: string) => {
-    await prisma.customSurvey.update({
-      where: { id: survey.id },
-      data: { mirrorStatus: JSON.stringify({ success, message, at: new Date().toISOString() }) },
-    })
+    const existing = await prisma.surveySettings.findFirst()
+    if (existing) {
+      await prisma.surveySettings.update({
+        where: { id: existing.id },
+        data: { customSurveyMirrorStatus: JSON.stringify({ success, message, at: new Date().toISOString() }) },
+      })
+    }
   }
 
   const fields: MirrorField[] = [
-    { label: 'Submitted At', candidates: [], value: formatSubmittedAt(submittedAt) },
-    { label: 'Staff Name', candidates: ['staffname', 'employeename', 'fullname', 'name'], value: recipient.staffName },
+    { label: 'Timestamp', candidates: ['submittedat', 'datefilled', 'dateandtime'], value: formatSubmittedAt(submittedAt) },
+    { label: 'Survey Name', candidates: ['surveytitle', 'survey'], value: survey.title },
+    { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname', 'name'], value: recipient.staffName },
     { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: recipient.businessUnit || '' },
-    ...questions.map((q) => ({ label: q.label, candidates: [] as string[], value: asText(answers[q.id]) })),
+    ...questions.map((q, i) => ({ label: `Q${i + 1}`, candidates: [] as string[], value: asText(answers[q.id]) })),
   ]
 
   try {
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-    await appendMirrorRow(connection.spreadsheetId, survey.mirrorSheetName, connection.accessToken, fields)
-    await recordStatus(true, `Synced to "${survey.mirrorSheetName}".`)
-    return { attempted: true, success: true, message: `Synced to "${survey.mirrorSheetName}".` }
+    await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
+    await recordStatus(true, `Synced to "${sheetName}".`)
+    return { attempted: true, success: true, message: `Synced to "${sheetName}".` }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error.'
     await recordStatus(false, message)

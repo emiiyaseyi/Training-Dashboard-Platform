@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface Column<T> {
@@ -9,6 +9,10 @@ interface Column<T> {
   header: string
   render?: (row: T) => React.ReactNode
   align?: 'left' | 'right' | 'center'
+  // Opt-in per column — clicking the header cycles asc/desc/unsorted, comparing the row's raw
+  // value at `key` (not the rendered output), so a column with a custom render() still sorts by
+  // its real underlying value (e.g. an ISO date string, which sorts correctly as plain text).
+  sortable?: boolean
 }
 
 interface DataTableProps<T extends Record<string, unknown>> {
@@ -28,6 +32,7 @@ export function DataTable<T extends Record<string, unknown>>({
 }: DataTableProps<T>) {
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
   const rows: T[] = Array.isArray(data) ? data : []
 
   // Searches every field of every row (not just what's displayed), so it still finds a match
@@ -36,7 +41,28 @@ export function DataTable<T extends Record<string, unknown>>({
   const filteredRows = q
     ? rows.filter((row) => Object.values(row).some((v) => String(v ?? '').toLowerCase().includes(q)))
     : rows
-  const pageRows = pageSize > 0 ? paginate(filteredRows, page, pageSize) : filteredRows
+
+  const sortedRows = useMemo(() => {
+    if (!sort) return filteredRows
+    const { key, dir } = sort
+    const mul = dir === 'asc' ? 1 : -1
+    return [...filteredRows].sort((a, b) => {
+      const av = a[key as keyof T]
+      const bv = b[key as keyof T]
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mul
+      return String(av ?? '').localeCompare(String(bv ?? '')) * mul
+    })
+  }, [filteredRows, sort])
+
+  const toggleSort = (key: string) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+  }
+
+  const pageRows = pageSize > 0 ? paginate(sortedRows, page, pageSize) : sortedRows
   // Based on the UNFILTERED count, not filteredRows — otherwise the search box would disappear
   // mid-typing as soon as a query narrows the results down to a single page.
   const showSearch = pageSize > 0 && rows.length > pageSize
@@ -72,11 +98,19 @@ export function DataTable<T extends Record<string, unknown>>({
               {columns.map((col, colIdx) => (
                 <th
                   key={`${colIdx}-${col.header}`}
+                  onClick={col.sortable ? () => toggleSort(String(col.key)) : undefined}
                   className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
-                  }`}
+                  } ${col.sortable ? 'cursor-pointer select-none hover:text-slate-700' : ''}`}
                 >
-                  {col.header}
+                  <span className={`inline-flex items-center gap-1 ${col.align === 'right' ? 'flex-row-reverse' : ''}`}>
+                    {col.header}
+                    {col.sortable && (
+                      sort?.key === col.key
+                        ? sort.dir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                        : <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -112,7 +146,7 @@ export function DataTable<T extends Record<string, unknown>>({
       </div>
       {pageSize > 0 && (
         <div className="px-4 border-t border-slate-100">
-          <Pagination page={page} totalItems={filteredRows.length} pageSize={pageSize} onChange={setPage} />
+          <Pagination page={page} totalItems={sortedRows.length} pageSize={pageSize} onChange={setPage} />
         </div>
       )}
     </div>

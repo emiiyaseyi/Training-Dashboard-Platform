@@ -44,8 +44,6 @@ interface SurveySummary {
   audienceType: AudienceType
   audienceValue: string | null
   expiryDays: number
-  mirrorSheetName: string | null
-  mirrorStatus: string | null
   status: 'draft' | 'launched' | 'closed'
   launchedAt: string | null
   closedAt: string | null
@@ -170,7 +168,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
 
   const [savingField, setSavingField] = useState(false)
   const [audienceOptions, setAudienceOptions] = useState<{ departments: string[]; roles: string[]; businessUnits: string[] } | null>(null)
-  const [preview, setPreview] = useState<{ count: number; sample: string[]; missingEmail: number } | null>(null)
+  const [preview, setPreview] = useState<{ count: number; sample: string[]; missingEmail: number; missingEmailSample: string[] } | null>(null)
   const [previewing, setPreviewing] = useState(false)
 
   const [selectedPending, setSelectedPending] = useState<RosterStaff[]>([])
@@ -475,22 +473,19 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       {savingField && <span className="text-[11px] text-slate-400">Saving…</span>}
                     </div>
                     {preview && (
-                      <p className="text-xs text-slate-500 mt-1.5">
-                        {preview.count} staff would receive this survey.{preview.missingEmail > 0 && ` ${preview.missingEmail} have no email on file and will be skipped.`}
-                        {preview.sample.length > 0 && ` (e.g. ${preview.sample.slice(0, 5).join(', ')}${preview.count > 5 ? ', …' : ''})`}
-                      </p>
+                      <div className="text-xs text-slate-500 mt-1.5 space-y-0.5">
+                        <p>
+                          {preview.count} staff would receive this survey
+                          {preview.sample.length > 0 && ` (e.g. ${preview.sample.join(', ')}${preview.count > preview.sample.length ? ', …' : ''})`}.
+                        </p>
+                        {preview.missingEmail > 0 && (
+                          <p className="text-amber-700">
+                            {preview.missingEmail} have no email on file and will be skipped
+                            {preview.missingEmailSample.length > 0 && `: ${preview.missingEmailSample.join(', ')}${preview.missingEmail > preview.missingEmailSample.length ? ', …' : ''}`}.
+                          </p>
+                        )}
+                      </div>
                     )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Google Sheet mirror tab (optional)</label>
-                    <input
-                      value={detail.mirrorSheetName || ''}
-                      onChange={(e) => setDetail({ ...detail, mirrorSheetName: e.target.value })}
-                      onBlur={(e) => patchSurvey({ mirrorSheetName: e.target.value })}
-                      placeholder="e.g. Custom Survey Responses"
-                      className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-                    />
                   </div>
 
                   <div>
@@ -555,11 +550,29 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       </button>
                     )}
                   </div>
-                  {detail.mirrorStatus && (() => {
-                    try {
-                      const s = JSON.parse(detail.mirrorStatus)
-                      return <p className={`text-[11px] ${s.success ? 'text-emerald-600' : 'text-red-600'}`}>Last mirror sync: {s.message}</p>
-                    } catch { return null }
+                  {(() => {
+                    const total = detail.recipients.length
+                    const sent = detail.recipients.filter((r) => r.sentAt).length
+                    const filled = detail.recipients.filter((r) => r.respondedAt).length
+                    const noEmail = detail.recipients.filter((r) => !r.email).length
+                    const yetToFill = sent - filled
+                    const stats: [string, number, string][] = [
+                      ['Recipients', total, 'text-slate-700'],
+                      ['Sent', sent, 'text-emerald-700'],
+                      ['Filled', filled, 'text-blue-700'],
+                      ['Yet to Fill', yetToFill, 'text-amber-700'],
+                      ['No Email', noEmail, 'text-red-700'],
+                    ]
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                        {stats.map(([label, value, color]) => (
+                          <div key={label} className="border border-slate-200 rounded-lg px-3 py-2 text-center">
+                            <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wide">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )
                   })()}
 
                   <div className="overflow-x-auto">
@@ -633,6 +646,14 @@ export function CustomSurveyPanel() {
   const [newTitle, setNewTitle] = useState('')
   const [showNewForm, setShowNewForm] = useState(false)
 
+  // One shared mirror tab for every Custom Survey (not one per survey — see custom-survey-mirror.ts)
+  // — stored on the same singleton SurveySettings row as the pre/post1/post2 mirror tabs, so saving
+  // it must round-trip the OTHER settings fields too rather than overwrite them with defaults.
+  const [allSettings, setAllSettings] = useState<Record<string, unknown> | null>(null)
+  const [mirrorSheetName, setMirrorSheetName] = useState('')
+  const [mirrorStatus, setMirrorStatus] = useState<{ success: boolean; message: string } | null>(null)
+  const [savingMirror, setSavingMirror] = useState(false)
+
   const load = async () => {
     setLoading(true)
     try {
@@ -643,10 +664,34 @@ export function CustomSurveyPanel() {
     }
   }
 
+  const loadMirrorSettings = async () => {
+    const res = await fetch('/api/admin/survey-settings')
+    const data = await res.json()
+    setAllSettings(data)
+    setMirrorSheetName(data.customSurveyMirrorSheetName || '')
+    if (data.customSurveyMirrorStatus) {
+      try { setMirrorStatus(JSON.parse(data.customSurveyMirrorStatus)) } catch { /* ignore */ }
+    }
+  }
+
   useEffect(() => {
     load()
     fetch('/api/admin/roster-directory').then((r) => r.json()).then(setRoster)
+    loadMirrorSettings()
   }, [])
+
+  const saveMirrorSheetName = async () => {
+    if (!allSettings) return
+    setSavingMirror(true)
+    try {
+      await fetch('/api/admin/survey-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...allSettings, customSurveyMirrorSheetName: mirrorSheetName }),
+      })
+    } finally {
+      setSavingMirror(false)
+    }
+  }
 
   const createSurvey = async () => {
     if (!newTitle.trim()) return
@@ -688,6 +733,32 @@ export function CustomSurveyPanel() {
         >
           <Plus className="w-3.5 h-3.5" /> New Survey
         </button>
+      </div>
+
+      <div className="mb-4 border border-slate-200 rounded-lg p-3">
+        <label className="block text-xs font-medium text-slate-600 mb-1">
+          Google Sheet mirror tab (optional — shared by every Custom Survey)
+        </label>
+        <p className="text-[11px] text-slate-400 mb-1.5">
+          Every Custom Survey response appends here, in the spreadsheet configured under Live Data Source — Timestamp,
+          Survey Name, Employee Name, Business Unit, then Q1, Q2, … per that survey&rsquo;s own questions. Survey Name is
+          what tells rows from different surveys apart.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            value={mirrorSheetName}
+            onChange={(e) => setMirrorSheetName(e.target.value)}
+            onBlur={saveMirrorSheetName}
+            placeholder="e.g. Custom Survey Responses"
+            className="flex-1 border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+          />
+          {savingMirror && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
+        </div>
+        {mirrorStatus && (
+          <p className={`text-[11px] mt-1 ${mirrorStatus.success ? 'text-emerald-600' : 'text-red-600'}`}>
+            Last sync: {mirrorStatus.message}
+          </p>
+        )}
       </div>
 
       {showNewForm && (
