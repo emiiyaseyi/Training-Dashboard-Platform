@@ -25,7 +25,7 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
         <div>
           <p className="text-report-gray" style={{ fontSize: 13 }}>Formal Training</p>
           <p className="font-bold text-navy-700 tabular-nums" style={{ fontSize: 18, lineHeight: '22px' }}>{fmt(bu.trainingCost)}</p>
-          <p className="text-report-gray" style={{ fontSize: 12, marginTop: 2 }}>{bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set'}</p>
+          <p className="text-report-gray" style={{ fontSize: 12, marginTop: 2 }}>{bu.budget > 0 ? `${pct((bu.trainingCost / bu.budget) * 100)} of budget` : 'Budget not set'}</p>
         </div>
         <div>
           <p className="text-report-gray" style={{ fontSize: 13 }}>Strategic Learnings</p>
