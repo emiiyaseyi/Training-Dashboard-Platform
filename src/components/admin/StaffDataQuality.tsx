@@ -70,6 +70,7 @@ export function StaffDataQuality() {
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{
     checked: number; updated: number; fieldsFilled: number; stillMissing: number; noSheetRow: number
+    matchedByName: number; staffIdMismatch: number
     fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]; error?: string
   } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -239,8 +240,15 @@ export function StaffDataQuality() {
               <p className={backfillResult.updated > 0 ? 'text-emerald-700' : ''}>
                 Checked {backfillResult.checked} flagged staff — filled {backfillResult.fieldsFilled} field(s) across {backfillResult.updated} record(s).
                 {' '}{backfillResult.stillMissing} still have nothing to fill from in the sheet
-                {backfillResult.noSheetRow > 0 && ` (${backfillResult.noSheetRow} of those weren't found in the sheet by Staff ID at all — check the Staff ID matches exactly)`}.
+                {backfillResult.noSheetRow > 0 && ` (${backfillResult.noSheetRow} of those weren't found in the sheet by Staff ID or by exact name)`}.
+                {backfillResult.matchedByName > 0 && ` ${backfillResult.matchedByName} were matched by name instead of Staff ID (their Staff ID here didn't match the sheet).`}
               </p>
+              {backfillResult.staffIdMismatch > 0 && (
+                <p className="text-amber-700">
+                  {backfillResult.staffIdMismatch} of those name-matched people also have a DIFFERENT Staff ID in the sheet than what&apos;s stored here —
+                  their fields were filled, but the Staff ID itself wasn&apos;t changed (that&apos;s a separate correction; edit them individually below if the sheet&apos;s ID is the right one).
+                </p>
+              )}
               {backfillResult.fieldBreakdown.some((f) => f.missingInDb > 0) && (
                 <ul className="pl-3 list-disc space-y-0.5">
                   {backfillResult.fieldBreakdown.filter((f) => f.missingInDb > 0).map((f) => (
