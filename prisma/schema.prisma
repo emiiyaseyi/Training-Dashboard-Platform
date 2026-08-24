@@ -36,6 +36,7 @@ model GoogleSheetsConfig {
   feedbackSheetName                String    @default("Feedback")
   subscriptionSheetName            String    @default("Subscriptions")
   kssSheetName                     String    @default("KSS")
+  rosterSheetName                  String? // optional — when set, Sync Now/scheduled sync also imports new-or-changed Staff Roster rows from this tab, same as a manual Upload & Data → Staff Roster upload. Leave blank to keep managing the roster by upload only.
   comprehensiveStaffListSheetName  String? // optional secondary staff source (e.g. "MERISTEM COMPREHENSIVE STAFF LIST") — read-only supplement to the uploaded roster, fills in gaps like missing email/line manager
   talentMemberSheetName            String? // tab the Talent Member roster (TalentMemberRosterEntry) is mirrored into — admin adds/removes TMs from the Talent Members page, not by editing this sheet directly
   autoSyncEnabled                  Boolean   @default(false)

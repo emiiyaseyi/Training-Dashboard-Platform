@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { parseRosterExcel } from '@/lib/excel-parser'
-import { normalizeBUName } from '@/lib/bu-normalizer'
+import { importRosterRows } from '@/lib/import-records'
 import { requirePermission } from '@/lib/session-guard'
 import { validateUploadFile } from '@/lib/upload-validation'
-import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('upload-data', 'admin')
@@ -32,49 +30,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File parsed but contained no valid rows.', warnings }, { status: 422 })
     }
 
-    const normalizedRows = rows.map((r) => ({ ...r, businessUnit: normalizeBUName(r.businessUnit) }))
+    const result = await importRosterRows(rows, file.name, period || null, warnings)
 
-    const buNames = [...new Set(normalizedRows.map((r) => r.businessUnit).filter(Boolean))]
-    for (const name of buNames) {
-      await prisma.businessUnit.upsert({
-        where: { name },
-        update: {},
-        create: { name, budget: 0, staffCount: 0 },
-      })
-    }
-
-    const batch = await prisma.uploadBatch.create({
-      data: {
-        type: 'roster',
-        filename: file.name,
-        recordCount: normalizedRows.length,
-        period: period || null,
-      },
-    })
-
-    await prisma.staffRosterRecord.createMany({
-      data: normalizedRows.map((r) => ({
-        staffId:        r.staffId.toUpperCase(),
-        firstName:      r.firstName,
-        middleName:     r.middleName || null,
-        lastName:       r.lastName,
-        email:          r.email || null,
-        lineManagerStaffId: r.lineManagerStaffId || null,
-        businessUnit:   r.businessUnit,
-        role:           r.role || null,
-        department:     r.department || null,
-        employmentDate: r.employmentDate ? new Date(r.employmentDate) : null,
-        confirmed:      r.confirmed,
-        batchId:        batch.id,
-      })),
-    })
-
-    invalidateComprehensiveStaffListCache()
     return NextResponse.json({
       success: true,
-      batchId: batch.id,
-      recordCount: normalizedRows.length,
-      warnings,
+      batchId: result.batchId,
+      recordCount: result.recordCount,
+      warnings: result.warnings,
     })
   } catch (err) {
     console.error('[upload/roster]', err)

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeBUName } from '@/lib/bu-normalizer'
-import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
+import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
+import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow, RosterRow } from '@/lib/excel-parser'
 
 // Shared "write parsed rows into the database" logic — used by both the Excel upload routes
 // and the Google Sheets sync engine, so the two paths can never drift out of sync with each
@@ -140,5 +141,36 @@ export async function importKSSRows(rows: KSSRow[], filename: string, period: st
       batchId: batch.id,
     })),
   })
+  return { batchId: batch.id, recordCount: normalizedRows.length, warnings }
+}
+
+// Roster is a snapshot, not an event log — every row here is `rows` filtered by the caller down
+// to genuinely new-or-changed people (see dedupeRoster in sheets-sync.ts), never the full sheet
+// re-imported wholesale, so this doesn't bloat StaffRosterRecord with an unchanged copy of
+// everyone on every sync run.
+export async function importRosterRows(rows: RosterRow[], filename: string, period: string | null, warnings: string[] = []): Promise<ImportResult> {
+  const normalizedRows = rows.map((r) => ({ ...r, businessUnit: normalizeBUName(r.businessUnit) }))
+  await ensureBusinessUnits(normalizedRows.map((r) => r.businessUnit))
+
+  const batch = await prisma.uploadBatch.create({
+    data: { type: 'roster', filename, recordCount: normalizedRows.length, period: period || null },
+  })
+  await prisma.staffRosterRecord.createMany({
+    data: normalizedRows.map((r) => ({
+      staffId: r.staffId.toUpperCase(),
+      firstName: r.firstName,
+      middleName: r.middleName || null,
+      lastName: r.lastName,
+      email: r.email || null,
+      lineManagerStaffId: r.lineManagerStaffId || null,
+      businessUnit: r.businessUnit,
+      role: r.role || null,
+      department: r.department || null,
+      employmentDate: r.employmentDate ? new Date(r.employmentDate) : null,
+      confirmed: r.confirmed,
+      batchId: batch.id,
+    })),
+  })
+  invalidateComprehensiveStaffListCache()
   return { batchId: batch.id, recordCount: normalizedRows.length, warnings }
 }

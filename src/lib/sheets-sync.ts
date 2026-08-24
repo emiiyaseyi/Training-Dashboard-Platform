@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { connectToSpreadsheet, fetchSheetAsBuffer, batchUpdateRowsByCompoundKey, type SheetsConnection } from '@/lib/google-sheets'
-import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel } from '@/lib/excel-parser'
-import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow } from '@/lib/excel-parser'
-import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows } from '@/lib/import-records'
+import { parseTrainingExcel, parseFeedbackExcel, parseSubscriptionExcel, parseKSSExcel, parseRosterExcel } from '@/lib/excel-parser'
+import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow, RosterRow } from '@/lib/excel-parser'
+import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows, importRosterRows } from '@/lib/import-records'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
@@ -243,16 +243,73 @@ async function dedupeKSS(rows: KSSRow[]): Promise<KSSRow[]> {
   return rows.filter((r) => !seen.has(key(r.staffId, r.durationMinutes, r.month)))
 }
 
-type JobType = 'training' | 'feedback' | 'subscription' | 'kss'
+// Roster's fields, folded into one comparable string — used to tell "this person's row hasn't
+// actually changed" apart from "something changed and a new snapshot row is needed".
+function rosterFingerprint(r: {
+  firstName: string; middleName: string | null; lastName: string; email: string | null
+  lineManagerStaffId: string | null; businessUnit: string; role: string | null; department: string | null
+  employmentDate: Date | null; confirmed: boolean
+}): string {
+  return [
+    r.firstName.trim().toLowerCase(),
+    (r.middleName || '').trim().toLowerCase(),
+    r.lastName.trim().toLowerCase(),
+    (r.email || '').trim().toLowerCase(),
+    (r.lineManagerStaffId || '').trim().toUpperCase(),
+    r.businessUnit,
+    (r.role || '').trim().toLowerCase(),
+    (r.department || '').trim().toLowerCase(),
+    r.employmentDate ? r.employmentDate.toISOString().slice(0, 10) : '',
+    String(r.confirmed),
+  ].join('|')
+}
+
+// Roster is a snapshot (see importRosterRows), not an event log like the other 4 sync types —
+// importing every row on every sync would create a redundant new StaffRosterRecord for everyone
+// on staff, every single day, even when nothing changed. Instead: only rows that are brand new
+// (Staff ID never seen before) or that differ from that Staff ID's current (most recent) record
+// get imported; everyone else is skipped, same "only act on what actually changed" spirit as
+// reconcileTraining, just without a review step — Staff ID is a reliable enough match key here
+// (unlike Training's name-based loose match) that overwriting via a new snapshot row is safe.
+async function dedupeRoster(rows: RosterRow[]): Promise<RosterRow[]> {
+  const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
+  const latestByStaffId = new Map<string, (typeof all)[number]>()
+  for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
+
+  return rows.filter((row) => {
+    const existing = latestByStaffId.get(normalizeStaffIdKey(row.staffId))
+    if (!existing) return true
+    const incoming = rosterFingerprint({
+      firstName: row.firstName, middleName: row.middleName || null, lastName: row.lastName,
+      email: row.email || null, lineManagerStaffId: row.lineManagerStaffId || null,
+      businessUnit: normalizeBUName(row.businessUnit),
+      role: row.role || null, department: row.department || null,
+      employmentDate: row.employmentDate ? new Date(row.employmentDate) : null,
+      confirmed: row.confirmed,
+    })
+    return incoming !== rosterFingerprint(existing)
+  })
+}
+
+type JobType = 'training' | 'feedback' | 'subscription' | 'kss' | 'roster'
 interface Job { type: JobType; sheetName: string; label: string }
 
-function jobsFor(config: { trainingSheetName: string; feedbackSheetName: string; subscriptionSheetName: string; kssSheetName: string }): Job[] {
-  return [
+function jobsFor(config: {
+  trainingSheetName: string; feedbackSheetName: string; subscriptionSheetName: string; kssSheetName: string
+  rosterSheetName?: string | null
+}): Job[] {
+  const jobs: Job[] = [
     { type: 'training', sheetName: config.trainingSheetName, label: 'Training Cost' },
     { type: 'feedback', sheetName: config.feedbackSheetName, label: 'Feedback' },
     { type: 'subscription', sheetName: config.subscriptionSheetName, label: 'Subscriptions' },
     { type: 'kss', sheetName: config.kssSheetName, label: 'KSS' },
   ]
+  // Roster is opt-in (no default tab name) — omitted entirely from the job list rather than
+  // shown as a permanent "No tab name configured" error for admins who manage it by upload only.
+  if (config.rosterSheetName?.trim()) {
+    jobs.push({ type: 'roster', sheetName: config.rosterSheetName, label: 'Staff Roster' })
+  }
+  return jobs
 }
 
 async function connectOrThrow(spreadsheetUrl: string | null): Promise<SheetsConnection> {
@@ -271,6 +328,9 @@ function subscriptionSample(rows: SubscriptionRow[]) {
 }
 function kssSample(rows: KSSRow[]) {
   return rows.slice(0, 5).map((r) => ({ Name: r.staffName, 'Business Unit': r.businessUnit, 'Duration (min)': r.durationMinutes, Month: r.month }))
+}
+function rosterSample(rows: RosterRow[]) {
+  return rows.slice(0, 5).map((r) => ({ Name: `${r.firstName} ${r.lastName}`.trim(), 'Staff ID': r.staffId, 'Business Unit': r.businessUnit, Role: r.role || '—' }))
 }
 
 export interface SheetPreview {
@@ -337,6 +397,11 @@ export async function previewGoogleSheetsSync(): Promise<SyncPreviewResult> {
         if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
         const newRows = await dedupeKSS(rows)
         sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: kssSample(newRows) })
+      } else if (job.type === 'roster') {
+        const { rows, errors } = parseRosterExcel(buffer)
+        if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
+        const newRows = await dedupeRoster(rows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: rosterSample(newRows) })
       }
     } catch (err) {
       sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: err instanceof Error ? err.message : 'Failed to read this tab.' })
@@ -449,6 +514,15 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
         if (newRows.length === 0) { imported.kss = 0; continue }
         const result = await importKSSRows(newRows, filename, null, warnings)
         imported.kss = result.recordCount
+        batchIds.push(result.batchId)
+      } else if (job.type === 'roster') {
+        const { rows, errors: parseErrors, warnings } = parseRosterExcel(buffer)
+        if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
+        if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
+        const newRows = await dedupeRoster(rows)
+        if (newRows.length === 0) { imported.roster = 0; continue }
+        const result = await importRosterRows(newRows, filename, null, warnings)
+        imported.roster = result.recordCount
         batchIds.push(result.batchId)
       }
     } catch (err) {
