@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 export interface TableAuditSample {
   id: string
@@ -159,18 +160,26 @@ async function auditKSS(): Promise<TableAudit> {
 }
 
 async function auditRoster(): Promise<TableAudit> {
-  const where = { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { email: null }] }
-  const [total, issueCount, problems] = await Promise.all([
-    prisma.staffRosterRecord.count(),
-    prisma.staffRosterRecord.count({ where }),
-    prisma.staffRosterRecord.findMany({ where, take: 200, orderBy: { createdAt: 'desc' } }),
-  ])
+  // Unlike the event-log tables above (Training/Feedback/Subscription/KSS/Manager Review, where
+  // every row IS a distinct real record), the roster is a snapshot — each upload or sync run adds
+  // a NEW row only for people who are new or changed (see dedupeRoster in sheets-sync.ts), and
+  // older rows for the same Staff ID become stale history, not separate people. Counting every
+  // row here (like the tables above do correctly) would count each person's superseded old
+  // snapshots as if they were extra staff, inflating both the total and the issue count — same
+  // "latest row per Staff ID wins" convention as auditStaffQuality (staff-quality.ts).
+  const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
+  const latestByStaffId = new Map<string, (typeof all)[number]>()
+  for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId) || `__blank_${r.id}`, r)
+  const latest = [...latestByStaffId.values()]
+
+  const flagged = latest.filter((r) => r.staffId.startsWith('UNKNOWN_') || !r.businessUnit || !r.email)
+
   return {
     table: 'roster',
     label: 'Staff Roster',
-    totalRecords: total,
-    issueCount,
-    samples: problems.map((r) => ({
+    totalRecords: latest.length,
+    issueCount: flagged.length,
+    samples: flagged.slice(0, 200).map((r) => ({
       id: r.id,
       summary: [r.firstName, r.lastName].filter(Boolean).join(' ') || '(no name)',
       issues: [
