@@ -2,8 +2,9 @@ import { prisma } from '@/lib/prisma'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
-// Kept intentionally separate from analytics.ts — this report reads TrainingRecord for
-// attendance but never writes back to it, and touches no other report's calculations.
+// Kept intentionally separate from analytics.ts — this report reads TrainingRecord (and, for the
+// same reason Talent Members unions two sources — see computeTalentMemberReport — TrainingSchedule)
+// for attendance but never writes back to either, and touches no other report's calculations.
 
 function allowedMonths(filter: PeriodFilter): Set<string> | null {
   if (filter.mode === 'all' || filter.mode === 'year') return null
@@ -49,12 +50,25 @@ export interface YetToAttendReport {
   list: YetToAttendStaff[]
   hasRosterData: boolean
   availableYears: number[]
+  // Roster composition context, independent of attendance — surfaced as their own cards rather
+  // than folded into the confirmed-staff coverage numbers above.
+  unconfirmedStaffCount: number
+  internStaffCount: number
 }
 
 export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[] | null): Promise<YetToAttendReport> {
-  const [allRoster, allTraining] = await Promise.all([
+  const [allRoster, allTraining, allSchedules] = await Promise.all([
     prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } }),
     prisma.trainingRecord.findMany({ select: { staffId: true, year: true, month: true } }),
+    // Schedule-sourced attendance is unioned in alongside TrainingRecord for the same reason
+    // computeTalentMemberReport does: a schedule's attendees are dual-written into TrainingRecord
+    // the moment they're added (see training-schedule/[id]/attendees/route.ts), but older
+    // schedules created before that existed, or any row where that write failed, would otherwise
+    // silently look like "never attended" here even though the schedule clearly happened.
+    prisma.trainingSchedule.findMany({
+      where: { endDate: { lt: new Date() } }, // only training/summits/conferences that have actually happened
+      select: { startDate: true, attendees: { select: { staffId: true } } },
+    }),
   ])
 
   const availableYears = [...new Set(allTraining.map((r) => r.year))].sort((a, b) => b - a)
@@ -62,9 +76,22 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   // Roster is a snapshot, not a cumulative log — dedupe by staffId, most recent upload wins.
   const latestByStaffId = new Map<string, (typeof allRoster)[number]>()
   for (const r of allRoster) latestByStaffId.set(r.staffId, r)
+  const latestRoster = [...latestByStaffId.values()]
 
-  let roster = [...latestByStaffId.values()].filter((r) => r.confirmed)
+  let roster = latestRoster.filter((r) => r.confirmed)
   if (buScope) roster = roster.filter((r) => buScope.includes(r.businessUnit))
+
+  let scopedRoster = latestRoster
+  if (buScope) scopedRoster = scopedRoster.filter((r) => buScope.includes(r.businessUnit))
+  const unconfirmedStaffCount = scopedRoster.filter((r) => !r.confirmed).length
+  const internStaffCount = scopedRoster.filter((r) => (r.employmentType || '').trim().toLowerCase() === 'intern').length
+
+  const inPeriod = (year: number, month: string) => {
+    if (filter.mode !== 'all' && filter.year && year !== filter.year) return false
+    const months = allowedMonths(filter)
+    if (months && !months.has(month)) return false
+    return true
+  }
 
   let training = allTraining
   if (filter.mode !== 'all' && filter.year) {
@@ -75,6 +102,11 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     training = training.filter((r) => months.has(r.month))
   }
   const attendedStaffIds = new Set(training.map((r) => normalizeStaffIdKey(r.staffId)))
+
+  for (const sched of allSchedules) {
+    if (!inPeriod(sched.startDate.getFullYear(), MONTHS[sched.startDate.getMonth()])) continue
+    for (const att of sched.attendees) attendedStaffIds.add(normalizeStaffIdKey(att.staffId))
+  }
 
   const list: YetToAttendStaff[] = []
   let totalAttended = 0
@@ -120,5 +152,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     list: list.sort((a, b) => a.businessUnit.localeCompare(b.businessUnit) || a.staffName.localeCompare(b.staffName)),
     hasRosterData: allRoster.length > 0,
     availableYears,
+    unconfirmedStaffCount,
+    internStaffCount,
   }
 }
