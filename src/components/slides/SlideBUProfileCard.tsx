@@ -16,7 +16,7 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
           <p className="font-bold text-navy-700 leading-snug truncate" style={{ fontSize: 18 }}>{bu.name}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-report-gray" style={{ fontSize: 13 }}>Total Investment</p>
+          <p className="text-report-gray" style={{ fontSize: 13 }}>Total Learning Investment</p>
           <p className="font-bold tabular-nums" style={{ fontSize: 26, lineHeight: '30px', color: '#1E2761' }}>{fmt(bu.totalInvestment)}</p>
         </div>
       </div>
@@ -30,6 +30,7 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
         <div>
           <p className="text-report-gray" style={{ fontSize: 13 }}>Strategic Learnings</p>
           <p className="font-bold tabular-nums" style={{ fontSize: 18, lineHeight: '22px', color: '#C9A24B' }}>{fmt(bu.otherInvestmentCost)}</p>
+          <p className="text-report-gray" style={{ fontSize: 12, marginTop: 2 }}>{bu.otherStaffTrained} staff</p>
         </div>
         <div>
           <p className="text-report-gray" style={{ fontSize: 13 }}>Subscription Spend</p>

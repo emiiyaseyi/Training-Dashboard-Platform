@@ -276,7 +276,7 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     }
     slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.1, h: 0.4, fontFace: 'Calibri', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle' })
     slide.addText([
-      { text: 'Total Investment\n', options: { fontSize: 11, color: C.gray } },
+      { text: 'Total Learning Investment\n', options: { fontSize: 11, color: C.gray } },
       { text: fmt(bu.totalInvestment), options: { fontSize: 24, bold: true, color: C.navy, breakLine: true } },
     ], { x: x + cardW - 1.7, y: y + 0.1, w: 1.55, h: 0.6, align: 'right', fontFace: 'Calibri' })
 
@@ -287,6 +287,10 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     slide.addText(
       bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set',
       { x: x + 0.2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
+    )
+    slide.addText(
+      `${bu.otherStaffTrained} staff`,
+      { x: x + colW, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
     )
     slide.addText(
       `${bu.subscriptionStaff} members`,

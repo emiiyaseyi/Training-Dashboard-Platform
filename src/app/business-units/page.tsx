@@ -28,6 +28,7 @@ interface BUSummaryRow {
   subscriptionCost: number
   totalInvestment: number
   staffTrained: number
+  otherStaffTrained: number
   totalStaff: number
   coverageRatio: number
   avgImpactScore: number
@@ -72,13 +73,13 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-xs text-slate-400">Total Investment</p>
+          <p className="text-xs text-slate-400">Total Learning Investment</p>
           <p className="text-base font-bold text-navy-600 tabular-nums">{fmt(bu.totalInvestment)}</p>
         </div>
       </div>
 
       {/* Spend breakdown */}
-      <div className="px-5 py-4 grid grid-cols-2 gap-4 border-b border-slate-100">
+      <div className="px-5 py-4 grid grid-cols-3 gap-3 border-b border-slate-100">
         <div>
           <p className="text-xs text-slate-400 mb-0.5">Formal Training</p>
           <p className="text-sm font-semibold text-slate-700 tabular-nums">{fmt(bu.trainingCost)}</p>
@@ -87,6 +88,11 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
               {bu.isOverBudget ? '⚠ Over budget' : `${pct(bu.budgetUtilisation)} of budget`}
             </p>
           )}
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 mb-0.5">Strategic Learnings</p>
+          <p className="text-sm font-semibold text-gold-600 tabular-nums">{fmt(bu.otherInvestmentCost)}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{bu.otherStaffTrained} staff</p>
         </div>
         <div>
           <p className="text-xs text-slate-400 mb-0.5">Subscription Spend</p>
@@ -201,7 +207,7 @@ export default function BusinessUnitsDashboard() {
 
   const exportRows = buList.map((b) => ({
     'Business Unit': b.name,
-    'Total Investment (₦)': b.totalInvestment,
+    'Total Learning Investment (₦)': b.totalInvestment,
     'Formal Training (₦)': b.trainingCost,
     'Strategic Learnings (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
@@ -261,7 +267,7 @@ export default function BusinessUnitsDashboard() {
                 <div ref={investmentChartRef} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-sm font-semibold text-slate-800">Total Learning Investment</h3>
-                    <SectionExport captureRef={investmentChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Total Investment (₦)': b.totalInvestment }))} filename="bu_total_investment" />
+                    <SectionExport captureRef={investmentChartRef} rows={buList.map((b) => ({ 'Business Unit': b.name, 'Total Learning Investment (₦)': b.totalInvestment }))} filename="bu_total_investment" />
                   </div>
                   <BarChart
                     labels={buList.map((b) => b.name)}
@@ -307,7 +313,7 @@ export default function BusinessUnitsDashboard() {
                       </button>
                     ),
                   },
-                  { key: 'totalInvestment',   header: 'Total Investment',  align: 'right', render: (r) => fmt(r.totalInvestment as number) },
+                  { key: 'totalInvestment',   header: 'Total Learning Investment',  align: 'right', render: (r) => fmt(r.totalInvestment as number) },
                   { key: 'trainingCost',       header: 'Formal Training',   align: 'right', render: (r) => fmt(r.trainingCost as number) },
                   { key: 'otherInvestmentCost', header: 'Strategic Learnings', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
                   { key: 'subscriptionCost',   header: 'Subscriptions',     align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
