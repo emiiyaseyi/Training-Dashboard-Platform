@@ -76,7 +76,7 @@ export default function ExecutiveDashboard() {
   const buTableRows = data.businessUnits.map((b) => ({
     'Business Unit': b.name,
     'Formal Training Spend (₦)': b.trainingCost,
-    'Strategic Initiatives (₦)': b.otherInvestmentCost,
+    'Strategic Learnings (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
     'Total Investment (₦)': b.totalInvestment,
     'Staff Trained': b.staffTrained,
@@ -142,7 +142,7 @@ export default function ExecutiveDashboard() {
                 columns={[
                   { key: 'name', header: 'Business Unit' },
                   { key: 'trainingCost', header: 'Formal Training', align: 'right', render: (r) => fmt(r.trainingCost as number) },
-                  { key: 'otherInvestmentCost', header: 'Strategic Initiatives', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
+                  { key: 'otherInvestmentCost', header: 'Strategic Learnings', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
                   { key: 'subscriptionCost', header: 'Subscriptions', align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
                   { key: 'totalInvestment', header: 'Total Investment', align: 'right', render: (r) => fmt(r.totalInvestment as number) },
                   { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },

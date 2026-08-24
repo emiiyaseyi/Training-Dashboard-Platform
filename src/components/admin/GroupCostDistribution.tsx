@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Split, Loader2, AlertTriangle, CheckCircle, Plus, Trash2, History, Download } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { Split, Loader2, AlertTriangle, CheckCircle, Plus, Trash2, History, Download, ChevronDown, ChevronUp } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { usePagePermission } from '@/lib/use-page-permission'
 
 interface TrainingOption { name: string; count: number }
+interface SummaryBreakdownRow { businessUnit: string; cost: number; attendeeCount: number }
+interface SummaryRow { training: string; totalCost: number; attendeeCount: number; breakdown: SummaryBreakdownRow[] }
 interface BreakdownRow { businessUnit: string; attendeeCount: number; share: number; perPersonAmount: number }
 interface DistributionResult {
   training: string
@@ -45,6 +47,9 @@ export function GroupCostDistribution() {
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [summary, setSummary] = useState<SummaryRow[]>([])
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [expandedTraining, setExpandedTraining] = useState<string | null>(null)
 
   const exportAll = async () => {
     setExporting(true)
@@ -52,11 +57,11 @@ export function GroupCostDistribution() {
       const res = await fetch('/api/admin/strategic-initiatives-export')
       const data = await res.json()
       if (!res.ok) { alert(data.error || 'Export failed.'); return }
-      if (!data.rows || data.rows.length === 0) { alert('No records currently classified as a Strategic Learning Initiative / Other Investment Budget training.'); return }
+      if (!data.rows || data.rows.length === 0) { alert('No records currently classified as a Strategic Learnings training.'); return }
       const { exportExcel } = await import('@/lib/export')
       await exportExcel(
-        [{ name: 'Strategic Initiatives', rows: data.rows }],
-        `strategic_learning_initiatives_${new Date().toISOString().slice(0, 10)}`
+        [{ name: 'Strategic Learnings', rows: data.rows }],
+        `strategic_learnings_${new Date().toISOString().slice(0, 10)}`
       )
     } finally {
       setExporting(false)
@@ -69,6 +74,15 @@ export function GroupCostDistribution() {
       .then((data) => setTrainings(Array.isArray(data) ? data : []))
       .catch(() => setTrainings([]))
     loadHistory()
+    loadSummary()
+  }
+  const loadSummary = () => {
+    setSummaryLoading(true)
+    fetch('/api/admin/strategic-learnings-summary')
+      .then((r) => r.json())
+      .then((data) => setSummary(Array.isArray(data) ? data : []))
+      .catch(() => setSummary([]))
+      .finally(() => setSummaryLoading(false))
   }
   const loadHistory = () => {
     fetch('/api/admin/group-cost/history')
@@ -139,14 +153,14 @@ export function GroupCostDistribution() {
   return (
     <SectionCard
       icon={Split}
-      title="Other Investment Budget"
+      title="Strategic Learnings"
       description="For a group-wide training (e.g. a Summit or Leadership Cafe already uploaded with attendees but no per-person cost), enter the total amount spent — it's distributed across Business Units proportional to each BU's attendee count for that training, and written back onto those records."
       headerActions={
         canExport ? (
           <button
             onClick={(e) => { e.stopPropagation(); exportAll() }}
             disabled={exporting}
-            title="Export every training record currently classified as a Strategic Learning Initiative"
+            title="Export every training record currently classified as Strategic Learnings"
             className="flex items-center gap-1.5 text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-50 disabled:opacity-50"
           >
             {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -156,6 +170,79 @@ export function GroupCostDistribution() {
       }
     >
       <div className="space-y-4">
+      <div>
+        {summaryLoading ? (
+          <p className="text-xs text-slate-400">Loading…</p>
+        ) : summary.length === 0 ? (
+          <p className="text-xs text-slate-400">No records currently classified as Strategic Learnings.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Training</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Attendees</th>
+                  <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Cost</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {summary.map((row) => {
+                  const isExpanded = expandedTraining === row.training
+                  return (
+                    <Fragment key={row.training}>
+                      <tr
+                        onClick={() => setExpandedTraining(isExpanded ? null : row.training)}
+                        className="cursor-pointer hover:bg-slate-50"
+                      >
+                        <td className="px-3 py-2 font-medium text-slate-800">{row.training}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-600">{row.attendeeCount}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-gold-600">{fmt(row.totalCost)}</td>
+                        <td className="px-3 py-2 text-slate-400">{isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-2 bg-slate-50">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-slate-400">
+                                  <th className="text-left font-medium pb-1">Business Unit</th>
+                                  <th className="text-right font-medium pb-1">Attendees</th>
+                                  <th className="text-right font-medium pb-1">Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {row.breakdown.map((b) => (
+                                  <tr key={b.businessUnit} className="border-t border-slate-100">
+                                    <td className="py-1 text-slate-700">{b.businessUnit}</td>
+                                    <td className="py-1 text-right tabular-nums text-slate-600">{b.attendeeCount}</td>
+                                    <td className="py-1 text-right tabular-nums text-slate-700">{fmt(b.cost)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50">
+                  <td className="px-3 py-2 font-semibold text-slate-800">Total ({summary.reduce((s, r) => s + r.attendeeCount, 0)} attendees across {summary.length} training{summary.length === 1 ? '' : 's'})</td>
+                  <td />
+                  <td className="px-3 py-2 text-right font-semibold text-slate-800 tabular-nums">{fmt(summary.reduce((s, r) => s + r.totalCost, 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2 border-t border-slate-100">
+        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Add or Correct a Group Training Amount</p>
       {!applied ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -322,6 +409,7 @@ export function GroupCostDistribution() {
           </div>
         </div>
       )}
+      </div>
       </div>
     </SectionCard>
   )

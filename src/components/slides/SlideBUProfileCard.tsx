@@ -21,16 +21,20 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3" style={{ marginTop: 10 }}>
+      <div className="grid grid-cols-3 gap-3" style={{ marginTop: 10 }}>
         <div>
-          <p className="text-report-gray" style={{ fontSize: 14 }}>Training Spend</p>
-          <p className="font-bold text-navy-700 tabular-nums" style={{ fontSize: 22, lineHeight: '26px' }}>{fmt(bu.trainingCost)}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>{bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set'}</p>
+          <p className="text-report-gray" style={{ fontSize: 13 }}>Formal Training</p>
+          <p className="font-bold text-navy-700 tabular-nums" style={{ fontSize: 18, lineHeight: '22px' }}>{fmt(bu.trainingCost)}</p>
+          <p className="text-report-gray" style={{ fontSize: 12, marginTop: 2 }}>{bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set'}</p>
         </div>
         <div>
-          <p className="text-report-gray" style={{ fontSize: 14 }}>Subscription Spend</p>
-          <p className="font-bold text-navy-700 tabular-nums" style={{ fontSize: 22, lineHeight: '26px' }}>{fmt(bu.subscriptionCost)}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>{bu.subscriptionStaff} members</p>
+          <p className="text-report-gray" style={{ fontSize: 13 }}>Strategic Learnings</p>
+          <p className="font-bold tabular-nums" style={{ fontSize: 18, lineHeight: '22px', color: '#C9A24B' }}>{fmt(bu.otherInvestmentCost)}</p>
+        </div>
+        <div>
+          <p className="text-report-gray" style={{ fontSize: 13 }}>Subscription Spend</p>
+          <p className="font-bold text-navy-700 tabular-nums" style={{ fontSize: 18, lineHeight: '22px' }}>{fmt(bu.subscriptionCost)}</p>
+          <p className="text-report-gray" style={{ fontSize: 12, marginTop: 2 }}>{bu.subscriptionStaff} members</p>
         </div>
       </div>
 
