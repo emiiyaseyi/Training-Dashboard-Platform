@@ -644,6 +644,8 @@ export interface RosterBackfillResult {
   updated: number // of those, how many had at least one field actually filled in
   fieldsFilled: number // total individual field values filled in, across all updated staff
   stillMissing: number // checked but the sheet had nothing to fill them with either
+  noSheetRow: number // of stillMissing, how many had no row in the sheet AT ALL for their Staff ID (vs a row that just didn't have the value either)
+  fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]
   error?: string
 }
 
@@ -653,7 +655,7 @@ export interface RosterBackfillResult {
 // the admin explicitly configured, not a guess. A person still missing a field after this ran
 // genuinely has no value for it in that sheet either.
 export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
-  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0 }
+  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0, noSheetRow: 0, fieldBreakdown: [] }
   const config = await prisma.googleSheetsConfig.findFirst()
   const sheetName = (config?.rosterSheetName || config?.comprehensiveStaffListSheetName || '').trim()
   if (!sheetName || !config?.spreadsheetUrl) {
@@ -692,7 +694,14 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   const latestByStaffId = new Map<string, (typeof all)[number]>()
   for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
 
-  let checked = 0, fieldsFilled = 0, stillMissing = 0
+  let checked = 0, fieldsFilled = 0, stillMissing = 0, noSheetRow = 0
+  const fieldStats: Record<string, { missingInDb: number; availableInSheet: number }> = {
+    email: { missingInDb: 0, availableInSheet: 0 },
+    lineManagerStaffId: { missingInDb: 0, availableInSheet: 0 },
+    role: { missingInDb: 0, availableInSheet: 0 },
+    department: { missingInDb: 0, availableInSheet: 0 },
+    employmentDate: { missingInDb: 0, availableInSheet: 0 },
+  }
   const updates: { id: string; data: Record<string, unknown> }[] = []
 
   for (const [key, current] of latestByStaffId) {
@@ -701,14 +710,14 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
     checked++
 
     const sheetRow = sheetByStaffId.get(key)
-    if (!sheetRow) { stillMissing++; continue }
+    if (!sheetRow) { stillMissing++; noSheetRow++; continue }
 
     const data: Record<string, unknown> = {}
-    if (!current.email && sheetRow.email) data.email = sheetRow.email
-    if (!current.lineManagerStaffId && sheetRow.lineManagerStaffId) data.lineManagerStaffId = sheetRow.lineManagerStaffId
-    if (!current.role && sheetRow.role) data.role = sheetRow.role
-    if (!current.department && sheetRow.department) data.department = sheetRow.department
-    if (!current.employmentDate && sheetRow.employmentDate) data.employmentDate = new Date(sheetRow.employmentDate)
+    if (!current.email) { fieldStats.email.missingInDb++; if (sheetRow.email) { data.email = sheetRow.email; fieldStats.email.availableInSheet++ } }
+    if (!current.lineManagerStaffId) { fieldStats.lineManagerStaffId.missingInDb++; if (sheetRow.lineManagerStaffId) { data.lineManagerStaffId = sheetRow.lineManagerStaffId; fieldStats.lineManagerStaffId.availableInSheet++ } }
+    if (!current.role) { fieldStats.role.missingInDb++; if (sheetRow.role) { data.role = sheetRow.role; fieldStats.role.availableInSheet++ } }
+    if (!current.department) { fieldStats.department.missingInDb++; if (sheetRow.department) { data.department = sheetRow.department; fieldStats.department.availableInSheet++ } }
+    if (!current.employmentDate) { fieldStats.employmentDate.missingInDb++; if (sheetRow.employmentDate) { data.employmentDate = new Date(sheetRow.employmentDate); fieldStats.employmentDate.availableInSheet++ } }
 
     if (Object.keys(data).length === 0) { stillMissing++; continue }
     fieldsFilled += Object.keys(data).length
@@ -720,5 +729,6 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
     invalidateComprehensiveStaffListCache()
   }
 
-  return { checked, updated: updates.length, fieldsFilled, stillMissing }
+  const fieldBreakdown = Object.entries(fieldStats).map(([field, s]) => ({ field, ...s }))
+  return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, fieldBreakdown }
 }
