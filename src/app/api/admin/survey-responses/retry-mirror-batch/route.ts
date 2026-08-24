@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       attendee: r.attendee,
       answers: JSON.parse(r.answers) as Record<string, string | string[]>,
       questions: questionsByStage.get(r.stage as SurveyStageKey) || [],
+      submittedAt: r.submittedAt,
     }))
 
     const results = await mirrorSurveyResponses(items)

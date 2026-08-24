@@ -22,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const questions = await prisma.surveyQuestion.findMany({ where: { stage: stageKey }, orderBy: { order: 'asc' } })
   const answers = JSON.parse(response.answers) as Record<string, string | string[]>
 
-  const result = await mirrorSurveyResponse(stageKey, response.attendee, answers, questions)
+  const result = await mirrorSurveyResponse(stageKey, response.attendee, answers, questions, response.submittedAt)
   await prisma.surveyResponse.update({
     where: { id: response.id },
     data: { mirrorSyncedAt: result.success ? new Date() : null, mirrorError: result.success ? null : result.message },

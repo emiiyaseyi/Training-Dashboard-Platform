@@ -119,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // Best-effort: mirror into the Google Sheet tab. Outcome is persisted on the response itself
     // (not just logged) so a failure is visible to the admin and individually retryable, rather
     // than silently disappearing into server logs nobody sees.
-    const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions)
+    const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions, response.submittedAt)
     if (mirrorResult.attempted) {
       await prisma.surveyResponse.update({
         where: { id: response.id },
