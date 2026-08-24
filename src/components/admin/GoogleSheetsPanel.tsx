@@ -10,6 +10,7 @@ interface ConfigState {
   feedbackSheetName: string
   subscriptionSheetName: string
   kssSheetName: string
+  rosterSheetName: string
   comprehensiveStaffListSheetName: string
   talentMemberSheetName: string
   autoSyncEnabled: boolean
@@ -68,6 +69,7 @@ const DEFAULT_STATE: ConfigState = {
   feedbackSheetName: 'Feedback',
   subscriptionSheetName: 'Subscriptions',
   kssSheetName: 'KSS',
+  rosterSheetName: '',
   comprehensiveStaffListSheetName: '',
   talentMemberSheetName: '',
   autoSyncEnabled: false,
@@ -111,6 +113,7 @@ export function GoogleSheetsPanel() {
         feedbackSheetName: data.feedbackSheetName || DEFAULT_STATE.feedbackSheetName,
         subscriptionSheetName: data.subscriptionSheetName || DEFAULT_STATE.subscriptionSheetName,
         kssSheetName: data.kssSheetName || DEFAULT_STATE.kssSheetName,
+        rosterSheetName: data.rosterSheetName || '',
         comprehensiveStaffListSheetName: data.comprehensiveStaffListSheetName || '',
         talentMemberSheetName: data.talentMemberSheetName || '',
         autoSyncEnabled: !!data.autoSyncEnabled,
@@ -339,6 +342,25 @@ export function GoogleSheetsPanel() {
                 />
               </div>
             ))}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              Staff Roster tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.rosterSheetName}
+              onChange={(e) => setState({ ...state, rosterSheetName: e.target.value })}
+              placeholder="e.g. Staff Roster"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              When set, Sync Now/Preview and the scheduled sync also pick up new-or-changed staff from this tab —
+              same columns as Upload &amp; Data → Staff Roster (Staff ID, First/Middle/Last Name, Email, Business Unit,
+              Role, Department, Employment Date, Confirmation Status, Line Manager). Leave blank to keep managing the
+              roster by upload only. This is a different tab from the Comprehensive Staff List below — that one only
+              ever fills gaps on people already on the roster, it never adds anyone new.
+            </p>
           </div>
 
           <div>
