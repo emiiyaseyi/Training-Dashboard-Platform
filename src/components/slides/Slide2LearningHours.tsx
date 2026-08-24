@@ -18,7 +18,7 @@ export function Slide2LearningHours({ data, pageNumber, periodLabel }: { data: G
             icon={ClipboardCheck}
             title="Post-Training Impact"
             value={data.postTrainingReviewCount > 0 ? `${data.postTrainingImpactScore.toFixed(1)}/5` : 'No data'}
-            subtitle={data.postTrainingReviewCount > 0 ? `From ${data.postTrainingReviewCount} manager review${data.postTrainingReviewCount === 1 ? '' : 's'}` : 'Upload manager reviews to populate'}
+            subtitle={data.postTrainingReviewCount > 0 ? 'From line manager reviews' : 'Upload manager reviews to populate'}
             valueColor="text-report-green"
           />
         </div>
