@@ -220,14 +220,14 @@ export default function TrainingDashboard() {
           <div ref={buTrainingDetailRef}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-slate-800">Business Unit Training Detail</span>
-              <SectionExport captureRef={buTrainingDetailRef} rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? b.budgetUtilisation.toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
+              <SectionExport captureRef={buTrainingDetailRef} rows={data.businessUnits.map((b) => ({ 'Business Unit': b.name, 'Spend (₦)': b.trainingCost, 'Budget (₦)': b.budget, 'Utilisation %': b.budget > 0 ? ((b.trainingCost / b.budget) * 100).toFixed(1) : 'N/A', 'Staff Trained': b.staffTrained, 'Coverage %': b.coverageRatio.toFixed(1), 'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1) }))} filename="bu_training_detail" />
             </div>
             <DataTable
               columns={[
                 { key: 'name', header: 'Business Unit' },
                 { key: 'trainingCost', header: 'Spend', align: 'right', render: (r) => fmt(r.trainingCost as number) },
                 { key: 'budget', header: 'Budget', align: 'right', render: (r) => (r.budget as number) > 0 ? fmt(r.budget as number) : '—' },
-                { key: 'budgetUtilisation', header: 'Utilisation', align: 'right', render: (r) => (r.budget as number) > 0 ? pct(r.budgetUtilisation as number) : '—' },
+                { key: 'budgetUtilisation', header: 'Utilisation', align: 'right', render: (r) => (r.budget as number) > 0 ? pct(((r.trainingCost as number) / (r.budget as number)) * 100) : '—' },
                 { key: 'staffTrained', header: 'Staff Trained', align: 'right' },
                 { key: 'coverageRatio', header: 'Coverage', align: 'right', render: (r) => pct(r.coverageRatio as number) },
                 { key: 'avgImpactScore', header: 'Impact Score', align: 'right', render: (r) => rating(r.avgImpactScore as number) },

@@ -285,7 +285,7 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
     slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
     slide.addText(
-      bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set',
+      bu.budget > 0 ? `${pct((bu.trainingCost / bu.budget) * 100)} of budget` : 'Budget not set',
       { x: x + 0.2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
     )
     slide.addText(
