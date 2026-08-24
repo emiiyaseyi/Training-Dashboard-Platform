@@ -298,6 +298,12 @@ model SurveySettings {
   preMirrorStatus   String?
   post1MirrorStatus String?
   post2MirrorStatus String?
+  // One shared mirror tab for EVERY Custom Survey (unlike the per-stage tabs above) — every
+  // Custom Survey response appends here regardless of which survey it's for, using generic
+  // Timestamp/Survey Name/Employee Name/Q1/Q2/... columns so responses from different surveys
+  // (different questions) all land in the same sheet; Survey Name is what tells them apart.
+  customSurveyMirrorSheetName String?
+  customSurveyMirrorStatus    String?
   updatedAt             DateTime @updatedAt
 }
 
@@ -577,8 +583,6 @@ model CustomSurvey {
   audienceType    String    // "all" | "department" | "role" | "businessUnit" | "selected"
   audienceValue   String?   // department/role/BU name for those modes; JSON string[] of staff identifiers for "selected"; null for "all"
   expiryDays      Int       @default(14) // reminders sent once/day (same cadence as the training surveys) until filled or this many days after launch
-  mirrorSheetName String?   // optional tab (in the spreadsheet configured under Live Data Source) each response is also appended to
-  mirrorStatus    String?   // JSON: { success, message, at } — last mirror-append outcome, same pattern as SurveySettings
   status          String    @default("draft") // "draft" (editable, not yet sent) | "launched" (recipients resolved + initial send done) | "closed" (reminders stopped)
   launchedAt      DateTime?
   closedAt        DateTime?

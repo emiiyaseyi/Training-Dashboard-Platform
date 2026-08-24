@@ -13,10 +13,12 @@ export async function POST(req: NextRequest) {
     const audienceType = String(body.audienceType || 'all')
     const audienceValue = body.audienceValue ?? null
     const audience = await resolveAudience(audienceType, audienceValue)
+    const missing = audience.filter((a) => !a.email)
     return NextResponse.json({
       count: audience.length,
-      sample: audience.slice(0, 10).map((a) => a.staffName),
-      missingEmail: audience.filter((a) => !a.email).length,
+      sample: audience.slice(0, 5).map((a) => a.staffName),
+      missingEmail: missing.length,
+      missingEmailSample: missing.slice(0, 5).map((a) => a.staffName),
     })
   } catch (err) {
     console.error('[admin/custom-surveys/audience-preview POST]', err)

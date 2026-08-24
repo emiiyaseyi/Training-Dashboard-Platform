@@ -20,8 +20,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 // Only editable while still a draft — once launched, its audience has already been resolved and
 // sent to, so changing title/audience/questions afterward would silently desync from what
-// recipients actually received. Launched surveys can still have their expiry/mirror sheet
-// adjusted (neither retroactively changes what was already sent).
+// recipients actually received. Launched surveys can still have their expiry adjusted (doesn't
+// retroactively change what was already sent). Mirroring is a single shared tab for all Custom
+// Surveys (Admin → Survey Automation → Survey Mirror Sheets), not per-survey.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
@@ -51,7 +52,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     if (body.expiryDays !== undefined) data.expiryDays = Math.max(1, Number(body.expiryDays) || 14)
-    if (body.mirrorSheetName !== undefined) data.mirrorSheetName = body.mirrorSheetName ? String(body.mirrorSheetName).trim() : null
 
     const updated = await prisma.customSurvey.update({ where: { id }, data })
     return NextResponse.json(updated)
