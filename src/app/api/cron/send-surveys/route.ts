@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { sendSurveyStage, sendSurveyReminders } from '@/lib/survey-send'
 import type { SurveyStage } from '@/lib/survey-email'
 import { sendCronFailureAlert } from '@/lib/cron-alert'
+import { sendCustomSurveyReminders } from '@/lib/custom-survey'
 
 const DAY_MS = 86400000
 
@@ -82,10 +83,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Second sweep, independent of training schedules: nudge Custom Survey recipients who've been
+  // sent a survey but haven't responded yet. Reuses the exact same daily-calendar-day cadence as
+  // the training surveys' reminder sweep above (see sendCustomSurveyReminders).
+  const customSurveys = await prisma.customSurvey.findMany({
+    where: { status: 'launched' },
+    include: { recipients: true },
+  })
+  const customResults: { surveyId: string; title: string; sent: number; skipped: number }[] = []
+  const customErrors: { surveyId: string; title: string; message: string }[] = []
+  for (const survey of customSurveys) {
+    try {
+      const result = await sendCustomSurveyReminders(survey)
+      if (result.sent > 0 || result.skipped.length > 0) {
+        customResults.push({ surveyId: survey.id, title: survey.title, sent: result.sent, skipped: result.skipped.length })
+      }
+    } catch (err) {
+      customErrors.push({ surveyId: survey.id, title: survey.title, message: err instanceof Error ? err.message : 'Failed to send custom survey reminder.' })
+    }
+  }
+
   await sendCronFailureAlert(
     'Survey send/reminder',
-    errors.map((e) => `Schedule ${e.scheduleId} (${e.stage}): ${e.message}`)
+    [
+      ...errors.map((e) => `Schedule ${e.scheduleId} (${e.stage}): ${e.message}`),
+      ...customErrors.map((e) => `Custom Survey "${e.title}": ${e.message}`),
+    ]
   )
 
-  return NextResponse.json({ success: errors.length === 0, results, errors })
+  return NextResponse.json({
+    success: errors.length === 0 && customErrors.length === 0,
+    results, errors, customResults, customErrors,
+  })
 }

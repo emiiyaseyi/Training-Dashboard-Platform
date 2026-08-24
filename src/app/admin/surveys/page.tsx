@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SurveyAutomationPanel } from '@/components/admin/SurveyAutomationPanel'
 import { SurveyQuestionEditor } from '@/components/admin/SurveyQuestionEditor'
+import { CustomSurveyPanel } from '@/components/admin/CustomSurveyPanel'
 import { SurveyResponseMirrorPanel } from '@/components/admin/SurveyResponseMirrorPanel'
 import { TrainingDataMirrorPanel } from '@/components/admin/TrainingDataMirrorPanel'
 import { SurveySendLogPanel } from '@/components/admin/SurveySendLogPanel'
@@ -34,6 +35,7 @@ export default function AdminSurveysPage() {
         <AlreadyAttendedTrainingsPanel onScheduleCreated={() => setScheduleRefreshKey((k) => k + 1)} />
         <SurveyAutomationPanel key={scheduleRefreshKey} />
         <SurveyQuestionEditor />
+        <CustomSurveyPanel />
         <SurveySendLogPanel />
       </div>
     </div>
