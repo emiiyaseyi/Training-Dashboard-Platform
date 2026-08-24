@@ -644,7 +644,9 @@ export interface RosterBackfillResult {
   updated: number // of those, how many had at least one field actually filled in
   fieldsFilled: number // total individual field values filled in, across all updated staff
   stillMissing: number // checked but the sheet had nothing to fill them with either
-  noSheetRow: number // of stillMissing, how many had no row in the sheet AT ALL for their Staff ID (vs a row that just didn't have the value either)
+  noSheetRow: number // of stillMissing, how many had no row in the sheet by Staff ID OR by exact name
+  matchedByName: number // Staff ID lookup failed, but an unambiguous exact-name match in the sheet was used instead
+  staffIdMismatch: number // of matchedByName, how many also have a DIFFERENT Staff ID in the sheet than what's stored here — a real ID correction opportunity, reported but never auto-applied
   fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]
   error?: string
 }
@@ -655,7 +657,7 @@ export interface RosterBackfillResult {
 // the admin explicitly configured, not a guess. A person still missing a field after this ran
 // genuinely has no value for it in that sheet either.
 export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
-  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0, noSheetRow: 0, fieldBreakdown: [] }
+  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0, noSheetRow: 0, matchedByName: 0, staffIdMismatch: 0, fieldBreakdown: [] }
   const config = await prisma.googleSheetsConfig.findFirst()
   const sheetName = (config?.rosterSheetName || config?.comprehensiveStaffListSheetName || '').trim()
   if (!sheetName || !config?.spreadsheetUrl) {
@@ -683,9 +685,15 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   }
 
   const sheetByStaffId = new Map<string, RosterRow>()
+  const sheetByName = new Map<string, RosterRow[]>()
   for (const r of sheetRows) {
-    const key = normalizeStaffIdKey(r.staffId)
-    if (key) sheetByStaffId.set(key, r)
+    const idKey = normalizeStaffIdKey(r.staffId)
+    if (idKey) sheetByStaffId.set(idKey, r)
+    const nameKey = `${r.firstName} ${r.lastName}`.trim().toLowerCase()
+    if (nameKey) {
+      if (!sheetByName.has(nameKey)) sheetByName.set(nameKey, [])
+      sheetByName.get(nameKey)!.push(r)
+    }
   }
 
   // Same "latest row per Staff ID" convention as everywhere else this table is read — only the
@@ -694,7 +702,7 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   const latestByStaffId = new Map<string, (typeof all)[number]>()
   for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
 
-  let checked = 0, fieldsFilled = 0, stillMissing = 0, noSheetRow = 0
+  let checked = 0, fieldsFilled = 0, stillMissing = 0, noSheetRow = 0, matchedByName = 0, staffIdMismatch = 0
   const fieldStats: Record<string, { missingInDb: number; availableInSheet: number }> = {
     email: { missingInDb: 0, availableInSheet: 0 },
     lineManagerStaffId: { missingInDb: 0, availableInSheet: 0 },
@@ -709,7 +717,21 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
     if (!missingAny) continue
     checked++
 
-    const sheetRow = sheetByStaffId.get(key)
+    // A Staff ID lookup can miss someone whose ID was corrected between the roster's last upload
+    // and the sheet's current version — fall back to an exact name match, but ONLY when it's
+    // unambiguous (exactly one person in the sheet with that name). Never touches the stored
+    // Staff ID itself, even when this reveals it now differs from the sheet's — that's a real ID
+    // correction, but a separate, deliberate action, not something to auto-apply here.
+    let sheetRow = sheetByStaffId.get(key)
+    if (!sheetRow) {
+      const nameKey = `${current.firstName} ${current.lastName}`.trim().toLowerCase()
+      const candidates = nameKey ? sheetByName.get(nameKey) || [] : []
+      if (candidates.length === 1) {
+        sheetRow = candidates[0]
+        matchedByName++
+        if (normalizeStaffIdKey(sheetRow.staffId) !== key) staffIdMismatch++
+      }
+    }
     if (!sheetRow) { stillMissing++; noSheetRow++; continue }
 
     const data: Record<string, unknown> = {}
@@ -730,5 +752,5 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   }
 
   const fieldBreakdown = Object.entries(fieldStats).map(([field, s]) => ({ field, ...s }))
-  return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, fieldBreakdown }
+  return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, matchedByName, staffIdMismatch, fieldBreakdown }
 }
