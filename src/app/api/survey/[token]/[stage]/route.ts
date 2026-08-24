@@ -73,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         label: q.label,
         type: q.type,
         options: q.options ? JSON.parse(q.options) : null,
+        ratingMax: q.ratingMax,
         required: q.required,
         autoFill: q.autoFill,
       })),

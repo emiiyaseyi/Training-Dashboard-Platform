@@ -32,6 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         label,
         type,
         options: Array.isArray(body.options) && body.options.length > 0 ? JSON.stringify(body.options) : null,
+        ratingMax: Number(body.ratingMax) >= 2 && Number(body.ratingMax) <= 10 ? Math.round(Number(body.ratingMax)) : 5,
         required: !!body.required,
         driveFolderId: body.driveFolderId ? String(body.driveFolderId).trim() : null,
       },

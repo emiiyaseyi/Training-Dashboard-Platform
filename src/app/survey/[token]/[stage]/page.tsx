@@ -16,6 +16,7 @@ interface Question {
   label: string
   type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
   options: string[] | null
+  ratingMax: number
   required: boolean
   autoFill: string | null
 }
@@ -206,23 +207,28 @@ function QuestionInput({ q, value, onChange }: { q: Question; value: string | st
         </div>
       )
     }
-    case 'rating':
+    case 'rating': {
+      const max = q.ratingMax || 5
       return (
-        <div className="flex items-center gap-2.5">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              type="button"
-              key={n}
-              onClick={() => onChange(String(n))}
-              className={`w-11 h-11 rounded-full border text-[18px] font-medium ${
-                String(value) === String(n) ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
+        <div>
+          <p className="text-[14px] text-slate-400 mb-1.5">Rate from 1 (lowest) to {max} (highest)</p>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+              <button
+                type="button"
+                key={n}
+                onClick={() => onChange(String(n))}
+                className={`w-11 h-11 rounded-full border text-[18px] font-medium ${
+                  String(value) === String(n) ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
         </div>
       )
+    }
     case 'yesno':
       return (
         <div className="flex items-center gap-2.5">
@@ -301,7 +307,7 @@ export default function SurveyPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-navy-700 px-4 py-10">
+    <div className="min-h-dvh w-full flex items-center justify-center bg-navy-700 px-4 pt-10 pb-20">
       <div className="w-full max-w-3xl">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-lg bg-gold-400 flex items-center justify-center mb-4">

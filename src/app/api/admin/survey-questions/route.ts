@@ -29,9 +29,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { stage, section, label, type, options, required, autoFill, fieldKey, driveFolderId } = body as {
+    const { stage, section, label, type, options, ratingMax, required, autoFill, fieldKey, driveFolderId } = body as {
       stage: string; section?: string; label: string; type: string
-      options?: string[]; required?: boolean; autoFill?: string; fieldKey?: string; driveFolderId?: string
+      options?: string[]; ratingMax?: number; required?: boolean; autoFill?: string; fieldKey?: string; driveFolderId?: string
     }
     if (!VALID_STAGES.includes(stage as SurveyStageKey)) {
       return NextResponse.json({ error: 'Unknown stage.' }, { status: 400 })
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         label: label.trim(),
         type,
         options: options && options.length > 0 ? JSON.stringify(options) : null,
+        ratingMax: ratingMax && ratingMax >= 2 && ratingMax <= 10 ? Math.round(ratingMax) : 5,
         required: !!required,
         autoFill: autoFill || null,
         fieldKey: fieldKey?.trim() || null,

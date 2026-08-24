@@ -15,6 +15,7 @@ interface Question {
   label: string
   type: QuestionType
   options: string[] | null
+  ratingMax: number
   required: boolean
   driveFolderId: string | null
 }
@@ -75,7 +76,7 @@ const AUDIENCE_LABELS: Record<AudienceType, string> = {
   selected: 'Selected Staff',
 }
 
-const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', required: false, driveFolderId: '' }
+const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false, driveFolderId: '' }
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString()
@@ -139,6 +140,18 @@ function QuestionForm({
           onChange={(e) => onChange({ ...draft, driveFolderId: e.target.value })}
           className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
         />
+      )}
+      {draft.type === 'rating' && (
+        <label className="block text-xs text-slate-600">
+          Scale — respondent picks 1 to
+          <select
+            value={draft.ratingMax}
+            onChange={(e) => onChange({ ...draft, ratingMax: Number(e.target.value) })}
+            className="ml-2 border border-slate-300 rounded-md px-2 py-1 text-xs"
+          >
+            {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
       )}
       <label className="flex items-center gap-1.5 text-xs text-slate-600">
         <input type="checkbox" checked={draft.required} onChange={(e) => onChange({ ...draft, required: e.target.checked })} />
@@ -258,7 +271,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const startAddQuestion = () => { setAddingQuestion(true); setQuestionDraft(emptyQuestionDraft) }
   const startEditQuestion = (q: Question) => {
     setEditingQuestionId(q.id)
-    setQuestionDraft({ section: q.section || '', label: q.label, type: q.type, optionsText: (q.options || []).join(', '), required: q.required, driveFolderId: q.driveFolderId || '' })
+    setQuestionDraft({ section: q.section || '', label: q.label, type: q.type, optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required, driveFolderId: q.driveFolderId || '' })
   }
   const toOptionsArray = (text: string) => text.split(',').map((o) => o.trim()).filter(Boolean)
 
@@ -267,7 +280,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     try {
       const body = {
         section: questionDraft.section, label: questionDraft.label, type: questionDraft.type,
-        options: toOptionsArray(questionDraft.optionsText), required: questionDraft.required, driveFolderId: questionDraft.driveFolderId,
+        options: toOptionsArray(questionDraft.optionsText), ratingMax: questionDraft.ratingMax, required: questionDraft.required, driveFolderId: questionDraft.driveFolderId,
       }
       const res = editingQuestionId
         ? await fetch(`/api/admin/custom-surveys/${summary.id}/questions/${editingQuestionId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -500,7 +513,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                               {q.section && <p className="text-[10px] uppercase tracking-wide text-navy-600 font-semibold">{q.section}</p>}
                               <p className="text-xs text-slate-800">{q.label}</p>
                               <div className="flex flex-wrap items-center gap-1 mt-1">
-                                <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{q.type}</span>
+                                <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{q.type}{q.type === 'rating' ? ` (1-${q.ratingMax || 5})` : ''}</span>
                                 {q.required && <span className="text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5">required</span>}
                               </div>
                             </div>
