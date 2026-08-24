@@ -12,8 +12,9 @@ interface HistoricalGroup {
   year: number
   attendeeCount: number
   attendees: HistoricalAttendee[]
-  hasExistingSchedule: boolean
 }
+
+type StageChoice = 'both' | 'post1' | 'post2'
 
 function monthIndex(month: string): number {
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -38,7 +39,8 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [remindersEnabled, setRemindersEnabled] = useState(false)
+  const [remindersEnabled, setRemindersEnabled] = useState(true)
+  const [stageChoice, setStageChoice] = useState<StageChoice>('both')
   const [creating, setCreating] = useState(false)
   const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[] } | null>(null)
 
@@ -72,7 +74,8 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     setSelected(new Set(g.attendees.map((a) => a.staffId)))
     setStartDate(firstOfMonth(g.month, g.year))
     setEndDate(firstOfMonth(g.month, g.year))
-    setRemindersEnabled(false)
+    setRemindersEnabled(true)
+    setStageChoice('both')
     setResult(null)
   }
 
@@ -98,6 +101,8 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
           businessUnit: g.businessUnits[0], // nominal default only — each attendee still gets their own actual BU when added below
           startDate, endDate,
           remindersEnabled,
+          post1Enabled: stageChoice !== 'post2',
+          post2Enabled: stageChoice !== 'post1',
           sourcedFromHistoricalData: true,
         }),
       })
@@ -124,7 +129,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     <SectionCard
       icon={History}
       title="Already Attended Trainings"
-      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Reminders default off; turn them on per training if you want the daily nudge."
+      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Reminders are on by default (daily nudge until filled). Once a training has a schedule, it moves to Training Schedules below — that's also where you'll find every survey's send/response reports."
     >
       <div className="space-y-3">
         {groups.length > 5 && (
@@ -158,7 +163,6 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                       <p className="text-sm font-medium text-slate-800 truncate">{g.training}</p>
                       <p className="text-xs text-slate-500">
                         {g.businessUnits.length <= 2 ? g.businessUnits.join(', ') : `${g.businessUnits.length} Business Units`} · {g.month} {g.year} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
-                        {g.hasExistingSchedule && <span className="text-amber-600"> · a schedule already exists for this training</span>}
                       </p>
                     </div>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
@@ -198,9 +202,31 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                         Defaulted to the 1st of {g.month} {g.year} (the recorded month) — confirm or adjust to the actual training dates.
                       </p>
 
+                      <div>
+                        <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([
+                            ['both', 'Both (default)'],
+                            ['post1', 'Post-1 only'],
+                            ['post2', 'Post-2 only'],
+                          ] as const).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setStageChoice(value)}
+                              className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                                stageChoice === value ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <label className="flex items-center gap-2 text-xs text-slate-600">
                         <input type="checkbox" checked={remindersEnabled} onChange={(e) => setRemindersEnabled(e.target.checked)} />
-                        Enable daily reminder nudges for this training (off by default)
+                        Enable daily reminder nudges for this training (on by default)
                       </label>
 
                       {result && result.key === key && (

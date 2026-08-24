@@ -50,8 +50,8 @@ export async function GET(req: NextRequest) {
 
     const due: SurveyStage[] = []
     if (daysUntilStart <= preDaysBefore && daysUntilStart >= -3) due.push('pre')
-    if (daysSinceEnd >= post1DaysAfter) due.push('post1')
-    if (daysSinceEnd >= post2DaysAfter) due.push('post2')
+    if (daysSinceEnd >= post1DaysAfter && schedule.post1Enabled) due.push('post1')
+    if (daysSinceEnd >= post2DaysAfter && schedule.post2Enabled) due.push('post2')
 
     for (const stage of due) {
       const hasUnsent = schedule.attendees.some((a) => {

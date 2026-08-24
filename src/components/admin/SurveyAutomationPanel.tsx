@@ -49,6 +49,8 @@ interface Schedule {
   capability: string | null
   vendor: string | null
   remindersEnabled: boolean
+  post1Enabled: boolean
+  post2Enabled: boolean
   sourcedFromHistoricalData: boolean
   attendeeCount: number
   preSent: number
@@ -852,9 +854,11 @@ export function SurveyAutomationPanel() {
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-4">
-                      {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened */}
+                      {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; Post-1/Post-2 are further filtered per-schedule by post1Enabled/post2Enabled (e.g. an "Already Attended Trainings" schedule created for just one of the two) */}
                       <div className="flex flex-wrap items-center gap-2">
-                        {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const)).map((stage) => {
+                        {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const))
+                          .filter((stage) => (stage === 'post1' ? s.post1Enabled : stage === 'post2' ? s.post2Enabled : true))
+                          .map((stage) => {
                           const key = `${s.id}:${stage}:all`
                           return (
                             <button
@@ -1038,8 +1042,8 @@ export function SurveyAutomationPanel() {
                                   <th className="text-left font-medium py-1.5 pr-3">Email</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
                                   {!s.sourcedFromHistoricalData && <th className="text-center font-medium py-1.5 pr-3">Pre</th>}
-                                  <th className="text-center font-medium py-1.5 pr-3">Post-1</th>
-                                  <th className="text-center font-medium py-1.5 pr-3">Post-2</th>
+                                  {s.post1Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-1</th>}
+                                  {s.post2Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-2</th>}
                                   <th className="py-1.5"></th>
                                 </tr>
                               </thead>
@@ -1056,7 +1060,9 @@ export function SurveyAutomationPanel() {
                                       ['preSurveySentAt', 'preSurveyRespondedAt', 'pre'],
                                       ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
                                       ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
-                                    ] as const).map(([sentField, respondedField, stage]) => {
+                                    ] as const)
+                                      .filter(([, , stage]) => (stage === 'post1' ? s.post1Enabled : stage === 'post2' ? s.post2Enabled : true))
+                                      .map(([sentField, respondedField, stage]) => {
                                       const cellKey = `${s.id}:${stage}:${a.id}`
                                       const state = tickState(a[sentField], a[respondedField], settings.expiryEnabled, settings.expiryDays)
                                       return (

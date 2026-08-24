@@ -7,9 +7,9 @@ import { requirePermission } from '@/lib/session-guard'
 // Post-1/Post-2 surveys to its attendees via "Already Attended Trainings". Business Unit is a
 // property of each attendee, not of the training itself (the same session commonly has attendees
 // from several BUs), so it's tracked per-attendee rather than splitting one training into a
-// separate card per BU. Each instance also reports whether a TrainingSchedule already exists for
-// the same training name, as a duplicate hint (not a hard block — the admin might legitimately
-// want a second round).
+// separate card per BU. A training that already has a TrainingSchedule is excluded entirely —
+// once scheduled, it's managed (attendees, sending, reports) from the Training Schedules section
+// below instead, not re-offered here as a fresh candidate.
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
   if (gate instanceof NextResponse) return gate
@@ -39,6 +39,7 @@ export async function GET() {
     }
 
     const result = [...groups.values()]
+      .filter((g) => !existingScheduleNames.has(g.training.toLowerCase()))
       .map((g) => {
         const attendees = [...g.attendees.values()].sort((a, b) => a.staffName.localeCompare(b.staffName))
         const businessUnits = [...new Set(attendees.map((a) => a.businessUnit))].sort()
@@ -49,7 +50,6 @@ export async function GET() {
           year: g.year,
           attendeeCount: attendees.length,
           attendees,
-          hasExistingSchedule: existingScheduleNames.has(g.training.toLowerCase()),
         }
       })
       .sort((a, b) => (b.year - a.year) || a.training.localeCompare(b.training))
