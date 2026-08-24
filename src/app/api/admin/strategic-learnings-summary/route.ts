@@ -29,15 +29,20 @@ export async function GET() {
     })
     const otherRecords = records.filter((r) => r.trainingType && otherTypeNames.has(r.trainingType.toLowerCase()))
 
-    const byTraining = new Map<string, typeof otherRecords>()
+    // Grouped by a normalized key (lowercased, whitespace-collapsed) — not the raw training text —
+    // so two rows for the same training that differ only by a stray space or capitalization (a
+    // common artifact of re-uploads/syncs) land in one group instead of splitting into duplicate
+    // rows. The first-seen raw text is kept as the display name.
+    const byTraining = new Map<string, { displayName: string; records: typeof otherRecords }>()
     otherRecords.forEach((r) => {
-      const name = r.training?.trim() || '(untitled)'
-      if (!byTraining.has(name)) byTraining.set(name, [])
-      byTraining.get(name)!.push(r)
+      const raw = r.training?.trim() || '(untitled)'
+      const key = raw.toLowerCase().replace(/\s+/g, ' ')
+      if (!byTraining.has(key)) byTraining.set(key, { displayName: raw, records: [] })
+      byTraining.get(key)!.records.push(r)
     })
 
-    const rows: StrategicLearningsSummaryRow[] = [...byTraining.entries()]
-      .map(([training, recs]) => {
+    const rows: StrategicLearningsSummaryRow[] = [...byTraining.values()]
+      .map(({ displayName: training, records: recs }) => {
         const byBU = new Map<string, typeof recs>()
         recs.forEach((r) => {
           const bu = r.businessUnit || 'Unassigned'
