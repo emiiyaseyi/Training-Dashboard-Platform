@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Users, UserCheck, UserX, Download, Search } from 'lucide-react'
+import { RefreshCw, Users, UserCheck, UserX, Download, Search, Clock, GraduationCap } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { AlertBadge } from '@/components/ui/AlertBadge'
@@ -115,7 +115,7 @@ export default function YetToAttendPage() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <KPICard
                 title="Confirmed Staff"
                 value={data.totalConfirmedStaff.toLocaleString()}
@@ -126,7 +126,7 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Attended Training"
                 value={data.totalAttended.toLocaleString()}
-                subtitle="At least one training in period"
+                subtitle="At least one training/summit/other strategic learning in period"
                 icon={UserCheck}
                 color="green"
               />
@@ -144,6 +144,20 @@ export default function YetToAttendPage() {
                 subtitle="Share of confirmed staff trained"
                 icon={UserCheck}
                 color="purple"
+              />
+              <KPICard
+                title="Yet to be Confirmed"
+                value={data.unconfirmedStaffCount.toLocaleString()}
+                subtitle="On roster, confirmation pending — excluded from the numbers above"
+                icon={Clock}
+                color="amber"
+              />
+              <KPICard
+                title="Interns"
+                value={data.internStaffCount.toLocaleString()}
+                subtitle="On roster with Employment Type = Intern"
+                icon={GraduationCap}
+                color="blue"
               />
             </div>
 
