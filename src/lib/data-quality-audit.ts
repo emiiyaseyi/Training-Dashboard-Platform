@@ -218,3 +218,145 @@ async function auditManagerReview(): Promise<TableAudit> {
     })),
   }
 }
+
+export interface TableBackfillStat {
+  table: string
+  label: string
+  staffIdFixed: number
+  businessUnitFixed: number
+  ambiguousNameSkipped: number // staffId missing, but 2+ people on the roster share that exact name — too risky to guess, needs a manual look
+  noMatch: number // nothing on the roster matched at all
+}
+
+export interface DataQualityBackfillResult {
+  tables: TableBackfillStat[]
+}
+
+interface RosterCandidate { staffId: string; businessUnit: string }
+
+// Same "latest row per Staff ID wins" convention as everywhere else the roster is read.
+async function buildRosterLookups(): Promise<{ byStaffId: Map<string, RosterCandidate>; byName: Map<string, RosterCandidate[]> }> {
+  const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
+  const latestByStaffId = new Map<string, (typeof all)[number]>()
+  for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
+  const roster = [...latestByStaffId.values()]
+
+  const byStaffId = new Map<string, RosterCandidate>()
+  const byName = new Map<string, RosterCandidate[]>()
+  for (const r of roster) {
+    byStaffId.set(normalizeStaffIdKey(r.staffId), { staffId: r.staffId, businessUnit: r.businessUnit })
+    const name = [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ').trim().toLowerCase()
+    if (!name) continue
+    if (!byName.has(name)) byName.set(name, [])
+    byName.get(name)!.push({ staffId: r.staffId, businessUnit: r.businessUnit })
+  }
+  return { byStaffId, byName }
+}
+
+// Resolves ONE flagged record against the roster. Never guesses when a name matches more than
+// one person on the roster — exactly the risk this file's isBlankStaffId comment already warns
+// about — those are reported separately so an admin can look them up by hand rather than risk
+// misattributing someone's training/subscription/KSS record to the wrong person.
+function resolveFromRoster(
+  current: { staffId: string; staffName: string; businessUnit: string },
+  byStaffId: Map<string, RosterCandidate>,
+  byName: Map<string, RosterCandidate[]>
+): { staffId?: string; businessUnit?: string; outcome: 'fixed' | 'ambiguous' | 'noMatch' } {
+  if (isBlankStaffId(current.staffId)) {
+    const candidates = current.staffName.trim() ? byName.get(current.staffName.trim().toLowerCase()) || [] : []
+    if (candidates.length === 0) return { outcome: 'noMatch' }
+    if (candidates.length > 1) return { outcome: 'ambiguous' }
+    const match = candidates[0]
+    const businessUnit = !current.businessUnit && match.businessUnit ? match.businessUnit : undefined
+    return { staffId: match.staffId, businessUnit, outcome: 'fixed' }
+  }
+  if (!current.businessUnit) {
+    const match = byStaffId.get(normalizeStaffIdKey(current.staffId))
+    if (match?.businessUnit) return { businessUnit: match.businessUnit, outcome: 'fixed' }
+    return { outcome: 'noMatch' }
+  }
+  return { outcome: 'noMatch' } // nothing was actually missing for this record
+}
+
+// Fills in a missing Staff ID (by exact name match against the roster, only when unambiguous)
+// and/or a missing Business Unit (by Staff ID lookup) across Training/Subscription/KSS/Manager
+// Review — Feedback is excluded, it has no Staff ID field to resolve at all. Pull-only from data
+// already in the roster; never invents a value.
+export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfillResult> {
+  const { byStaffId, byName } = await buildRosterLookups()
+  const tables: TableBackfillStat[] = []
+
+  {
+    const flagged = await prisma.trainingRecord.findMany({
+      where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] },
+      select: { id: true, staffId: true, staffName: true, businessUnit: true },
+    })
+    const stat: TableBackfillStat = { table: 'training', label: 'Training Cost', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
+    for (const r of flagged) {
+      const resolved = resolveFromRoster(r, byStaffId, byName)
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      const data: Record<string, unknown> = {}
+      if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
+      if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
+      await prisma.trainingRecord.update({ where: { id: r.id }, data })
+    }
+    tables.push(stat)
+  }
+
+  {
+    const flagged = await prisma.subscriptionRecord.findMany({
+      where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] },
+      select: { id: true, staffId: true, staffName: true, businessUnit: true },
+    })
+    const stat: TableBackfillStat = { table: 'subscription', label: 'Subscriptions', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
+    for (const r of flagged) {
+      const resolved = resolveFromRoster(r, byStaffId, byName)
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      const data: Record<string, unknown> = {}
+      if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
+      if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
+      await prisma.subscriptionRecord.update({ where: { id: r.id }, data })
+    }
+    tables.push(stat)
+  }
+
+  {
+    const flagged = await prisma.kSSRecord.findMany({
+      where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] },
+      select: { id: true, staffId: true, staffName: true, businessUnit: true },
+    })
+    const stat: TableBackfillStat = { table: 'kss', label: 'KSS', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
+    for (const r of flagged) {
+      const resolved = resolveFromRoster(r, byStaffId, byName)
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      const data: Record<string, unknown> = {}
+      if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
+      if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
+      await prisma.kSSRecord.update({ where: { id: r.id }, data })
+    }
+    tables.push(stat)
+  }
+
+  {
+    const flagged = await prisma.managerReviewRecord.findMany({
+      where: { OR: [{ staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }] },
+      select: { id: true, staffId: true, staffName: true, businessUnit: true },
+    })
+    const stat: TableBackfillStat = { table: 'manager-review', label: 'Post-Training Manager Reviews', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
+    for (const r of flagged) {
+      const resolved = resolveFromRoster(r, byStaffId, byName)
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      const data: Record<string, unknown> = {}
+      if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
+      if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
+      await prisma.managerReviewRecord.update({ where: { id: r.id }, data })
+    }
+    tables.push(stat)
+  }
+
+  return { tables }
+}
