@@ -5,6 +5,7 @@ import type { TrainingRow, FeedbackRow, SubscriptionRow, KSSRow, RosterRow } fro
 import { importTrainingRows, importFeedbackRows, importSubscriptionRows, importKSSRows, importRosterRows } from '@/lib/import-records'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 
 // Unlike manual file uploads (where re-uploading the same file twice is the admin's call), a
 // live sheet is re-read on every sync, so it would otherwise re-import the same rows forever.
@@ -636,4 +637,88 @@ export async function pushVendorUpdatesToSheet(year: number = new Date().getFull
   } catch (err) {
     return { success: false, updated: 0, notFound: 0, year, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
   }
+}
+
+export interface RosterBackfillResult {
+  checked: number // flagged staff (missing at least one of the fields below) that were looked up
+  updated: number // of those, how many had at least one field actually filled in
+  fieldsFilled: number // total individual field values filled in, across all updated staff
+  stillMissing: number // checked but the sheet had nothing to fill them with either
+  error?: string
+}
+
+// Fills gaps ONLY — never overwrites a value that's already present, and never invents one. Pulls
+// exclusively from the sheet tab already configured for staff sync (Staff Roster tab, falling back
+// to the Comprehensive Staff List tab if that's what's set instead) — this is a read from a source
+// the admin explicitly configured, not a guess. A person still missing a field after this ran
+// genuinely has no value for it in that sheet either.
+export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
+  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0 }
+  const config = await prisma.googleSheetsConfig.findFirst()
+  const sheetName = (config?.rosterSheetName || config?.comprehensiveStaffListSheetName || '').trim()
+  if (!sheetName || !config?.spreadsheetUrl) {
+    return { ...empty, error: 'No Staff Roster or Comprehensive Staff List tab configured under Admin -> Live Data Source.' }
+  }
+
+  let connection: SheetsConnection
+  try {
+    connection = await connectToSpreadsheet(config.spreadsheetUrl)
+  } catch (err) {
+    return { ...empty, error: err instanceof Error ? err.message : 'Failed to connect to Google Sheets.' }
+  }
+  if (!connection.tabTitles.includes(sheetName)) {
+    return { ...empty, error: `Tab "${sheetName}" not found in the spreadsheet.` }
+  }
+
+  let sheetRows: RosterRow[]
+  try {
+    const buffer = await fetchSheetAsBuffer(connection.spreadsheetId, sheetName, connection.accessToken)
+    const { rows, errors } = parseRosterExcel(buffer)
+    if (errors.length) return { ...empty, error: errors.join(' ') }
+    sheetRows = rows
+  } catch (err) {
+    return { ...empty, error: err instanceof Error ? err.message : 'Failed to read this tab.' }
+  }
+
+  const sheetByStaffId = new Map<string, RosterRow>()
+  for (const r of sheetRows) {
+    const key = normalizeStaffIdKey(r.staffId)
+    if (key) sheetByStaffId.set(key, r)
+  }
+
+  // Same "latest row per Staff ID" convention as everywhere else this table is read — only the
+  // CURRENT record per person is a backfill target, not their superseded history.
+  const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
+  const latestByStaffId = new Map<string, (typeof all)[number]>()
+  for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
+
+  let checked = 0, fieldsFilled = 0, stillMissing = 0
+  const updates: { id: string; data: Record<string, unknown> }[] = []
+
+  for (const [key, current] of latestByStaffId) {
+    const missingAny = !current.email || !current.lineManagerStaffId || !current.role || !current.department || !current.employmentDate
+    if (!missingAny) continue
+    checked++
+
+    const sheetRow = sheetByStaffId.get(key)
+    if (!sheetRow) { stillMissing++; continue }
+
+    const data: Record<string, unknown> = {}
+    if (!current.email && sheetRow.email) data.email = sheetRow.email
+    if (!current.lineManagerStaffId && sheetRow.lineManagerStaffId) data.lineManagerStaffId = sheetRow.lineManagerStaffId
+    if (!current.role && sheetRow.role) data.role = sheetRow.role
+    if (!current.department && sheetRow.department) data.department = sheetRow.department
+    if (!current.employmentDate && sheetRow.employmentDate) data.employmentDate = new Date(sheetRow.employmentDate)
+
+    if (Object.keys(data).length === 0) { stillMissing++; continue }
+    fieldsFilled += Object.keys(data).length
+    updates.push({ id: current.id, data })
+  }
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates.map((u) => prisma.staffRosterRecord.update({ where: { id: u.id }, data: u.data })))
+    invalidateComprehensiveStaffListCache()
+  }
+
+  return { checked, updated: updates.length, fieldsFilled, stillMissing }
 }
