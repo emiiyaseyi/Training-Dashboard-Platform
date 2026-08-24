@@ -87,6 +87,7 @@ export interface BUSummary {
   subscriptionCost: number
   totalInvestment: number
   staffTrained: number
+  otherStaffTrained: number // unique staff with at least one Strategic Learning record
   subscriptionStaff: number
   totalStaff: number
   budget: number
@@ -817,6 +818,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const subscriptionCost = sRecs.reduce((s, r) => s + r.amount, 0)
     const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
     const staffTrained = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
+    const otherStaffTrained = new Set(otherTRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const subscriptionStaff = new Set(sRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const totalStaff = buConfig?.staffCount ?? 0
     const budget = buConfig?.budget ?? 0
@@ -838,6 +840,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       subscriptionCost,
       totalInvestment,
       staffTrained,
+      otherStaffTrained,
       subscriptionStaff,
       totalStaff,
       budget,
@@ -1038,6 +1041,7 @@ export async function computeBUAnalytics(
   const subscriptionCost = subscriptionRecords.reduce((s, r) => s + r.amount, 0)
   const totalInvestment = trainingCost + otherInvestmentCost + subscriptionCost
   const staffTrained = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
+  const otherStaffTrained = new Set(otherTrainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const subscriptionStaff = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const totalStaff = buConfig?.staffCount ?? 0
   const budget = buConfig?.budget ?? 0
@@ -1058,6 +1062,7 @@ export async function computeBUAnalytics(
     subscriptionCost,
     totalInvestment,
     staffTrained,
+    otherStaffTrained,
     subscriptionStaff,
     totalStaff,
     budget,
@@ -1165,7 +1170,7 @@ export async function computeBUAnalytics(
     return {
       name,
       trainingCost: tc, otherInvestmentCost: 0, subscriptionCost: 0, totalInvestment: tc,
-      staffTrained: st, subscriptionStaff: 0,
+      staffTrained: st, otherStaffTrained: 0, subscriptionStaff: 0,
       totalStaff: ts, budget: cfg?.budget ?? 0,
       coverageRatio: ts > 0 ? (st / ts) * 100 : 0,
       avgImpactScore: ai,
