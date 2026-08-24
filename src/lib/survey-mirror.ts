@@ -16,10 +16,6 @@ const MIRROR_STATUS_FIELD = {
   post2: 'post2MirrorStatus',
 } as const
 
-function currentMonthName(): string {
-  return MONTHS[new Date().getMonth()]
-}
-
 const asText = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(', ') : v || '')
 const asNumber = (v: string | string[] | undefined) => {
   const n = parseFloat(Array.isArray(v) ? '' : v || '')
@@ -32,19 +28,35 @@ export interface MirrorResult {
   message: string
 }
 
+// Formatted as a plain "YYYY-MM-DD HH:mm" (not a raw ISO string) so it lands in the sheet as
+// something a non-technical admin can read and filter by directly, without needing to parse a
+// timezone-suffixed ISO timestamp first.
+function formatSubmittedAt(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function buildMirrorFields(
   stageKey: SurveyStageKey,
   attendee: TrainingScheduleAttendee & { schedule: TrainingSchedule },
   answers: Record<string, string | string[]>,
-  questions: SurveyQuestion[]
+  questions: SurveyQuestion[],
+  submittedAt: Date
 ): MirrorField[] {
   const fieldAnswer = (fieldKey: string) => {
     const q = questions.find((q) => q.fieldKey === fieldKey)
     return q ? answers[q.id] : undefined
   }
+  // Derived from the response's actual submission time, not "now" — mirroring can happen well
+  // after submission (a retried sync), so using the current time here would show when the SHEET
+  // ROW was written, not when the employee/manager actually filled the form. Month follows the
+  // same rule, for the same "filter by when this really happened" reason.
+  const submittedAtText = formatSubmittedAt(submittedAt)
+  const submittedMonth = MONTHS[submittedAt.getMonth()]
 
   if (stageKey === 'post1') {
     return [
+      { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
       { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
       { label: 'Training Title', candidates: ['trainingtitle', 'training', 'course', 'programme'], value: attendee.schedule.trainingName },
       { label: 'Role', candidates: ['role', 'jobtitle', 'position'], value: '' },
@@ -56,7 +68,8 @@ function buildMirrorFields(
       { label: 'Vendor Rating', candidates: ['vendorrating', 'facilitatorrating', 'providerrating', 'trainerrating', 'facilitatorevaluation', 'instructorrating'], value: asNumber(fieldAnswer('vendorRating')) },
       { label: 'Vendor Name', candidates: ['vendorname', 'facilitatorname', 'providername', 'trainername', 'facilitator', 'trainer', 'provider'], value: asText(fieldAnswer('vendorName')) },
       { label: 'Qualitative responses', candidates: ['qualitativeresponse', 'qualitative', 'comments', 'feedback'], value: asText(fieldAnswer('qualitativeResponse')) },
-      { label: 'Month', candidates: ['month', 'trainingmonth', 'period', 'feedbackmonth'], value: currentMonthName() },
+      { label: 'Month', candidates: ['month', 'trainingmonth', 'period', 'feedbackmonth'], value: submittedMonth },
+      { label: 'Date Filled', candidates: ['datefilled', 'submittedat', 'dateandtime', 'responsedate', 'datesubmitted'], value: submittedAtText },
     ]
   } else if (stageKey === 'post2') {
     return [
@@ -67,11 +80,12 @@ function buildMirrorFields(
       { label: 'Manager Name', candidates: ['linemanager', 'reviewedby', 'manager', 'supervisor'], value: attendee.lineManagerName || '' },
       { label: 'Impact Score', candidates: ['posttrainingimpactscore', 'impactscore', 'impactrating', 'managerrating'], value: asNumber(fieldAnswer('impactScore')) },
       { label: 'Comments', candidates: ['remarks', 'notes', 'observation'], value: asText(fieldAnswer('comments')) },
-      { label: 'Month', candidates: ['reviewmonth', 'period'], value: currentMonthName() },
+      { label: 'Month', candidates: ['reviewmonth', 'period'], value: submittedMonth },
+      { label: 'Date Filled', candidates: ['datefilled', 'submittedat', 'dateandtime', 'responsedate', 'datesubmitted'], value: submittedAtText },
     ]
   }
   return [
-    { label: 'Submitted At', candidates: [], value: new Date().toISOString() },
+    { label: 'Submitted At', candidates: [], value: submittedAtText },
     { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
     { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: attendee.schedule.trainingName },
     { label: 'Business Unit', candidates: ['businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
@@ -88,7 +102,8 @@ export async function mirrorSurveyResponse(
   stageKey: SurveyStageKey,
   attendee: TrainingScheduleAttendee & { schedule: TrainingSchedule },
   answers: Record<string, string | string[]>,
-  questions: SurveyQuestion[]
+  questions: SurveyQuestion[],
+  submittedAt: Date
 ): Promise<MirrorResult> {
   const settings = await prisma.surveySettings.findFirst()
   const config = await prisma.googleSheetsConfig.findFirst()
@@ -110,7 +125,7 @@ export async function mirrorSurveyResponse(
 
   try {
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-    const fields = buildMirrorFields(stageKey, attendee, answers, questions)
+    const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt)
     await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
     await recordStatus(true, `Synced to "${sheetName}".`)
     return { attempted: true, success: true, message: `Synced to "${sheetName}".` }
@@ -128,6 +143,7 @@ export interface MirrorBatchItem {
   attendee: TrainingScheduleAttendee & { schedule: TrainingSchedule }
   answers: Record<string, string | string[]>
   questions: SurveyQuestion[]
+  submittedAt: Date
 }
 
 // Batch version for "Retry All" — retrying N unsynced responses one at a time meant N separate
@@ -157,7 +173,7 @@ export async function mirrorSurveyResponses(items: MirrorBatchItem[]): Promise<M
       continue
     }
 
-    const withFields = stageItems.map((it) => ({ item: it, fields: buildMirrorFields(stageKey, it.attendee, it.answers, it.questions) }))
+    const withFields = stageItems.map((it) => ({ item: it, fields: buildMirrorFields(stageKey, it.attendee, it.answers, it.questions, it.submittedAt) }))
     const shapeKey = (fields: MirrorField[]) => fields.map((f) => f.label).join('|')
 
     const shapeGroups = new Map<string, typeof withFields>()
