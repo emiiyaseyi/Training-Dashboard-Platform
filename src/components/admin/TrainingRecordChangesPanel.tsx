@@ -177,21 +177,27 @@ export function TrainingRecordChangesPanel() {
           {pageItems.map((c) => (
             <div key={c.id} className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
               <p className="text-xs font-semibold text-slate-700 mb-2">
-                {c.newData.staffName || c.oldData.staffName}
+                {c.newData.businessUnit || c.oldData.businessUnit}
                 <span className="text-slate-400 font-normal"> — {c.newData.month || c.oldData.month}</span>
               </p>
               <div className="overflow-x-auto">
                 <table className="text-xs w-full min-w-[420px]">
                   <thead>
                     <tr className="text-slate-400 text-left">
+                      <th className="font-medium pb-1.5 pr-3">Staff Name</th>
                       <th className="font-medium pb-1.5 pr-3">Field</th>
                       <th className="font-medium pb-1.5 pr-3">Previous</th>
                       <th className="font-medium pb-1.5">Current (in sheet)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {c.changedFields.map((field) => (
+                    {c.changedFields.map((field, i) => (
                       <tr key={field} className="border-t border-amber-100">
+                        {i === 0 && (
+                          <td className="py-1 pr-3 font-medium text-slate-700 align-top" rowSpan={c.changedFields.length}>
+                            {c.newData.staffName || c.oldData.staffName}
+                          </td>
+                        )}
                         <td className="py-1 pr-3 text-slate-500">{FIELD_LABELS[field as keyof TrainingSnapshot] || field}</td>
                         <td className="py-1 pr-3 text-red-700">{String(c.oldData[field as keyof TrainingSnapshot] ?? '—')}</td>
                         <td className="py-1 text-emerald-700 font-medium">{String(c.newData[field as keyof TrainingSnapshot] ?? '—')}</td>
