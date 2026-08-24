@@ -88,16 +88,29 @@ function toFloat(val: unknown): number {
 
 // Excel dates arrive either as a serial day-number (when the cell is date-formatted) or as a
 // plain string. Handles both; returns an ISO date string, or null if it can't be parsed.
+//
+// A numeric cell that ISN'T actually a date (a phone number, a Staff ID typo'd into the wrong
+// column, etc.) still parses as *some* Date via the serial-number math below, just a nonsensical
+// one — e.g. serial 13,888,888 becomes the year 39820. `new Date()` itself never rejects that
+// (JS dates are valid across an enormous range), but Prisma's DateTime wire format only accepts
+// a bounded, plausible year and throws on the rest — and since roster rows are written in one
+// createMany call, ONE such row previously failed the entire batch (everyone in it, not just the
+// bad row). Clamping to a plausible human-date range here, before the value ever reaches Prisma,
+// makes it "unparseable" (null + a warning) instead of a crash.
 function parseExcelDate(val: unknown): string | null {
   if (val === '' || val === null || val === undefined) return null
+  let d: Date
   if (typeof val === 'number') {
     // Excel serial date epoch: Dec 30 1899
     const ms = Math.round((val - 25569) * 86400 * 1000)
-    const d = new Date(ms)
-    return isNaN(d.getTime()) ? null : d.toISOString()
+    d = new Date(ms)
+  } else {
+    d = new Date(String(val))
   }
-  const d = new Date(String(val))
-  return isNaN(d.getTime()) ? null : d.toISOString()
+  if (isNaN(d.getTime())) return null
+  const year = d.getUTCFullYear()
+  if (year < 1900 || year > 2200) return null
+  return d.toISOString()
 }
 
 function parseConfirmed(val: unknown): boolean {
