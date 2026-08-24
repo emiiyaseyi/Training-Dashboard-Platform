@@ -54,13 +54,24 @@ type Draft = {
 
 const PAGE_SIZE = 20
 
+const FIELD_DISPLAY_LABELS: Record<string, string> = {
+  email: 'Email',
+  lineManagerStaffId: 'Line Manager',
+  role: 'Role',
+  department: 'Department',
+  employmentDate: 'Employment Date',
+}
+
 export function StaffDataQuality() {
   const [audit, setAudit] = useState<Audit | null>(null)
   const [loading, setLoading] = useState(true)
   const [cleaning, setCleaning] = useState(false)
   const [cleanResult, setCleanResult] = useState<number | null>(null)
   const [backfilling, setBackfilling] = useState(false)
-  const [backfillResult, setBackfillResult] = useState<{ checked: number; updated: number; fieldsFilled: number; stillMissing: number; error?: string } | null>(null)
+  const [backfillResult, setBackfillResult] = useState<{
+    checked: number; updated: number; fieldsFilled: number; stillMissing: number; noSheetRow: number
+    fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]; error?: string
+  } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -222,10 +233,25 @@ export function StaffDataQuality() {
       )}
 
       {backfillResult && (
-        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${backfillResult.error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-200 text-emerald-700'}`}>
-          {backfillResult.error
-            ? backfillResult.error
-            : `Checked ${backfillResult.checked} flagged staff — filled ${backfillResult.fieldsFilled} field(s) across ${backfillResult.updated} record(s). ${backfillResult.stillMissing} still have nothing to fill from in the sheet.`}
+        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border space-y-1 ${backfillResult.error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+          {backfillResult.error ? backfillResult.error : (
+            <>
+              <p className={backfillResult.updated > 0 ? 'text-emerald-700' : ''}>
+                Checked {backfillResult.checked} flagged staff — filled {backfillResult.fieldsFilled} field(s) across {backfillResult.updated} record(s).
+                {' '}{backfillResult.stillMissing} still have nothing to fill from in the sheet
+                {backfillResult.noSheetRow > 0 && ` (${backfillResult.noSheetRow} of those weren't found in the sheet by Staff ID at all — check the Staff ID matches exactly)`}.
+              </p>
+              {backfillResult.fieldBreakdown.some((f) => f.missingInDb > 0) && (
+                <ul className="pl-3 list-disc space-y-0.5">
+                  {backfillResult.fieldBreakdown.filter((f) => f.missingInDb > 0).map((f) => (
+                    <li key={f.field}>
+                      {FIELD_DISPLAY_LABELS[f.field] || f.field}: {f.missingInDb} missing here, the sheet had a value for {f.availableInSheet} of them.
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       )}
 
