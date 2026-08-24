@@ -44,7 +44,12 @@ export function FilterBar({ availableYears, value, onChange }: FilterBarProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-1 w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-[100] p-4 space-y-4">
+        // Fixed + viewport-relative margins on mobile — this button often sits near the left edge
+        // of a narrow header, and the old `absolute right-0` anchored the panel to the BUTTON's
+        // position (the only positioned ancestor), so a fixed 320px-wide panel grew leftward off
+        // the button and straight off the edge of the screen. From sm: up there's reliably enough
+        // room for the original anchored-dropdown behavior.
+        <div className="fixed inset-x-4 top-24 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-1 w-auto sm:w-80 bg-white rounded-xl border border-slate-200 shadow-lg z-[100] p-4 space-y-4">
           {/* Mode selector */}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Period</p>
