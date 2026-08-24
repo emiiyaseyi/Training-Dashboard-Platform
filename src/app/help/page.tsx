@@ -42,7 +42,7 @@ export default function HelpPage() {
 
         <SectionCard icon={LayoutDashboard} title="Dashboard Pages" description="What each analytics page shows">
           <div>
-            <FAQItem q="Executive Overview" a="Group-wide totals: learning investment, formal training vs. strategic initiatives vs. subscriptions, staff coverage, impact scores, and business unit performance — always shows full organisation data regardless of your assigned access." />
+            <FAQItem q="Executive Overview" a="Group-wide totals: learning investment, formal training vs. strategic learnings vs. subscriptions, staff coverage, impact scores, and business unit performance — always shows full organisation data regardless of your assigned access." />
             <FAQItem q="Training Analytics" a="Detailed training spend, hours, and participation, scoped to the Business Unit(s) you have access to." />
             <FAQItem q="Subscriptions" a="Professional membership spend and coverage by Business Unit." />
             <FAQItem q="Business Units" a="A deep-dive profile per Business Unit — investment split, coverage, budget utilisation, and impact." />

@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const otherTypeNames = new Set(trainingTypes.filter((t) => t.classification === 'other').map((t) => t.name.toLowerCase()))
     const misclassifiedCount = records.filter((r) => !r.trainingType || !otherTypeNames.has(r.trainingType.toLowerCase())).length
     const classificationWarning = misclassifiedCount > 0
-      ? `${misclassifiedCount} of ${records.length} matched record(s) aren't tagged with a Training Type classified as "other" — this amount will count as Formal Training Spend for those, not Strategic Learning Initiatives, until the Training Type is corrected.`
+      ? `${misclassifiedCount} of ${records.length} matched record(s) aren't tagged with a Training Type classified as "other" — this amount will count as Formal Training Spend for those, not Strategic Learnings, until the Training Type is corrected.`
       : null
 
     const byBU = new Map<string, typeof records>()

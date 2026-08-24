@@ -203,7 +203,7 @@ export default function BusinessUnitsDashboard() {
     'Business Unit': b.name,
     'Total Investment (₦)': b.totalInvestment,
     'Formal Training (₦)': b.trainingCost,
-    'Strategic Initiatives (₦)': b.otherInvestmentCost,
+    'Strategic Learnings (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
     'Staff Trained': b.staffTrained,
     'Total Staff': b.totalStaff,
@@ -309,7 +309,7 @@ export default function BusinessUnitsDashboard() {
                   },
                   { key: 'totalInvestment',   header: 'Total Investment',  align: 'right', render: (r) => fmt(r.totalInvestment as number) },
                   { key: 'trainingCost',       header: 'Formal Training',   align: 'right', render: (r) => fmt(r.trainingCost as number) },
-                  { key: 'otherInvestmentCost', header: 'Strategic Initiatives', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
+                  { key: 'otherInvestmentCost', header: 'Strategic Learnings', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
                   { key: 'subscriptionCost',   header: 'Subscriptions',     align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
                   { key: 'staffTrained',       header: 'Trained',           align: 'right' },
                   {

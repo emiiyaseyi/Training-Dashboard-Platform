@@ -12,9 +12,9 @@ export function Slide1ExecutiveOverview({ data, pageNumber, periodLabel }: { dat
   return (
     <SlideShell title="Executive Overview" subtitle="Group-wide learning investment at a glance" pageNumber={pageNumber} periodLabel={periodLabel}>
       <div className="grid grid-cols-4 gap-3 h-full content-start">
-        <ReportTile icon={NairaSign} title="Total Learning Investment" value={fmt(data.totalLearningInvestment)} subtitle={`${pct(data.trainingSharePct)} training · ${pct(data.otherSharePct)} strategic · ${pct(data.subscriptionSharePct)} subscriptions`} />
+        <ReportTile icon={NairaSign} title="Total Learning Investment" value={fmt(data.totalLearningInvestment)} subtitle={`${pct(data.trainingSharePct)} training · ${pct(data.otherSharePct)} strategic learnings · ${pct(data.subscriptionSharePct)} subscriptions`} />
         <ReportTile icon={GraduationCap} title="Formal Training Spend" value={fmt(data.totalTrainingCost)} subtitle="Internal + External programmes" valueColor="text-navy-600" />
-        <ReportTile icon={Award} title="Strategic Learning Initiatives" value={fmt(data.totalOtherTrainingCost)} subtitle={data.otherTrainingTypeNames.join(', ') || 'Summits, Leadership Cafe, Workshops'} valueColor="text-gold-400" />
+        <ReportTile icon={Award} title="Strategic Learnings" value={fmt(data.totalOtherTrainingCost)} subtitle={data.otherTrainingTypeNames.join(', ') || 'Summits, Leadership Cafe, Workshops'} valueColor="text-gold-400" />
         <ReportTile icon={BadgeCheck} title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" valueColor="text-report-green" />
 
         <ReportTile icon={Users} title="Investment per Staff" value={fmt(data.investmentPerStaff)} subtitle={`Across ${data.totalStaffCount.toLocaleString()} total staff`} valueColor="text-gold-400" />

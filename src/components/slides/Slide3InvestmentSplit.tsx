@@ -10,10 +10,10 @@ export function Slide3InvestmentSplit({ data, pageNumber, periodLabel }: { data:
       <div className="grid grid-cols-3 gap-4 h-full">
         <div className="rounded-xl border border-navy-200 bg-navy-100 p-5 flex flex-col">
           <h3 className="text-sm font-semibold text-navy-600 mb-2">Investment Split</h3>
-          <PieChart labels={['Formal Training', 'Strategic Initiatives', 'Subscriptions']} values={[data.totalTrainingCost, data.totalOtherTrainingCost, data.totalSubscriptionCost]} donut height={340} showLegend={false} />
+          <PieChart labels={['Formal Training', 'Strategic Learnings', 'Subscriptions']} values={[data.totalTrainingCost, data.totalOtherTrainingCost, data.totalSubscriptionCost]} donut height={340} showLegend={false} />
           <div className="grid grid-cols-1 gap-2 mt-3 text-xs">
             <div><span className="font-bold text-navy-600">{fmt(data.totalTrainingCost)}</span> <span className="text-report-gray">Formal Training ({pct(data.trainingSharePct)})</span></div>
-            <div><span className="font-bold text-gold-400">{fmt(data.totalOtherTrainingCost)}</span> <span className="text-report-gray">Strategic Initiatives ({pct(data.otherSharePct)})</span></div>
+            <div><span className="font-bold text-gold-400">{fmt(data.totalOtherTrainingCost)}</span> <span className="text-report-gray">Strategic Learnings ({pct(data.otherSharePct)})</span></div>
             <div><span className="font-bold text-report-green">{fmt(data.totalSubscriptionCost)}</span> <span className="text-report-gray">Subscriptions ({pct(data.subscriptionSharePct)})</span></div>
           </div>
         </div>

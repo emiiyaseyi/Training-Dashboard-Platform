@@ -106,9 +106,9 @@ function buildSlide1(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
   addHeader(slide, 'Executive Overview', 'Group-wide learning investment at a glance')
 
   const tiles: Tile[] = [
-    { iconKey: 'nairaSign', title: 'Total Learning Investment', value: fmt(data.totalLearningInvestment), subtitle: `${pct(data.trainingSharePct)} training · ${pct(data.otherSharePct)} strategic · ${pct(data.subscriptionSharePct)} subscriptions` },
+    { iconKey: 'nairaSign', title: 'Total Learning Investment', value: fmt(data.totalLearningInvestment), subtitle: `${pct(data.trainingSharePct)} training · ${pct(data.otherSharePct)} strategic learnings · ${pct(data.subscriptionSharePct)} subscriptions` },
     { iconKey: 'graduationCap', title: 'Formal Training Spend', value: fmt(data.totalTrainingCost), subtitle: 'Internal + External programmes' },
-    { iconKey: 'award', title: 'Strategic Learning Initiatives', value: fmt(data.totalOtherTrainingCost), subtitle: data.otherTrainingTypeNames.join(', ') || 'Summits, Leadership Cafe, Workshops', valueColor: C.gold },
+    { iconKey: 'award', title: 'Strategic Learnings', value: fmt(data.totalOtherTrainingCost), subtitle: data.otherTrainingTypeNames.join(', ') || 'Summits, Leadership Cafe, Workshops', valueColor: C.gold },
     { iconKey: 'badgeCheck', title: 'Subscription Spend', value: fmt(data.totalSubscriptionCost), subtitle: 'Professional memberships', valueColor: C.green },
     { iconKey: 'users', title: 'Investment per Staff', value: fmt(data.investmentPerStaff), subtitle: `Across ${data.totalStaffCount.toLocaleString()} total staff`, valueColor: C.gold },
     { iconKey: 'userCheck', title: 'Staff Coverage', value: pct(data.groupCoverageRatio), subtitle: `${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`, valueColor: data.groupCoverageRatio >= 70 ? C.green : data.groupCoverageRatio >= 40 ? C.gold : C.red },
@@ -138,7 +138,7 @@ function buildSlide2(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
       iconKey: 'checkCircle',
       title: 'Post-Training Impact',
       value: data.postTrainingReviewCount > 0 ? rating(data.postTrainingImpactScore) : 'No data',
-      subtitle: data.postTrainingReviewCount > 0 ? `From ${data.postTrainingReviewCount} manager review${data.postTrainingReviewCount === 1 ? '' : 's'}` : 'Upload manager reviews to populate',
+      subtitle: data.postTrainingReviewCount > 0 ? 'From line manager reviews' : 'Upload manager reviews to populate',
       valueColor: C.green,
     },
   ]
@@ -175,7 +175,7 @@ function buildSlide3(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   slide.addText('Investment Split', { x: MARGIN + 0.2, y: CONTENT_TOP + 0.15, w: leftW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
   slide.addChart(pptx.ChartType.doughnut, [{
     name: 'Investment Split',
-    labels: ['Formal Training', 'Strategic Initiatives', 'Subscriptions'],
+    labels: ['Formal Training', 'Strategic Learnings', 'Subscriptions'],
     values: [data.totalTrainingCost, data.totalOtherTrainingCost, data.totalSubscriptionCost],
   }], {
     x: MARGIN + 0.2, y: CONTENT_TOP + 0.5, w: leftW - 0.4, h: 2.6,
@@ -187,7 +187,7 @@ function buildSlide3(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
     { text: `${fmt(data.totalTrainingCost)}  `, options: { bold: true, color: C.navy } },
     { text: `Formal Training (${pct(data.trainingSharePct)})\n`, options: { color: C.gray } },
     { text: `${fmt(data.totalOtherTrainingCost)}  `, options: { bold: true, color: C.gold } },
-    { text: `Strategic Initiatives (${pct(data.otherSharePct)})\n`, options: { color: C.gray } },
+    { text: `Strategic Learnings (${pct(data.otherSharePct)})\n`, options: { color: C.gray } },
     { text: `${fmt(data.totalSubscriptionCost)}  `, options: { bold: true, color: C.green } },
     { text: `Subscriptions (${pct(data.subscriptionSharePct)})`, options: { color: C.gray } },
   ], { x: MARGIN + 0.2, y: legendY, w: leftW - 0.4, h: 1.0, fontFace: 'Calibri', fontSize: 9, lineSpacing: 16 })
@@ -280,15 +280,17 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
       { text: fmt(bu.totalInvestment), options: { fontSize: 24, bold: true, color: C.navy, breakLine: true } },
     ], { x: x + cardW - 1.7, y: y + 0.1, w: 1.55, h: 0.6, align: 'right', fontFace: 'Calibri' })
 
-    slide.addText([{ text: 'Training Spend\n', options: { fontSize: 12, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 20, bold: true, color: C.navyDark } }], { x: x + 0.2, y: y + 0.65, w: cardW / 2 - 0.3, h: 0.55, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 12, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 20, bold: true, color: C.navyDark } }], { x: x + cardW / 2, y: y + 0.65, w: cardW / 2 - 0.3, h: 0.55, fontFace: 'Calibri' })
+    const colW = cardW / 3
+    slide.addText([{ text: 'Formal Training\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + 0.2, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
     slide.addText(
       bu.budget > 0 ? `${pct(bu.budgetUtilisation)} of budget` : 'Budget not set',
-      { x: x + 0.2, y: y + 1.25, w: cardW / 2 - 0.3, h: 0.28, fontFace: 'Calibri', fontSize: 11, color: C.gray }
+      { x: x + 0.2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
     )
     slide.addText(
       `${bu.subscriptionStaff} members`,
-      { x: x + cardW / 2, y: y + 1.25, w: cardW / 2 - 0.3, h: 0.28, fontFace: 'Calibri', fontSize: 11, color: C.gray }
+      { x: x + colW * 2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
     )
 
     const statsY = y + 1.6

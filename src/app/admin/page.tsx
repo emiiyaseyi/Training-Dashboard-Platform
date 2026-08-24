@@ -52,7 +52,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'bu-csv-import', label: 'Bulk Import via CSV / Excel', tab: 'business-units' },
   { id: 'bu-export', label: 'Export Business Unit Data', tab: 'business-units' },
   { id: 'budget-settings', label: 'Budget Settings', tab: 'business-units' },
-  { id: 'group-cost-distribution', label: 'Other Investment Budget / Group Cost Distribution', tab: 'business-units' },
+  { id: 'group-cost-distribution', label: 'Strategic Learnings / Group Cost Distribution', tab: 'business-units' },
   { id: 'training-types', label: 'Training Types', tab: 'taxonomies' },
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
   { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
@@ -692,7 +692,7 @@ export default function AdminPage() {
             <div id="training-types" className={sectionWrapClass('training-types')}>
               <TaxonomyPanel
                 title="Training Types"
-                description="Classifies training spend as Formal Training (Internal/External) or a Strategic Learning Initiative (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learning Initiatives cards, and populates the Training Type column on the upload template."
+                description="Classifies training spend as Formal Training (Internal/External) or Strategic Learnings (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learnings cards, and populates the Training Type column on the upload template."
                 endpoint="/api/training-types"
                 withClassification
                 namePlaceholder="e.g. Summit"
