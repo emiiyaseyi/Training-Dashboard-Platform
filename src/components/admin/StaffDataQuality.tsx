@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search } from 'lucide-react'
+import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search, DownloadCloud } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
 
@@ -59,6 +59,8 @@ export function StaffDataQuality() {
   const [loading, setLoading] = useState(true)
   const [cleaning, setCleaning] = useState(false)
   const [cleanResult, setCleanResult] = useState<number | null>(null)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ checked: number; updated: number; fieldsFilled: number; stillMissing: number; error?: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
@@ -103,6 +105,19 @@ export function StaffDataQuality() {
       await load()
     } finally {
       setCleaning(false)
+    }
+  }
+
+  const backfillFromSheet = async () => {
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const res = await fetch('/api/admin/staff-quality/backfill-from-sheet', { method: 'POST' })
+      const data = await res.json()
+      setBackfillResult(data)
+      if (!data.error) await load()
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -173,6 +188,15 @@ export function StaffDataQuality() {
       description="Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names. Click any record to fix it."
       headerActions={
         <>
+          <button
+            onClick={(e) => { e.stopPropagation(); backfillFromSheet() }}
+            disabled={backfilling}
+            title="Fills gaps (email, line manager, role, department, employment date) from the Staff Roster / Comprehensive Staff List sheet already configured under Live Data Source — never overwrites a value that's already present, never invents one."
+            className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-50 disabled:opacity-50"
+          >
+            {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
+            Fill Missing Fields from Sheet
+          </button>
           {duplicateShadowedTotal > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); clean() }}
@@ -194,6 +218,14 @@ export function StaffDataQuality() {
       {cleanResult !== null && (
         <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-emerald-700">
           Removed {cleanResult} duplicate record(s).
+        </div>
+      )}
+
+      {backfillResult && (
+        <div className={`mb-3 text-xs rounded-lg px-3 py-2 border ${backfillResult.error ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-200 text-emerald-700'}`}>
+          {backfillResult.error
+            ? backfillResult.error
+            : `Checked ${backfillResult.checked} flagged staff — filled ${backfillResult.fieldsFilled} field(s) across ${backfillResult.updated} record(s). ${backfillResult.stillMissing} still have nothing to fill from in the sheet.`}
         </div>
       )}
 
