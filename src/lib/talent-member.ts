@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
-import { MONTHS } from '@/lib/filter-types'
+import { MONTHS, activeMonthIndices, type PeriodFilter } from '@/lib/filter-types'
 
 // Talent Member (TM) Trainings — a Training Type ("TM") tracked against a real, named roster.
 // The roster itself is admin-entered (TalentMemberRosterEntry, managed from Admin → Talent Member
@@ -112,7 +112,13 @@ function resolveAgainstRoster(
   return null
 }
 
-export async function computeTalentMemberReport(year: number): Promise<TalentMemberFullReport> {
+export async function computeTalentMemberReport(filter: PeriodFilter): Promise<TalentMemberFullReport> {
+  const year = filter.mode === 'all' ? new Date().getFullYear() : (filter.year ?? new Date().getFullYear())
+  // null = no month restriction within the year (All Time / Full Year both mean the whole year
+  // here — Talent Members' roster and exemptions are inherently year-scoped, so "All Time"
+  // doesn't span multiple years the way it does on other pages; see activeMonthIndices).
+  const monthIndices = activeMonthIndices(filter)
+
   const [directory, rosterEntries, exemptions, tmSchedules, yearTrainingRecords] = await Promise.all([
     loadRosterDirectory(),
     prisma.talentMemberRosterEntry.findMany(),
@@ -129,7 +135,8 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
   // is stripped entirely (not just trimmed) so a stray non-breaking space or double space from
   // manual data entry in the Training Type column still matches.
   const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
-  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm')
+  const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
+  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month))
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
@@ -150,7 +157,13 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
   })
 
   const now = Date.now()
-  const pastSchedules = tmSchedules.filter((s) => s.endDate.getTime() < now)
+  // "Upcoming" is intentionally NOT restricted to the selected period — it's forward-looking by
+  // definition, so a Year-to-Date filter (which is about what's already happened) shouldn't hide
+  // a training scheduled later in the same year. Only "past" (what counts toward attendance and
+  // spend) is scoped to the selected year + month range.
+  const pastSchedules = tmSchedules.filter((s) =>
+    s.endDate.getTime() < now && s.startDate.getFullYear() === year && inSelectedPeriod(MONTHS[s.startDate.getMonth()])
+  )
   const upcomingSchedules = tmSchedules.filter((s) => s.endDate.getTime() >= now)
 
   const rosterKeys = new Set(roster.map((s) => normalizeStaffIdKey(s.staffId)))
@@ -202,7 +215,11 @@ export async function computeTalentMemberReport(year: number): Promise<TalentMem
       vendor: rec.vendor,
     })
     attendedKeys.add(key)
-    totalSpend += rec.cost
+    // Uploaded/synced Training Data only has a month, not an exact day, so a row for the current
+    // month could genuinely be later this month (not yet happened) — approxDate lands on the 1st
+    // of that month, so this excludes it from spend the moment the month itself is still current
+    // or later, same "as of today" cutoff schedule-sourced spend already gets from endDate < now.
+    if (approxDate.getTime() <= now) totalSpend += rec.cost
   }
 
   const upcoming: TMUpcomingRecord[] = upcomingSchedules.map((s) => ({

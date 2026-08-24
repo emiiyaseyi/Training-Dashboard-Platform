@@ -616,7 +616,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.kSSRecord.findMany(),
     prisma.trainingType.findMany(),
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
-    computeTalentMemberReport(filter.year ?? new Date().getFullYear()),
+    computeTalentMemberReport({ mode: 'year', year: filter.year ?? new Date().getFullYear() }),
     prisma.budgetSettings.findFirst(),
     prisma.managerReviewRecord.findMany(),
   ])

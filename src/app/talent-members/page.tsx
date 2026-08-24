@@ -9,7 +9,9 @@ import { DataTable } from '@/components/ui/DataTable'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { NairaSign } from '@/components/ui/NairaSign'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { usePagePermission } from '@/lib/use-page-permission'
+import { type PeriodFilter, filterToQuery, filterLabel } from '@/lib/filter-types'
 
 interface TMAttendedRecord {
   recordId: string | null; source: 'schedule' | 'record'
@@ -49,7 +51,12 @@ const fmtDate = (d: string) => new Date(d).toLocaleDateString()
 export default function TalentMembersPage() {
   const { isPlatformAdmin } = usePagePermission()
   const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
+  // Talent Members' roster/exemptions/coverage are inherently year-scoped (unlike other pages),
+  // so the filter always carries a year — "All Time" and "Full Year" both mean the whole selected
+  // year here, not "every year of data". Defaults to the current year, full year, matching what
+  // the page showed before this filter existed.
+  const [filter, setFilter] = useState<PeriodFilter>({ mode: 'year', year: currentYear })
+  const year = filter.year ?? currentYear
   const [data, setData] = useState<TalentMemberFullReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -59,11 +66,11 @@ export default function TalentMembersPage() {
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
   const [rechecking, setRechecking] = useState(false)
 
-  const load = useCallback(async (y: number) => {
+  const load = useCallback(async (f: PeriodFilter) => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/talent-members?year=${y}`)
+      const res = await fetch(`/api/talent-members${filterToQuery(f)}`)
       if (!res.ok) throw new Error()
       setData(await res.json())
     } catch {
@@ -73,7 +80,7 @@ export default function TalentMembersPage() {
     }
   }, [])
 
-  useEffect(() => { load(year) }, [year, load])
+  useEffect(() => { load(filter) }, [filter, load])
 
   const saveVendor = async (recordId: string) => {
     setSavingVendor(true)
@@ -85,7 +92,7 @@ export default function TalentMembersPage() {
       })
       if (res.ok) {
         setEditingVendorId(null)
-        await load(year)
+        await load(filter)
       } else {
         alert('Failed to save vendor.')
       }
@@ -99,7 +106,7 @@ export default function TalentMembersPage() {
     try {
       const res = await fetch('/api/admin/google-sheets/sync', { method: 'POST' })
       const data = await res.json().catch(() => ({}))
-      await load(year)
+      await load(filter)
       if (!res.ok) {
         alert(data.error || 'Refresh failed — you may not have permission to trigger a sync (Admin → Live Data Source access is required).')
       } else if (data.changesDetected > 0) {
@@ -117,7 +124,7 @@ export default function TalentMembersPage() {
     setDeletingRecordId(id)
     try {
       const res = await fetch(`/api/admin/training-record/${id}`, { method: 'DELETE' })
-      if (res.ok) await load(year)
+      if (res.ok) await load(filter)
       else alert('Failed to remove record.')
     } finally {
       setDeletingRecordId(null)
@@ -135,7 +142,7 @@ export default function TalentMembersPage() {
   if (error) return (
     <div className="p-4 sm:p-8 space-y-4">
       <AlertBadge variant="error" message={error} />
-      <button onClick={() => load(year)} className="text-sm text-blue-600 flex items-center gap-1.5">
+      <button onClick={() => load(filter)} className="text-sm text-blue-600 flex items-center gap-1.5">
         <RefreshCw className="w-3.5 h-3.5" /> Retry
       </button>
     </div>
@@ -168,13 +175,7 @@ export default function TalentMembersPage() {
         subtitle="TM Trainings roster, completion, and coverage for the year in review"
         actions={
           <div className="flex items-center gap-2">
-            <select
-              value={year}
-              onChange={(e) => setYear(parseInt(e.target.value))}
-              className="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {availableYears.map((y) => <option key={y} value={y}>{y}{y === currentYear ? ' (current)' : ''}</option>)}
-            </select>
+            <FilterBar availableYears={availableYears} value={filter} onChange={setFilter} />
             <SectionExport
               sheets={[
                 { name: 'Attended', rows: attendedRows },
@@ -186,7 +187,7 @@ export default function TalentMembersPage() {
               format="xlsx"
               label="Download All"
             />
-            <button onClick={() => load(year)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
+            <button onClick={() => load(filter)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
           </div>
@@ -196,13 +197,13 @@ export default function TalentMembersPage() {
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Total Talent Members" value={data.totalTalentMembers.toLocaleString()} subtitle="Current TM roster" icon={Users} color="blue" />
-          <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${year} TM training attendance`} icon={UserCheck} color="green" />
+          <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${filterLabel(filter)} TM training attendance`} icon={UserCheck} color="green" />
           <KPICard title="Yet to be Trained" value={data.staffNotTrained.toLocaleString()} subtitle="Not yet attended, not exempted" icon={UserX} color="red" alert={data.staffNotTrained > 0} />
           <KPICard title="Staff Exempted" value={data.staffExempted.toLocaleString()} subtitle={`Excused for ${year}`} icon={UserMinus} color="purple" />
-          <KPICard title="Total Spend" value={`₦${data.totalSpend.toLocaleString()}`} subtitle="TM trainings attended this year" icon={NairaSign} color="amber" />
+          <KPICard title="Total Spend" value={`₦${data.totalSpend.toLocaleString()}`} subtitle={`${filterLabel(filter)}, as of today — excludes not-yet-held trainings`} icon={NairaSign} color="amber" />
           <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Exempted)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
           <KPICard title="Training Coming Soon" value={data.staffWithUpcomingTraining.toLocaleString()} subtitle="TMs on a scheduled, not-yet-happened training" icon={CalendarClock} color="blue" />
-          <KPICard title="Trainings Delivered" value={data.distinctTrainingsDelivered.toLocaleString()} subtitle={`Distinct TM programmes run in ${year}`} icon={GraduationCap} color="purple" />
+          <KPICard title="Trainings Delivered" value={data.distinctTrainingsDelivered.toLocaleString()} subtitle={`Distinct TM programmes run, ${filterLabel(filter)}`} icon={GraduationCap} color="purple" />
         </div>
 
         {isPlatformAdmin && data.unresolvedRosterEntries.length > 0 && (
