@@ -49,6 +49,7 @@ export interface SendMailInput {
   subject: string
   html: string
   fromName?: string
+  attachments?: { filename: string; content: Buffer }[]
 }
 
 // Splits an admin-typed "a@x.com, b@y.com; c@z.com" field into a clean address list — the one
@@ -59,7 +60,7 @@ export function parseCcList(raw: string | null | undefined): string[] {
   return raw.split(/[,;]/).map((e) => e.trim()).filter(Boolean)
 }
 
-export async function sendMail({ to, cc, subject, html, fromName }: SendMailInput): Promise<void> {
+export async function sendMail({ to, cc, subject, html, fromName, attachments }: SendMailInput): Promise<void> {
   const { transport, settings } = await getTransportAndSettings()
   const address = settings.fromAddress || settings.username || undefined
   const name = fromName || settings.fromName
@@ -74,5 +75,6 @@ export async function sendMail({ to, cc, subject, html, fromName }: SendMailInpu
     cc: allCc.length > 0 ? allCc.join(', ') : undefined,
     subject,
     html,
+    attachments,
   })
 }

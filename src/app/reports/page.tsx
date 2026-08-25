@@ -6,6 +6,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { InvestmentReportExport } from '@/components/reports/InvestmentReportExport'
 import { BUReportRecipientsPanel } from '@/components/admin/BUReportRecipientsPanel'
+import { ReportAutomationPanel } from '@/components/admin/ReportAutomationPanel'
+import { BUReportSendLogPanel } from '@/components/admin/BUReportSendLogPanel'
 import { MONTHS } from '@/lib/filter-types'
 
 interface MonthlyReport {
@@ -144,6 +146,10 @@ export default function ReportsPage() {
         <InvestmentReportExport />
 
         <BUReportRecipientsPanel />
+
+        <ReportAutomationPanel />
+
+        <BUReportSendLogPanel />
 
         {/* Controls */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
