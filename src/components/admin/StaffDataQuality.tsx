@@ -69,7 +69,7 @@ export function StaffDataQuality() {
   const [cleanResult, setCleanResult] = useState<number | null>(null)
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{
-    checked: number; updated: number; fieldsFilled: number; stillMissing: number; noSheetRow: number
+    checked: number; updated: number; fieldsFilled: number; stillMissing: number; noSheetRow: number; ambiguousName: number
     matchedByName: number; staffIdMismatch: number
     fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]; error?: string
   } | null>(null)
@@ -243,6 +243,12 @@ export function StaffDataQuality() {
                 {backfillResult.noSheetRow > 0 && ` (${backfillResult.noSheetRow} of those weren't found in the sheet by Staff ID or by exact name)`}.
                 {backfillResult.matchedByName > 0 && ` ${backfillResult.matchedByName} were matched by name instead of Staff ID (their Staff ID here didn't match the sheet).`}
               </p>
+              {backfillResult.ambiguousName > 0 && (
+                <p className="text-amber-700">
+                  {backfillResult.ambiguousName} have no Staff ID match, and their name matches 2+ rows in the sheet — too risky to guess which
+                  is them (the sheet likely has a leftover duplicate row for that name; worth checking there directly).
+                </p>
+              )}
               {backfillResult.staffIdMismatch > 0 && (
                 <p className="text-amber-700">
                   {backfillResult.staffIdMismatch} of those name-matched people also have a DIFFERENT Staff ID in the sheet than what&apos;s stored here —
