@@ -20,6 +20,10 @@ export function encryptSecret(plain: string): string {
   return PREFIX + Buffer.concat([iv, authTag, encrypted]).toString('base64')
 }
 
+export function isEncryptedSecret(stored: string): boolean {
+  return stored.startsWith(PREFIX)
+}
+
 // Values saved before this encryption layer existed are stored as plain text with no prefix —
 // returned as-is so already-configured SMTP credentials keep working without the admin having
 // to re-enter anything. Every value saved from now on goes through encryptSecret() above.

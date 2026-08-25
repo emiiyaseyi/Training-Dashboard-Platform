@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
 import { prisma } from '@/lib/prisma'
-import { decryptSecret } from '@/lib/secret-crypto'
+import { decryptSecret, encryptSecret, isEncryptedSecret } from '@/lib/secret-crypto'
 
 // SMTP is configured by the admin in-app (Admin Settings), not environment variables — it's a
 // platform-wide capability (surveys today, potentially other notifications later), and admins
@@ -16,11 +16,20 @@ async function getTransportAndSettings() {
   if (!s?.host || !s?.port || !s?.username || !s?.password) {
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings.')
   }
+  // Self-healing migration: a password saved before the admin-settings save path encrypted it
+  // (or one restored/copied in some other way) sits in the DB as plaintext. decryptSecret()
+  // already tolerates that on read, but the very next real chance to fix it at rest is right
+  // here — re-encrypt and persist it before it's ever used, so it doesn't stay exposed.
+  let storedPassword = s.password
+  if (!isEncryptedSecret(storedPassword)) {
+    storedPassword = encryptSecret(storedPassword)
+    await prisma.smtpSettings.update({ where: { id: s.id }, data: { password: storedPassword } })
+  }
   const transport = nodemailer.createTransport({
     host: s.host,
     port: s.port,
     secure: s.port === 465,
-    auth: { user: s.username, pass: decryptSecret(s.password) },
+    auth: { user: s.username, pass: decryptSecret(storedPassword) },
   })
   return { transport, settings: s }
 }

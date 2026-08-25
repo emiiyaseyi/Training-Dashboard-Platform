@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { encryptSecret } from '@/lib/secret-crypto'
 
 // The password is intentionally never included in the response — only whether one is set.
 export async function GET() {
@@ -37,8 +38,9 @@ export async function POST(req: NextRequest) {
       defaultCc: body.defaultCc?.trim() || null,
     }
     // Only overwrite the stored password if a new one was actually typed — leaving the field
-    // blank in the form means "keep the existing one", not "clear it".
-    if (body.password) data.password = body.password
+    // blank in the form means "keep the existing one", not "clear it". Encrypted at rest —
+    // mailer.ts's decryptSecret() reverses this (and tolerates old plaintext rows) when sending.
+    if (body.password) data.password = encryptSecret(body.password)
 
     const updated = existing
       ? await prisma.smtpSettings.update({ where: { id: existing.id }, data })
