@@ -235,7 +235,7 @@ export interface DataQualityBackfillResult {
 interface RosterCandidate { staffId: string; businessUnit: string }
 
 // Same "latest row per Staff ID wins" convention as everywhere else the roster is read.
-async function buildRosterLookups(): Promise<{ byStaffId: Map<string, RosterCandidate>; byName: Map<string, RosterCandidate[]> }> {
+async function buildRosterLookups(): Promise<{ byStaffId: Map<string, RosterCandidate>; byName: Map<string, RosterCandidate[]>; byFirstLast: Map<string, RosterCandidate[]> }> {
   const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
   const latestByStaffId = new Map<string, (typeof all)[number]>()
   for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
@@ -243,14 +243,26 @@ async function buildRosterLookups(): Promise<{ byStaffId: Map<string, RosterCand
 
   const byStaffId = new Map<string, RosterCandidate>()
   const byName = new Map<string, RosterCandidate[]>()
+  // First+Last only, ignoring middle name — a source sheet's "staffName" free-text column often
+  // omits a middle name the roster has (or vice versa), so the full first+middle+last string
+  // never matches even though it's unambiguously the same person. Same fallback idea as
+  // backfillRosterFromSheet's own exact-name matching in sheets-sync.ts.
+  const byFirstLast = new Map<string, RosterCandidate[]>()
   for (const r of roster) {
     byStaffId.set(normalizeStaffIdKey(r.staffId), { staffId: r.staffId, businessUnit: r.businessUnit })
+    const candidate = { staffId: r.staffId, businessUnit: r.businessUnit }
     const name = [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ').trim().toLowerCase()
-    if (!name) continue
-    if (!byName.has(name)) byName.set(name, [])
-    byName.get(name)!.push({ staffId: r.staffId, businessUnit: r.businessUnit })
+    if (name) {
+      if (!byName.has(name)) byName.set(name, [])
+      byName.get(name)!.push(candidate)
+    }
+    const firstLast = `${r.firstName} ${r.lastName}`.trim().toLowerCase()
+    if (firstLast) {
+      if (!byFirstLast.has(firstLast)) byFirstLast.set(firstLast, [])
+      byFirstLast.get(firstLast)!.push(candidate)
+    }
   }
-  return { byStaffId, byName }
+  return { byStaffId, byName, byFirstLast }
 }
 
 // Resolves ONE flagged record against the roster. Never guesses when a name matches more than
@@ -260,10 +272,12 @@ async function buildRosterLookups(): Promise<{ byStaffId: Map<string, RosterCand
 function resolveFromRoster(
   current: { staffId: string; staffName: string; businessUnit: string },
   byStaffId: Map<string, RosterCandidate>,
-  byName: Map<string, RosterCandidate[]>
+  byName: Map<string, RosterCandidate[]>,
+  byFirstLast: Map<string, RosterCandidate[]>
 ): { staffId?: string; businessUnit?: string; outcome: 'fixed' | 'ambiguous' | 'noMatch' } {
   if (isBlankStaffId(current.staffId)) {
-    const candidates = current.staffName.trim() ? byName.get(current.staffName.trim().toLowerCase()) || [] : []
+    const key = current.staffName.trim().toLowerCase()
+    const candidates = key ? (byName.get(key)?.length ? byName.get(key)! : byFirstLast.get(key) || []) : []
     if (candidates.length === 0) return { outcome: 'noMatch' }
     if (candidates.length > 1) return { outcome: 'ambiguous' }
     const match = candidates[0]
@@ -283,7 +297,7 @@ function resolveFromRoster(
 // Review — Feedback is excluded, it has no Staff ID field to resolve at all. Pull-only from data
 // already in the roster; never invents a value.
 export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfillResult> {
-  const { byStaffId, byName } = await buildRosterLookups()
+  const { byStaffId, byName, byFirstLast } = await buildRosterLookups()
   const tables: TableBackfillStat[] = []
 
   {
@@ -293,7 +307,7 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
     })
     const stat: TableBackfillStat = { table: 'training', label: 'Training Cost', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
     for (const r of flagged) {
-      const resolved = resolveFromRoster(r, byStaffId, byName)
+      const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast)
       if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
       if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
       const data: Record<string, unknown> = {}
@@ -311,7 +325,7 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
     })
     const stat: TableBackfillStat = { table: 'subscription', label: 'Subscriptions', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
     for (const r of flagged) {
-      const resolved = resolveFromRoster(r, byStaffId, byName)
+      const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast)
       if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
       if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
       const data: Record<string, unknown> = {}
@@ -329,7 +343,7 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
     })
     const stat: TableBackfillStat = { table: 'kss', label: 'KSS', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
     for (const r of flagged) {
-      const resolved = resolveFromRoster(r, byStaffId, byName)
+      const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast)
       if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
       if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
       const data: Record<string, unknown> = {}
@@ -347,7 +361,7 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
     })
     const stat: TableBackfillStat = { table: 'manager-review', label: 'Post-Training Manager Reviews', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0 }
     for (const r of flagged) {
-      const resolved = resolveFromRoster(r, byStaffId, byName)
+      const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast)
       if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
       if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
       const data: Record<string, unknown> = {}

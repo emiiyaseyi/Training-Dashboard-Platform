@@ -645,6 +645,7 @@ export interface RosterBackfillResult {
   fieldsFilled: number // total individual field values filled in, across all updated staff
   stillMissing: number // checked but the sheet had nothing to fill them with either
   noSheetRow: number // of stillMissing, how many had no row in the sheet by Staff ID OR by exact name
+  ambiguousName: number // of stillMissing, how many had NO Staff ID match but 2+ same-named rows in the sheet — too risky to guess which is them, likely a leftover duplicate row in the sheet itself
   matchedByName: number // Staff ID lookup failed, but an unambiguous exact-name match in the sheet was used instead
   staffIdMismatch: number // of matchedByName, how many also have a DIFFERENT Staff ID in the sheet than what's stored here — a real ID correction opportunity, reported but never auto-applied
   fieldBreakdown: { field: string; missingInDb: number; availableInSheet: number }[]
@@ -657,7 +658,7 @@ export interface RosterBackfillResult {
 // the admin explicitly configured, not a guess. A person still missing a field after this ran
 // genuinely has no value for it in that sheet either.
 export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
-  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0, noSheetRow: 0, matchedByName: 0, staffIdMismatch: 0, fieldBreakdown: [] }
+  const empty = { checked: 0, updated: 0, fieldsFilled: 0, stillMissing: 0, noSheetRow: 0, ambiguousName: 0, matchedByName: 0, staffIdMismatch: 0, fieldBreakdown: [] }
   const config = await prisma.googleSheetsConfig.findFirst()
   const sheetName = (config?.rosterSheetName || config?.comprehensiveStaffListSheetName || '').trim()
   if (!sheetName || !config?.spreadsheetUrl) {
@@ -702,7 +703,7 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   const latestByStaffId = new Map<string, (typeof all)[number]>()
   for (const r of all) latestByStaffId.set(normalizeStaffIdKey(r.staffId), r)
 
-  let checked = 0, fieldsFilled = 0, stillMissing = 0, noSheetRow = 0, matchedByName = 0, staffIdMismatch = 0
+  let checked = 0, fieldsFilled = 0, stillMissing = 0, noSheetRow = 0, ambiguousName = 0, matchedByName = 0, staffIdMismatch = 0
   const fieldStats: Record<string, { missingInDb: number; availableInSheet: number }> = {
     email: { missingInDb: 0, availableInSheet: 0 },
     lineManagerStaffId: { missingInDb: 0, availableInSheet: 0 },
@@ -713,7 +714,11 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   const updates: { id: string; data: Record<string, unknown> }[] = []
 
   for (const [key, current] of latestByStaffId) {
-    const missingAny = !current.email || !current.lineManagerStaffId || !current.role || !current.department || !current.employmentDate
+    // A line manager pointed at yourself is never legitimate data (nobody reports to themselves)
+    // — treat it exactly like a blank for backfill purposes, same as an actually-empty field,
+    // rather than skipping it as "already has a value."
+    const managerIsSelf = !!current.lineManagerStaffId && normalizeStaffIdKey(current.lineManagerStaffId) === key
+    const missingAny = !current.email || !current.lineManagerStaffId || managerIsSelf || !current.role || !current.department || !current.employmentDate
     if (!missingAny) continue
     checked++
 
@@ -723,6 +728,7 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
     // Staff ID itself, even when this reveals it now differs from the sheet's — that's a real ID
     // correction, but a separate, deliberate action, not something to auto-apply here.
     let sheetRow = sheetByStaffId.get(key)
+    let ambiguous = false
     if (!sheetRow) {
       const nameKey = `${current.firstName} ${current.lastName}`.trim().toLowerCase()
       const candidates = nameKey ? sheetByName.get(nameKey) || [] : []
@@ -730,13 +736,28 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
         sheetRow = candidates[0]
         matchedByName++
         if (normalizeStaffIdKey(sheetRow.staffId) !== key) staffIdMismatch++
+      } else if (candidates.length > 1) {
+        ambiguous = true
       }
     }
-    if (!sheetRow) { stillMissing++; noSheetRow++; continue }
+    if (!sheetRow) {
+      stillMissing++
+      if (ambiguous) ambiguousName++
+      else noSheetRow++
+      continue
+    }
 
     const data: Record<string, unknown> = {}
     if (!current.email) { fieldStats.email.missingInDb++; if (sheetRow.email) { data.email = sheetRow.email; fieldStats.email.availableInSheet++ } }
-    if (!current.lineManagerStaffId) { fieldStats.lineManagerStaffId.missingInDb++; if (sheetRow.lineManagerStaffId) { data.lineManagerStaffId = sheetRow.lineManagerStaffId; fieldStats.lineManagerStaffId.availableInSheet++ } }
+    if (!current.lineManagerStaffId || managerIsSelf) {
+      fieldStats.lineManagerStaffId.missingInDb++
+      // Only accept the sheet's manager if it's a real, different person — a sheet that ALSO has
+      // them self-referencing has nothing usable to offer here either.
+      if (sheetRow.lineManagerStaffId && normalizeStaffIdKey(sheetRow.lineManagerStaffId) !== key) {
+        data.lineManagerStaffId = sheetRow.lineManagerStaffId
+        fieldStats.lineManagerStaffId.availableInSheet++
+      }
+    }
     if (!current.role) { fieldStats.role.missingInDb++; if (sheetRow.role) { data.role = sheetRow.role; fieldStats.role.availableInSheet++ } }
     if (!current.department) { fieldStats.department.missingInDb++; if (sheetRow.department) { data.department = sheetRow.department; fieldStats.department.availableInSheet++ } }
     if (!current.employmentDate) { fieldStats.employmentDate.missingInDb++; if (sheetRow.employmentDate) { data.employmentDate = new Date(sheetRow.employmentDate); fieldStats.employmentDate.availableInSheet++ } }
@@ -752,5 +773,5 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   }
 
   const fieldBreakdown = Object.entries(fieldStats).map(([field, s]) => ({ field, ...s }))
-  return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, matchedByName, staffIdMismatch, fieldBreakdown }
+  return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, ambiguousName, matchedByName, staffIdMismatch, fieldBreakdown }
 }
