@@ -49,6 +49,7 @@ interface Schedule {
   capability: string | null
   vendor: string | null
   remindersEnabled: boolean
+  preEnabled: boolean
   post1Enabled: boolean
   post2Enabled: boolean
   sourcedFromHistoricalData: boolean
@@ -143,6 +144,7 @@ export function SurveyAutomationPanel() {
   const [newSchedule, setNewSchedule] = useState({
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
     costPerAttendee: '', trainingType: '', capability: '', vendor: '',
+    preEnabled: true, post1Enabled: true, post2Enabled: true, isHistorical: false,
   })
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
@@ -246,7 +248,10 @@ export function SurveyAutomationPanel() {
   }
 
   const resetScheduleForm = () => {
-    setNewSchedule({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+    setNewSchedule({
+      trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
+      preEnabled: true, post1Enabled: true, post2Enabled: true, isHistorical: false,
+    })
     setNewSchedulePending([])
     setNewScheduleSearchQuery('')
     setEditingScheduleId(null)
@@ -264,6 +269,10 @@ export function SurveyAutomationPanel() {
       trainingType: s.trainingType ?? '',
       capability: s.capability ?? '',
       vendor: s.vendor ?? '',
+      preEnabled: s.preEnabled,
+      post1Enabled: s.post1Enabled,
+      post2Enabled: s.post2Enabled,
+      isHistorical: s.sourcedFromHistoricalData,
     })
     setEditingScheduleId(s.id)
     setShowAddSchedule(true)
@@ -279,6 +288,7 @@ export function SurveyAutomationPanel() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...newSchedule,
+            isHistorical: undefined, // local UI flag only (hides the Pre-Training checkbox when editing an already-historical schedule) — not a field the API accepts
             hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
             costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
           }),
@@ -795,6 +805,28 @@ export function SurveyAutomationPanel() {
               Cost, type, and capability feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added.
               Vendor is used by the Talent Members report (Admin → Vendors manages this list). All are set once here and apply to the whole schedule.
             </p>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
+              <div className="flex flex-wrap items-center gap-4">
+                {([
+                  ...(newSchedule.isHistorical ? [] : [['preEnabled', 'Pre-Training']] as const),
+                  ['post1Enabled', 'Post-1'],
+                  ['post2Enabled', 'Post-2'],
+                ] as const).map(([field, label]) => (
+                  <label key={field} className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={newSchedule[field]}
+                      onChange={(e) => setNewSchedule({ ...newSchedule, [field]: e.target.checked })}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                All three are on by default. Uncheck any stage to disable it entirely for this schedule — it will never be sent, initially or as a reminder.
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={saveSchedule}
@@ -854,10 +886,10 @@ export function SurveyAutomationPanel() {
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-4">
-                      {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; Post-1/Post-2 are further filtered per-schedule by post1Enabled/post2Enabled (e.g. an "Already Attended Trainings" schedule created for just one of the two) */}
+                      {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; all three stages are further filtered per-schedule by preEnabled/post1Enabled/post2Enabled (set at creation, editable via Edit) */}
                       <div className="flex flex-wrap items-center gap-2">
                         {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const))
-                          .filter((stage) => (stage === 'post1' ? s.post1Enabled : stage === 'post2' ? s.post2Enabled : true))
+                          .filter((stage) => (stage === 'pre' ? s.preEnabled : stage === 'post1' ? s.post1Enabled : s.post2Enabled))
                           .map((stage) => {
                           const key = `${s.id}:${stage}:all`
                           return (
@@ -1041,7 +1073,7 @@ export function SurveyAutomationPanel() {
                                   <th className="text-left font-medium py-1.5 pr-3">Name</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Email</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
-                                  {!s.sourcedFromHistoricalData && <th className="text-center font-medium py-1.5 pr-3">Pre</th>}
+                                  {!s.sourcedFromHistoricalData && s.preEnabled && <th className="text-center font-medium py-1.5 pr-3">Pre</th>}
                                   {s.post1Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-1</th>}
                                   {s.post2Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-2</th>}
                                   <th className="py-1.5"></th>
@@ -1061,7 +1093,7 @@ export function SurveyAutomationPanel() {
                                       ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
                                       ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
                                     ] as const)
-                                      .filter(([, , stage]) => (stage === 'post1' ? s.post1Enabled : stage === 'post2' ? s.post2Enabled : true))
+                                      .filter(([, , stage]) => (stage === 'pre' ? s.preEnabled : stage === 'post1' ? s.post1Enabled : s.post2Enabled))
                                       .map(([sentField, respondedField, stage]) => {
                                       const cellKey = `${s.id}:${stage}:${a.id}`
                                       const state = tickState(a[sentField], a[respondedField], settings.expiryEnabled, settings.expiryDays)
