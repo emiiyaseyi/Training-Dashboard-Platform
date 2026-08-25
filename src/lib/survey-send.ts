@@ -35,10 +35,11 @@ function scheduleCcFor(schedule: TrainingSchedule, attendee: TrainingScheduleAtt
 }
 
 // Sends a given survey stage to some/all attendees of a schedule. Pre and Post-1 go to the
-// employee (cc: line manager + super admins) since they're self-reported. Post-2 goes to the
-// line manager instead (cc: employee + super admins), since that's the manager-authored
-// Post-Training Impact Score review, not a self-report. Marks each successfully-sent attendee's
-// stage timestamp so re-sending only targets who's left.
+// employee (cc: line manager) since they're self-reported. Post-2 goes to the line manager
+// instead (cc: employee), since that's the manager-authored Post-Training Impact Score review,
+// not a self-report. Super admins are no longer hardcoded into every Cc — that's now the admin's
+// own call via SmtpSettings.defaultCc (Admin -> SMTP Settings), applied centrally in sendMail().
+// Marks each successfully-sent attendee's stage timestamp so re-sending only targets who's left.
 //
 // onlyUnsent restricts to attendees who don't already have this stage's timestamp set — off by
 // default so a manual "send to all" click can deliberately resend as a reminder, but the
@@ -59,13 +60,10 @@ export async function sendSurveyStage(
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
   }
 
-  const [schedule, superAdmins] = await Promise.all([
-    prisma.trainingSchedule.findUnique({
-      where: { id: scheduleId },
-      include: { attendees: attendeeIds ? { where: { id: { in: attendeeIds } } } : true },
-    }),
-    prisma.user.findMany({ where: { isSuperAdmin: true, isActive: true }, select: { email: true } }),
-  ])
+  const schedule = await prisma.trainingSchedule.findUnique({
+    where: { id: scheduleId },
+    include: { attendees: attendeeIds ? { where: { id: { in: attendeeIds } } } : true },
+  })
 
   if (!schedule) throw new Error('Training schedule not found.')
   if (stage === 'pre' && schedule.sourcedFromHistoricalData) {
@@ -82,7 +80,6 @@ export async function sendSurveyStage(
   }
 
   const baseUrl = getAppBaseUrl()
-  const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
   const sentField = STAGE_SENT_FIELD[stage]
   const respondedField = STAGE_RESPONDED_FIELD[stage]
   const recipientRole = surveyRecipientRole(stage)
@@ -107,7 +104,7 @@ export async function sendSurveyStage(
       continue
     }
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails, ...scheduleCcFor(schedule, attendee)]
+    const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
     const { subject, html } = buildSurveyEmail({
       stage,
       recipientName: recipientName || 'there',
@@ -208,8 +205,6 @@ export async function sendSurveyReminders(
 
   const baseUrl = getAppBaseUrl()
   const recipientRole = surveyRecipientRole(stage)
-  const superAdmins = await prisma.user.findMany({ where: { isSuperAdmin: true, isActive: true }, select: { email: true } })
-  const superAdminEmails = superAdmins.map((u) => u.email).filter((e): e is string => !!e)
 
   for (const attendee of due) {
     const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
@@ -217,7 +212,7 @@ export async function sendSurveyReminders(
     const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
     if (!toAddress) continue // already reported as skipped by the original send
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails, ...scheduleCcFor(schedule, attendee)]
+    const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
     const { subject, html } = buildSurveyEmail({
       stage,
       recipientName: recipientName || 'there',
