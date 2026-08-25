@@ -468,6 +468,7 @@ model TrainingRecord {
   serialNo     String?
   staffName    String
   staffId      String
+  email        String?  // optional "Staff Email" upload column — a second identifier alongside Staff ID, used as a fallback match key when Staff ID resolution fails
   training     String
   businessUnit String
   month        String
@@ -530,6 +531,7 @@ model SubscriptionRecord {
   month          String?
   staffId        String
   staffName      String
+  email          String?  // optional "Staff Email" upload column — fallback match key when Staff ID resolution fails
   businessUnit   String
   membershipOrg  String
   amount         Float
@@ -548,6 +550,7 @@ model KSSRecord {
   id              String   @id @default(cuid())
   staffId         String
   staffName       String
+  email           String?  // optional "Staff Email" upload column — fallback match key when Staff ID resolution fails
   businessUnit    String
   durationMinutes Float    // In-Meeting Duration in minutes
   month           String?

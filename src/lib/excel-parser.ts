@@ -4,6 +4,7 @@ export interface TrainingRow {
   serialNo: string
   staffName: string
   staffId: string
+  email: string // optional "Staff Email" column — fallback match key alongside Staff ID
   training: string
   businessUnit: string
   month: string
@@ -17,6 +18,7 @@ export interface TrainingRow {
 export interface KSSRow {
   staffId: string
   staffName: string
+  email: string // optional "Staff Email" column — fallback match key alongside Staff ID
   businessUnit: string
   durationMinutes: number  // In-Meeting Duration (minutes)
   month: string
@@ -41,6 +43,7 @@ export interface SubscriptionRow {
   month: string
   staffId: string
   staffName: string
+  email: string // optional "Staff Email" column — fallback match key alongside Staff ID
   businessUnit: string
   membershipOrg: string
   amount: number
@@ -163,7 +166,12 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
   const col = {
     sn:       findHeader(headers, ['sn', 'serialno', 'serial', 's/n']),
     name:     findHeader(headers, ['name', 'staffname', 'employeename', 'fullname']),
+    // 'email'/'staffemail' stay in the Staff ID candidates too (unchanged, existing behavior) —
+    // a sheet with no real Staff ID column at all has historically fallen back to using the email
+    // column as a stand-in identifier; not touching that. The dedicated `email` column below is
+    // additive, so the same header can serve both purposes when there's no separate real ID column.
     staffId:  findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id', 'email', 'staffemail']),
+    email:    findHeader(headers, ['staffemail', 'email', 'emailaddress', 'workemail']),
     training: findHeader(headers, ['training', 'trainingname', 'trainingtitle', 'course', 'programme']),
     bu:       findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     month:    findHeader(headers, ['month', 'period', 'trainingmonth']),
@@ -197,6 +205,7 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
       serialNo:     normalise(r[col.sn ?? ''] ?? ''),
       staffName:    name,
       staffId:      staffId || `UNKNOWN_${i + 1}`,
+      email:        normalise(r[col.email ?? ''] ?? '').toLowerCase(),
       training:     normalise(r[col.training ?? ''] ?? ''),
       businessUnit: normalise(r[col.bu!]),
       month:        normalise(r[col.month ?? ''] ?? ''),
@@ -296,6 +305,7 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
   const col = {
     month:   findHeader(headers, ['month', 'subscriptionmonth', 'period', 'starttime', 'start', 'startdate', 'date']),
     staffId: findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id', 'email', 'emailaddress']),
+    email:   findHeader(headers, ['staffemail', 'email', 'emailaddress', 'workemail']),
     name:    findHeader(headers, ['name', 'staffname', 'fullname']),
     bu:      findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     org:     findHeader(headers, ['membershiporganization', 'membershiporganisation', 'organization', 'organisation', 'membership', 'body', 'professionalbody']),
@@ -323,6 +333,7 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
       month:        normalise(r[col.month ?? ''] ?? ''),
       staffId:      staffId || `UNKNOWN_${i + 1}`,
       staffName:    name,
+      email:        normalise(r[col.email ?? ''] ?? '').toLowerCase(),
       businessUnit: normalise(r[col.bu!]),
       membershipOrg:normalise(r[col.org!]),
       amount,
@@ -351,6 +362,7 @@ export function parseKSSExcel(buffer: Buffer): ParseResult<KSSRow> {
   const headers = Object.keys(raw[0])
   const col = {
     staffId:  findHeader(headers, ['staffid', 'staffno', 'employeeid', 'id']),
+    email:    findHeader(headers, ['staffemail', 'email', 'emailaddress', 'workemail']),
     name:     findHeader(headers, ['name', 'staffname', 'fullname', 'employeename']),
     bu:       findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     duration: findHeader(headers, ['inmeetingduration', 'duration', 'meetingduration', 'durationminutes', 'minutes', 'timespent']),
@@ -387,6 +399,7 @@ export function parseKSSExcel(buffer: Buffer): ParseResult<KSSRow> {
     rows.push({
       staffId:         staffId || `UNKNOWN_${i + 1}`,
       staffName:       name,
+      email:           normalise(r[col.email ?? ''] ?? '').toLowerCase(),
       businessUnit:    normalise(r[col.bu!]),
       durationMinutes: Math.max(0, durationMinutes),
       month:           normalise(r[col.month ?? ''] ?? ''),
