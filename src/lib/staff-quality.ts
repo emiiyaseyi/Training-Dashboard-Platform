@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { getLiveRosterStaffIdKeys } from '@/lib/sheets-sync'
 import type { StaffRosterRecord } from '@prisma/client'
 
 export interface StaffQualityRow {
@@ -137,12 +138,28 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
     }
   }
 
+  // createdAt can't tell current from stale here: importRosterRows only ever inserts a NEW row
+  // for a Staff ID it hasn't seen before (see its own comment), so if a sheet typo/ID gets fixed
+  // and reverted back to an ID already in the DB, that correct ID's row keeps its OLD createdAt
+  // while the abandoned typo'd ID's row — created more recently, back when the typo was live —
+  // looks newer. Cross-checking against the live Staff Roster tab (when one is configured) tells
+  // us which Staff ID is actually there right now; only fall back to the createdAt guess when
+  // that check is unavailable or doesn't resolve the group unambiguously.
+  const liveStaffIdKeys = await getLiveRosterStaffIdKeys()
+
   const duplicateNameGroups: DuplicateNameGroup[] = [...nameSeen.entries()]
     .filter(([, candidates]) => candidates.length > 1)
-    .map(([name, candidates]) => ({
-      name,
-      candidates: candidates.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    }))
+    .map(([name, candidates]) => {
+      const byCreatedAtDesc = candidates.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      if (liveStaffIdKeys) {
+        const inSheet = byCreatedAtDesc.filter((c) => liveStaffIdKeys.has(normalizeStaffIdKey(c.staffId)))
+        if (inSheet.length === 1) {
+          const current = inSheet[0]
+          return { name, candidates: [current, ...byCreatedAtDesc.filter((c) => c.id !== current.id)] }
+        }
+      }
+      return { name, candidates: byCreatedAtDesc }
+    })
 
   const flagged = rows.filter((r) => r.issues.length > 0)
 

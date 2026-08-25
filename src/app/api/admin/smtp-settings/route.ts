@@ -8,7 +8,7 @@ export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
   if (gate instanceof NextResponse) return gate
 
-  const s = await prisma.smtpSettings.findFirst()
+  const s = await prisma.smtpSettings.findFirst({ orderBy: { updatedAt: 'desc' } })
   return NextResponse.json({
     host: s?.host || '',
     port: s?.port || '',
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const existing = await prisma.smtpSettings.findFirst()
+    const existing = await prisma.smtpSettings.findFirst({ orderBy: { updatedAt: 'desc' } })
 
     const data: Record<string, unknown> = {
       host: body.host || null,

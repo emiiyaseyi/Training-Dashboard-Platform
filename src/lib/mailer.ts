@@ -7,12 +7,21 @@ import { decryptSecret, encryptSecret, isEncryptedSecret } from '@/lib/secret-cr
 // need to be able to change/test it without a redeploy.
 
 export async function hasSmtpCredentials(): Promise<boolean> {
-  const s = await prisma.smtpSettings.findFirst()
+  const s = await prisma.smtpSettings.findFirst({ orderBy: { updatedAt: 'desc' } })
   return !!(s?.host && s?.port && s?.username && s?.password)
 }
 
 async function getTransportAndSettings() {
-  const s = await prisma.smtpSettings.findFirst()
+  // SmtpSettings has no unique constraint enforcing "only ever one row" — if a race on the very
+  // first save (two requests both finding no existing row) ever created two, an unordered
+  // findFirst() can silently return whichever one Postgres happens to hand back first, which may
+  // not be the row the admin actually last edited in the panel. Ordering by updatedAt makes the
+  // most-recently-saved row win, deterministically, every time.
+  const rows = await prisma.smtpSettings.findMany({ orderBy: { updatedAt: 'desc' } })
+  const s = rows[0]
+  if (rows.length > 1) {
+    await prisma.smtpSettings.deleteMany({ where: { id: { in: rows.slice(1).map((r) => r.id) } } })
+  }
   if (!s?.host || !s?.port || !s?.username || !s?.password) {
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings.')
   }
