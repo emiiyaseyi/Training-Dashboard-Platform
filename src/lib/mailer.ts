@@ -34,11 +34,27 @@ async function getTransportAndSettings() {
     storedPassword = encryptSecret(storedPassword)
     await prisma.smtpSettings.update({ where: { id: s.id }, data: { password: storedPassword } })
   }
+  // Pooled so a caller sending several emails off ONE resolved transport (see createMailSender
+  // below) reuses live SMTP connections across them instead of a fresh TLS handshake + auth per
+  // email — that per-email handshake cost, multiplied across a schedule's whole attendee list
+  // sent fully sequentially, is what made a "resend to all" on a schedule with more than a
+  // handful of people slow enough to look hung (and risk the request outliving the route's
+  // timeout with no error ever reaching the client).
+  // Explicit timeouts so ONE bad recipient (a manager email pointing at a dead/unreachable
+  // domain, a mail server that never sends its greeting, etc.) fails fast with a real error
+  // instead of hanging — without these, nodemailer has no timeout of its own on some of these
+  // stages, so a single stuck connection can sit open indefinitely, which from the admin's screen
+  // looks exactly like "keeps loading and never sends," with no error ever surfacing.
   const transport = nodemailer.createTransport({
     host: s.host,
     port: s.port,
     secure: s.port === 465,
     auth: { user: s.username, pass: decryptSecret(storedPassword) },
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
   })
   return { transport, settings: s }
 }
@@ -60,21 +76,42 @@ export function parseCcList(raw: string | null | undefined): string[] {
   return raw.split(/[,;]/).map((e) => e.trim()).filter(Boolean)
 }
 
-export async function sendMail({ to, cc, subject, html, fromName, attachments }: SendMailInput): Promise<void> {
-  const { transport, settings } = await getTransportAndSettings()
+function buildMessage(settings: { fromAddress: string | null; fromName: string; defaultCc: string | null; username: string | null }, input: SendMailInput) {
   const address = settings.fromAddress || settings.username || undefined
-  const name = fromName || settings.fromName
+  const name = input.fromName || settings.fromName
   const from = name && address ? `"${name}" <${address}>` : address
   // Applied here, not at each call site — this is the one choke point every email the platform
   // sends passes through (surveys, reminders, custom surveys, cron failure alerts), so this is
   // the only place that can guarantee "every email, no exceptions" without touching every caller.
-  const allCc = [...new Set([...(cc || []), ...parseCcList(settings.defaultCc)])]
-  await transport.sendMail({
+  const allCc = [...new Set([...(input.cc || []), ...parseCcList(settings.defaultCc)])]
+  return {
     from,
-    to,
+    to: input.to,
     cc: allCc.length > 0 ? allCc.join(', ') : undefined,
-    subject,
-    html,
-    attachments,
-  })
+    subject: input.subject,
+    html: input.html,
+    attachments: input.attachments,
+  }
+}
+
+export async function sendMail(input: SendMailInput): Promise<void> {
+  const { transport, settings } = await getTransportAndSettings()
+  try {
+    await transport.sendMail(buildMessage(settings, input))
+  } finally {
+    transport.close()
+  }
+}
+
+// For sending several emails in one call (a schedule's whole attendee list, a reminder sweep) —
+// resolves settings and builds the pooled transport ONCE, reused for every send instead of paying
+// a fresh connection + TLS handshake + auth per email. Caller MUST call close() when done (a
+// try/finally around the loop), or the pooled connections stay open until they idle out on their
+// own.
+export async function createMailSender(): Promise<{ send: (input: SendMailInput) => Promise<void>; close: () => void }> {
+  const { transport, settings } = await getTransportAndSettings()
+  return {
+    send: (input) => transport.sendMail(buildMessage(settings, input)).then(() => undefined),
+    close: () => transport.close(),
+  }
 }
