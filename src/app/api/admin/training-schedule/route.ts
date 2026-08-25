@@ -28,6 +28,8 @@ export async function GET() {
       preEnabled: s.preEnabled,
       post1Enabled: s.post1Enabled,
       post2Enabled: s.post2Enabled,
+      additionalCc: s.additionalCc,
+      additionalCcMode: s.additionalCcMode,
       sourcedFromHistoricalData: s.sourcedFromHistoricalData,
       attendeeCount: s.attendees.length,
       preSent: s.attendees.filter((a) => a.preSurveySentAt).length,
@@ -43,6 +45,7 @@ export async function GET() {
         email: a.email,
         lineManagerName: a.lineManagerName,
         lineManagerEmail: a.lineManagerEmail,
+        additionalCc: a.additionalCc,
         preSurveySentAt: a.preSurveySentAt,
         post1SurveySentAt: a.post1SurveySentAt,
         post2SurveySentAt: a.post2SurveySentAt,
@@ -60,10 +63,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, sourcedFromHistoricalData } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, sourcedFromHistoricalData } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
-      remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean; sourcedFromHistoricalData?: boolean
+      remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
+      additionalCc?: string; additionalCcMode?: string; sourcedFromHistoricalData?: boolean
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
@@ -84,6 +88,8 @@ export async function POST(req: NextRequest) {
         preEnabled: preEnabled ?? true,
         post1Enabled: post1Enabled ?? true,
         post2Enabled: post2Enabled ?? true,
+        additionalCc: additionalCc?.trim() || null,
+        additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all',
         sourcedFromHistoricalData: sourcedFromHistoricalData ?? false,
       },
     })

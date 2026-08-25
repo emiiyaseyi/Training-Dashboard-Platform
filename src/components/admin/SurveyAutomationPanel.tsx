@@ -29,6 +29,7 @@ interface Attendee {
   email: string | null
   lineManagerName: string | null
   lineManagerEmail: string | null
+  additionalCc: string | null
   preSurveySentAt: string | null
   post1SurveySentAt: string | null
   post2SurveySentAt: string | null
@@ -52,6 +53,8 @@ interface Schedule {
   preEnabled: boolean
   post1Enabled: boolean
   post2Enabled: boolean
+  additionalCc: string | null
+  additionalCcMode: string
   sourcedFromHistoricalData: boolean
   attendeeCount: number
   preSent: number
@@ -144,7 +147,7 @@ export function SurveyAutomationPanel() {
   const [newSchedule, setNewSchedule] = useState({
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
     costPerAttendee: '', trainingType: '', capability: '', vendor: '',
-    preEnabled: true, post1Enabled: true, post2Enabled: true, isHistorical: false,
+    preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
   })
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
@@ -173,6 +176,23 @@ export function SurveyAutomationPanel() {
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
+
+  // Per-attendee "Additional Cc" edits (only relevant when a schedule's additionalCcMode is
+  // "individual") — a local draft per attendee id so typing doesn't fight the list re-render on
+  // every keystroke; saved on blur.
+  const [ccDrafts, setCcDrafts] = useState<Record<string, string>>({})
+  const [savingCcId, setSavingCcId] = useState<string | null>(null)
+  const saveAttendeeCc = async (scheduleId: string, attendeeId: string, value: string) => {
+    setSavingCcId(attendeeId)
+    try {
+      await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/${attendeeId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ additionalCc: value }),
+      })
+      await loadSchedules()
+    } finally {
+      setSavingCcId(null)
+    }
+  }
 
   const loadSettings = async () => {
     setLoadingSettings(true)
@@ -250,7 +270,7 @@ export function SurveyAutomationPanel() {
   const resetScheduleForm = () => {
     setNewSchedule({
       trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
-      preEnabled: true, post1Enabled: true, post2Enabled: true, isHistorical: false,
+      preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
     })
     setNewSchedulePending([])
     setNewScheduleSearchQuery('')
@@ -272,6 +292,8 @@ export function SurveyAutomationPanel() {
       preEnabled: s.preEnabled,
       post1Enabled: s.post1Enabled,
       post2Enabled: s.post2Enabled,
+      additionalCc: s.additionalCc ?? '',
+      additionalCcMode: (s.additionalCcMode === 'individual' ? 'individual' : 'all') as 'all' | 'individual',
       isHistorical: s.sourcedFromHistoricalData,
     })
     setEditingScheduleId(s.id)
@@ -827,6 +849,43 @@ export function SurveyAutomationPanel() {
                 All three are on by default. Uncheck any stage to disable it entirely for this schedule — it will never be sent, initially or as a reminder.
               </p>
             </div>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Additional Cc (optional)</p>
+              <div className="flex flex-wrap items-center gap-4 mb-2">
+                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="radio"
+                    checked={newSchedule.additionalCcMode === 'all'}
+                    onChange={() => setNewSchedule({ ...newSchedule, additionalCcMode: 'all' })}
+                  />
+                  Same for every participant
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="radio"
+                    checked={newSchedule.additionalCcMode === 'individual'}
+                    onChange={() => setNewSchedule({ ...newSchedule, additionalCcMode: 'individual' })}
+                  />
+                  Different per participant
+                </label>
+              </div>
+              {newSchedule.additionalCcMode === 'all' ? (
+                <input
+                  value={newSchedule.additionalCc}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, additionalCc: e.target.value })}
+                  placeholder="e.g. hr@meristemng.com, someone@meristemng.com"
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                />
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  Set per attendee from the attendee list below (after creating/saving the schedule). Anyone left blank still gets
+                  the platform-wide default Cc (Admin → SMTP Settings), just no extra addresses of their own.
+                </p>
+              )}
+              <p className="text-[11px] text-slate-400 mt-1">
+                Added on top of the automatic line-manager Cc and the platform-wide default Cc — never replaces either.
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={saveSchedule}
@@ -1073,6 +1132,7 @@ export function SurveyAutomationPanel() {
                                   <th className="text-left font-medium py-1.5 pr-3">Name</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Email</th>
                                   <th className="text-left font-medium py-1.5 pr-3">Line Manager</th>
+                                  {s.additionalCcMode === 'individual' && <th className="text-left font-medium py-1.5 pr-3">Additional Cc</th>}
                                   {!s.sourcedFromHistoricalData && s.preEnabled && <th className="text-center font-medium py-1.5 pr-3">Pre</th>}
                                   {s.post1Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-1</th>}
                                   {s.post2Enabled && <th className="text-center font-medium py-1.5 pr-3">Post-2</th>}
@@ -1085,6 +1145,18 @@ export function SurveyAutomationPanel() {
                                     <td className="py-1.5 pr-3 text-slate-700">{a.staffName}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.email || '—'}</td>
                                     <td className="py-1.5 pr-3 text-slate-500">{a.lineManagerName || '—'}</td>
+                                    {s.additionalCcMode === 'individual' && (
+                                      <td className="py-1.5 pr-3">
+                                        <input
+                                          value={ccDrafts[a.id] ?? a.additionalCc ?? ''}
+                                          onChange={(e) => setCcDrafts({ ...ccDrafts, [a.id]: e.target.value })}
+                                          onBlur={(e) => saveAttendeeCc(s.id, a.id, e.target.value)}
+                                          placeholder="none"
+                                          disabled={savingCcId === a.id}
+                                          className="w-40 border border-slate-200 rounded px-1.5 py-1 text-[11px] disabled:opacity-50"
+                                        />
+                                      </td>
+                                    )}
                                     {(s.sourcedFromHistoricalData ? [
                                       ['post1SurveySentAt', 'post1SurveyRespondedAt', 'post1'],
                                       ['post2SurveySentAt', 'post2SurveyRespondedAt', 'post2'],
