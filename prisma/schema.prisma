@@ -680,3 +680,48 @@ model MonthlyReport {
   @@index([year, month])
   @@unique([businessUnit, year, month])
 }
+
+// A designated recipient for a Business Unit's automated monthly/quarterly report — created here
+// (not directly in Admin -> User Access) because adding one ALSO provisions their platform login:
+// a User scoped to just this Business Unit (view access) is created/linked automatically, so the
+// "log in with your Staff ID" line in the report email is always a real, working credential.
+model BUReportRecipient {
+  id           String   @id @default(cuid())
+  businessUnit String
+  name         String
+  email        String
+  staffId      String?  // snapshotted from the linked User once created, shown in the email as their login
+  userId       String?  // the provisioned/linked User.id — plain reference, not a relation (same convention as staffId/businessUnit elsewhere in this schema)
+  active       Boolean  @default(true) // toggled off to pause their reports without deleting the record/history
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([businessUnit, email])
+  @@index([businessUnit])
+}
+
+// Global on/off + cadence for the automated BU report email — single-row settings, same pattern
+// as SmtpSettings/BudgetSettings.
+model ReportAutomationSettings {
+  id        String   @id @default(cuid())
+  enabled   Boolean  @default(false)
+  sendDay   Int      @default(1) // day of the month the PRIOR month's report goes out (e.g. 1 = sent on the 1st, covering last month). Quarter-end months (Mar/Jun/Sep/Dec) fold in a quarterly comparison section automatically.
+  updatedAt DateTime @updatedAt
+}
+
+// Durable record of every automated BU report email attempt — same "the history survives even
+// after later sends change state" rationale as SurveySendLog.
+model BUReportSendLog {
+  id             String   @id @default(cuid())
+  businessUnit   String
+  recipientEmail String
+  recipientName  String
+  period         String   // e.g. "2026-08"
+  isQuarterly    Boolean  @default(false) // true when this send included the quarter-end comparison section
+  success        Boolean
+  errorMessage   String?
+  sentAt         DateTime @default(now())
+
+  @@index([businessUnit])
+  @@index([sentAt])
+}

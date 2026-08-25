@@ -5,6 +5,7 @@ import { FileText, RefreshCw, Trash2, Loader2, Download, Printer, CheckCircle } 
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { InvestmentReportExport } from '@/components/reports/InvestmentReportExport'
+import { BUReportRecipientsPanel } from '@/components/admin/BUReportRecipientsPanel'
 import { MONTHS } from '@/lib/filter-types'
 
 interface MonthlyReport {
@@ -141,6 +142,8 @@ export default function ReportsPage() {
 
       <div className="p-4 sm:p-8 space-y-6">
         <InvestmentReportExport />
+
+        <BUReportRecipientsPanel />
 
         {/* Controls */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
