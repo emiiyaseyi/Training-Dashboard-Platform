@@ -10,7 +10,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json() as {
-      staffId?: string; staffName?: string; businessUnit?: string; membershipOrg?: string; amount?: number; month?: string | null
+      staffId?: string; staffName?: string; businessUnit?: string; membershipOrg?: string; amount?: number; month?: string | null; category?: string
     }
     const record = await prisma.subscriptionRecord.update({
       where: { id },
@@ -21,6 +21,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(body.membershipOrg !== undefined && { membershipOrg: body.membershipOrg.trim() }),
         ...(body.amount !== undefined && { amount: Number(body.amount) }),
         ...(body.month !== undefined && { month: body.month || null }),
+        ...(body.category !== undefined && { category: body.category === 'certification' ? 'certification' : 'membership' }),
       },
     })
     return NextResponse.json(record)

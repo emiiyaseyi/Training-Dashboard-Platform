@@ -115,6 +115,7 @@ export async function importSubscriptionRows(rows: SubscriptionRow[], filename: 
       staffId: r.staffId.toUpperCase(),
       staffName: r.staffName,
       email: r.email || null,
+      category: r.category || 'membership',
       businessUnit: r.businessUnit,
       membershipOrg: r.membershipOrg,
       amount: r.amount,

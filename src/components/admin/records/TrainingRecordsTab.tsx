@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
 
@@ -77,6 +77,11 @@ export function TrainingRecordsTab() {
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [createError, setCreateError] = useState('')
 
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkResult, setBulkResult] = useState<{ added: number; notFound: string[] } | null>(null)
+  const bulkCsvRef = useRef<HTMLInputElement>(null)
+
   const load = async () => {
     setLoading(true)
     try {
@@ -125,6 +130,51 @@ export function TrainingRecordsTab() {
     setPendingAttendees((prev) => [...prev, s])
     setAttendeeQuery('')
     setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: s.businessUnit }))
+  }
+
+  // One identifier (Staff ID, email, or full name) per line/CSV row — resolved against the
+  // already-loaded roster directory, client-side, since there's nothing to send to the server
+  // until the whole schedule is created. Matches the paste/CSV pattern used for Training Schedule
+  // attendees in Survey Automation, just applied to this tab's own attendee list.
+  const resolveBulkIdentifiers = (text: string): { found: RosterStaff[]; notFound: string[] } => {
+    const lines = text.split(/\r\n|\n/).map((l) => l.split(',')[0].replace(/^"|"$/g, '').trim()).filter(Boolean)
+      .filter((l) => !/^(staff ?id|name|email|identifier)$/i.test(l))
+    const found: RosterStaff[] = []
+    const notFound: string[] = []
+    const pendingIds = new Set(pendingAttendees.map((p) => p.staffId))
+    for (const line of lines) {
+      const q = line.toLowerCase()
+      const match = directory.find((s) => s.staffId.toLowerCase() === q || s.email?.toLowerCase() === q || s.name.toLowerCase() === q)
+      if (!match) { notFound.push(line); continue }
+      if (pendingIds.has(match.staffId) || found.some((f) => f.staffId === match.staffId)) continue
+      found.push(match)
+    }
+    return { found, notFound }
+  }
+
+  const downloadBulkTemplate = () => {
+    const csv = 'Staff ID or Email or Name\nMSL-0123\nsomeone@meristemng.com\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'training_attendees_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleBulkCsv = async (file: File) => {
+    setBulkText(await file.text())
+  }
+
+  const submitBulkAttendees = () => {
+    const { found, notFound } = resolveBulkIdentifiers(bulkText)
+    if (found.length > 0) {
+      setPendingAttendees((prev) => [...prev, ...found])
+      setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: found[0].businessUnit }))
+    }
+    setBulkResult({ added: found.length, notFound })
+    setBulkText('')
   }
 
   const createSchedule = async () => {
@@ -367,6 +417,42 @@ export function TrainingRecordsTab() {
                     <button onClick={() => setPendingAttendees(pendingAttendees.filter((x) => x.staffId !== p.staffId))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            {!bulkMode ? (
+              <button onClick={() => { setBulkMode(true); setBulkResult(null) }} className="flex items-center gap-1.5 text-xs text-navy-600 hover:underline mt-2">
+                <Users className="w-3.5 h-3.5" /> Or paste/upload a list of many at once
+              </button>
+            ) : (
+              <div className="mt-2 border border-dashed border-slate-300 rounded-lg p-3 space-y-2 bg-slate-50">
+                <p className="text-[11px] text-slate-500">One Staff ID, email, or full name per line. Paste directly, or download the template, fill it in, and upload it.</p>
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder={'MSL-0123\nsomeone@meristemng.com'}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"
+                />
+                {bulkResult && (
+                  <div className="text-xs space-y-0.5">
+                    <p className="text-emerald-700">{bulkResult.added} added.</p>
+                    {bulkResult.notFound.length > 0 && <p className="text-red-600">Not found in the roster: {bulkResult.notFound.join(', ')}</p>}
+                  </div>
+                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={submitBulkAttendees} disabled={!bulkText.trim()} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                    <Plus className="w-3.5 h-3.5" /> Add List
+                  </button>
+                  <button onClick={downloadBulkTemplate} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
+                    <Download className="w-3.5 h-3.5" /> Download Template
+                  </button>
+                  <button onClick={() => bulkCsvRef.current?.click()} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800">
+                    <Upload className="w-3.5 h-3.5" /> Upload CSV
+                  </button>
+                  <input ref={bulkCsvRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkCsv(f); e.target.value = '' }} />
+                  <button onClick={() => { setBulkMode(false); setBulkText(''); setBulkResult(null) }} className="text-xs text-slate-500 hover:text-slate-700 ml-auto">Close</button>
+                </div>
               </div>
             )}
           </div>
