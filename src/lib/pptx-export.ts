@@ -107,7 +107,7 @@ function buildSlide1(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
 
   const tiles: Tile[] = [
     { iconKey: 'nairaSign', title: 'Total Learning Investment', value: fmt(data.totalLearningInvestment), subtitle: `${pct(data.trainingSharePct)} training · ${pct(data.otherSharePct)} strategic learnings · ${pct(data.subscriptionSharePct)} subscriptions` },
-    { iconKey: 'graduationCap', title: 'Formal Training Spend', value: fmt(data.totalTrainingCost), subtitle: 'Internal + External programmes' },
+    { iconKey: 'graduationCap', title: 'Formal Training Spend', value: fmt(data.totalTrainingCost), subtitle: 'PDP Trainings' },
     { iconKey: 'award', title: 'Strategic Learnings', value: fmt(data.totalOtherTrainingCost), subtitle: data.otherTrainingTypeNames.join(', ') || 'Summits, Leadership Cafe, Workshops', valueColor: C.gold },
     { iconKey: 'badgeCheck', title: 'Subscription Spend', value: fmt(data.totalSubscriptionCost), subtitle: 'Professional memberships', valueColor: C.green },
     { iconKey: 'users', title: 'Investment per Staff', value: fmt(data.investmentPerStaff), subtitle: `Across ${data.totalStaffCount.toLocaleString()} total staff`, valueColor: C.gold },
