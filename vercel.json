@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/send-surveys",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/send-bu-reports",
+      "schedule": "0 8 * * *"
     }
   ]
 }

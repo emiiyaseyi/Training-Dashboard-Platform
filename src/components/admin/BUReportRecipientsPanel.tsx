@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, Plus, Trash2, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users, Plus, Trash2, Loader2, CheckCircle2, XCircle, Search } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 
 interface Recipient {
@@ -16,14 +16,23 @@ interface Recipient {
 
 interface BUOption { id: string; name: string }
 
+interface RosterStaff {
+  staffId: string
+  name: string
+  email: string | null
+  businessUnit: string
+}
+
 const emptyDraft = { businessUnit: '', name: '', email: '', staffId: '' }
 
 export function BUReportRecipientsPanel() {
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [loading, setLoading] = useState(true)
   const [businessUnits, setBusinessUnits] = useState<BUOption[]>([])
+  const [roster, setRoster] = useState<RosterStaff[]>([])
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState(emptyDraft)
+  const [searchQuery, setSearchQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -42,7 +51,21 @@ export function BUReportRecipientsPanel() {
   useEffect(() => {
     load()
     fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    return roster
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [searchQuery, roster])
+
+  const pickFromRoster = (staff: RosterStaff) => {
+    setDraft({ businessUnit: staff.businessUnit || draft.businessUnit, name: staff.name, email: staff.email || '', staffId: staff.staffId })
+    setSearchQuery('')
+  }
 
   const save = async () => {
     if (!draft.businessUnit || !draft.name.trim() || !draft.email.trim()) return
@@ -56,6 +79,7 @@ export function BUReportRecipientsPanel() {
       if (res.ok) {
         setAdding(false)
         setDraft(emptyDraft)
+        setSearchQuery('')
         await load()
       } else {
         setError(data.error || 'Failed to add recipient.')
@@ -103,6 +127,31 @@ export function BUReportRecipientsPanel() {
     >
       {adding && (
         <div className="mb-4 border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, Staff ID, or email…"
+              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs"
+            />
+            {searchResults.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {searchResults.map((r) => (
+                  <button
+                    key={r.staffId}
+                    type="button"
+                    onClick={() => pickFromRoster(r)}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-50 last:border-0"
+                  >
+                    <p className="text-slate-800 font-medium">{r.name}</p>
+                    <p className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''} · {r.businessUnit}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400">Pick someone from the roster above to fill the fields below automatically, or enter them by hand — e.g. for a BU head who isn&apos;t on the staff roster.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <select
               value={draft.businessUnit}
@@ -141,7 +190,7 @@ export function BUReportRecipientsPanel() {
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Save
             </button>
-            <button onClick={() => { setAdding(false); setDraft(emptyDraft); setError('') }} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1.5">
+            <button onClick={() => { setAdding(false); setDraft(emptyDraft); setSearchQuery(''); setError('') }} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1.5">
               Cancel
             </button>
           </div>
