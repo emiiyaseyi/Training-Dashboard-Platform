@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
-import { sendMail, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
+import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 
@@ -89,48 +89,57 @@ export async function sendSurveyStage(
     ? schedule.attendees
     : schedule.attendees.filter((a) => (onlyUnsent ? !a[sentField] : !a[respondedField]))
 
-  for (const attendee of targets) {
-    const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
-    const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
-    const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
+  // One pooled transport reused for every attendee in this call, instead of a fresh SMTP
+  // connection + handshake per email — with a schedule of any real size, sending fully
+  // sequentially through a brand-new connection each time was slow enough to risk the request
+  // outliving the route's timeout with no error ever reaching the admin's screen.
+  const mailer = await createMailSender()
+  try {
+    for (const attendee of targets) {
+      const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
+      const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
+      const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
 
-    if (!toAddress) {
-      result.skipped.push({
-        staffName: attendee.staffName,
-        reason: recipientRole === 'manager'
-          ? 'No line manager email on file — cannot send the manager review.'
-          : 'No email address on file for this staff member.',
-      })
-      continue
-    }
+      if (!toAddress) {
+        result.skipped.push({
+          staffName: attendee.staffName,
+          reason: recipientRole === 'manager'
+            ? 'No line manager email on file — cannot send the manager review.'
+            : 'No email address on file for this staff member.',
+        })
+        continue
+      }
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
-    const { subject, html } = buildSurveyEmail({
-      stage,
-      recipientName: recipientName || 'there',
-      employeeName: attendee.staffName,
-      trainingName: schedule.trainingName,
-      formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
-      startDate: schedule.startDate,
-      endDate: schedule.endDate,
-      trainingType: schedule.trainingType,
-      isHistorical: schedule.sourcedFromHistoricalData,
-    })
-    try {
-      await sendMail({ to: toAddress, cc, subject, html })
-      // Also stamps the reminder baseline (STAGE_REMINDER_FIELD) to now, so the reminder sweep's
-      // "hours since last nudge" interval starts counting from this send, not from epoch/null.
-      await prisma.trainingScheduleAttendee.update({
-        where: { id: attendee.id },
-        data: { [sentField]: new Date(), [STAGE_REMINDER_FIELD[stage]]: new Date() },
+      const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
+      const { subject, html } = buildSurveyEmail({
+        stage,
+        recipientName: recipientName || 'there',
+        employeeName: attendee.staffName,
+        trainingName: schedule.trainingName,
+        formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+        trainingType: schedule.trainingType,
+        isHistorical: schedule.sourcedFromHistoricalData,
       })
-      result.sent++
-      await logSend(schedule, stage, attendee, toAddress, false, true, null)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Send failed.'
-      result.skipped.push({ staffName: attendee.staffName, reason: message })
-      await logSend(schedule, stage, attendee, toAddress, false, false, message)
+      try {
+        await mailer.send({ to: toAddress, cc, subject, html })
+        // Also stamps the reminder baseline (STAGE_REMINDER_FIELD) to now, so the reminder sweep's
+        // "hours since last nudge" interval starts counting from this send, not from epoch/null.
+        await prisma.trainingScheduleAttendee.update({
+          where: { id: attendee.id },
+          data: { [sentField]: new Date(), [STAGE_REMINDER_FIELD[stage]]: new Date() },
+        })
+        result.sent++
+        await logSend(schedule, stage, attendee, toAddress, false, true, null)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Send failed.'
+        result.skipped.push({ staffName: attendee.staffName, reason: message })
+        await logSend(schedule, stage, attendee, toAddress, false, false, message)
+      }
     }
+  } finally {
+    mailer.close()
   }
 
   return result
@@ -206,35 +215,40 @@ export async function sendSurveyReminders(
   const baseUrl = getAppBaseUrl()
   const recipientRole = surveyRecipientRole(stage)
 
-  for (const attendee of due) {
-    const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
-    const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
-    const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
-    if (!toAddress) continue // already reported as skipped by the original send
+  const mailer = await createMailSender()
+  try {
+    for (const attendee of due) {
+      const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
+      const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
+      const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
+      if (!toAddress) continue // already reported as skipped by the original send
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
-    const { subject, html } = buildSurveyEmail({
-      stage,
-      recipientName: recipientName || 'there',
-      employeeName: attendee.staffName,
-      trainingName: schedule.trainingName,
-      formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
-      startDate: schedule.startDate,
-      endDate: schedule.endDate,
-      trainingType: schedule.trainingType,
-      isReminder: true,
-      isHistorical: schedule.sourcedFromHistoricalData,
-    })
-    try {
-      await sendMail({ to: toAddress, cc, subject, html })
-      await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
-      result.sent++
-      await logSend(schedule, stage, attendee, toAddress, true, true, null)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Reminder send failed.'
-      result.skipped.push({ staffName: attendee.staffName, reason: message })
-      await logSend(schedule, stage, attendee, toAddress, true, false, message)
+      const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
+      const { subject, html } = buildSurveyEmail({
+        stage,
+        recipientName: recipientName || 'there',
+        employeeName: attendee.staffName,
+        trainingName: schedule.trainingName,
+        formUrl: `${baseUrl}/survey/${attendee.surveyToken}/${stage}`,
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+        trainingType: schedule.trainingType,
+        isReminder: true,
+        isHistorical: schedule.sourcedFromHistoricalData,
+      })
+      try {
+        await mailer.send({ to: toAddress, cc, subject, html })
+        await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
+        result.sent++
+        await logSend(schedule, stage, attendee, toAddress, true, true, null)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Reminder send failed.'
+        result.skipped.push({ staffName: attendee.staffName, reason: message })
+        await logSend(schedule, stage, attendee, toAddress, true, false, message)
+      }
     }
+  } finally {
+    mailer.close()
   }
 
   return result

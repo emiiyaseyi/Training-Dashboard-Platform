@@ -467,13 +467,15 @@ export function SurveyAutomationPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage, attendeeIds }),
       })
-      const data = await res.json()
-      if (res.ok) {
+      const data = await res.json().catch(() => null)
+      if (res.ok && data) {
         setSendResult({ key, sent: data.sent, skipped: data.skipped })
         await loadSchedules()
       } else {
-        alert(data.error || 'Failed to send.')
+        alert(data?.error || `Failed to send (server returned ${res.status}). Check Survey Send Log below for whatever went out before the failure.`)
       }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to send — check your connection and try again.')
     } finally {
       setSendingKey(null)
     }

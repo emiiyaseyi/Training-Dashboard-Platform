@@ -5,6 +5,11 @@ import type { SurveyStage } from '@/lib/survey-email'
 
 const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
+// A "send/resend to everyone" on a schedule with more than a handful of attendees can take a
+// while even with the pooled-connection reuse in mailer.ts — headroom beyond Vercel's default so
+// it can actually finish instead of the request silently outliving its timeout.
+export const maxDuration = 120
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
