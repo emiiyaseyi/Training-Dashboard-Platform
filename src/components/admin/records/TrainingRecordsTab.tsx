@@ -132,24 +132,52 @@ export function TrainingRecordsTab() {
     setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: s.businessUnit }))
   }
 
-  // One identifier (Staff ID, email, or full name) per line/CSV row — resolved against the
-  // already-loaded roster directory, client-side, since there's nothing to send to the server
-  // until the whole schedule is created. Matches the paste/CSV pattern used for Training Schedule
-  // attendees in Survey Automation, just applied to this tab's own attendee list.
-  const resolveBulkIdentifiers = (text: string): { found: RosterStaff[]; notFound: string[] } => {
-    const lines = text.split(/\r\n|\n/).map((l) => l.split(',')[0].replace(/^"|"$/g, '').trim()).filter(Boolean)
-      .filter((l) => !/^(staff ?id|name|email|identifier)$/i.test(l))
+  // Shared core: resolves a list of already-split identifier tokens (Staff ID, email, or full
+  // name) against the already-loaded roster directory, client-side — nothing to send to the
+  // server until the whole schedule is created.
+  const matchIdentifierTokens = (tokens: string[]): { found: RosterStaff[]; notFound: string[] } => {
     const found: RosterStaff[] = []
     const notFound: string[] = []
     const pendingIds = new Set(pendingAttendees.map((p) => p.staffId))
-    for (const line of lines) {
-      const q = line.toLowerCase()
+    for (const token of tokens) {
+      const q = token.toLowerCase()
       const match = directory.find((s) => s.staffId.toLowerCase() === q || s.email?.toLowerCase() === q || s.name.toLowerCase() === q)
-      if (!match) { notFound.push(line); continue }
+      if (!match) { notFound.push(token); continue }
       if (pendingIds.has(match.staffId) || found.some((f) => f.staffId === match.staffId)) continue
       found.push(match)
     }
     return { found, notFound }
+  }
+
+  // Splits on newlines, commas, semicolons, AND plain whitespace — Staff IDs and emails never
+  // contain spaces, so this handles a paste of either one-per-line (CSV-style) or several on one
+  // line (space-separated, e.g. copied from a table that lost its line breaks). A full name with
+  // an internal space won't survive this split — for that, add attendees one at a time via the
+  // normal search above instead of bulk paste.
+  const resolveBulkIdentifiers = (text: string): { found: RosterStaff[]; notFound: string[] } => {
+    const tokens = text.split(/[\s,;]+/).map((t) => t.replace(/^"|"$/g, '').trim()).filter(Boolean)
+      .filter((t) => !/^(staff ?id|name|email|identifier)$/i.test(t))
+    return matchIdentifierTokens(tokens)
+  }
+
+  // Pasting several Staff IDs/emails at once directly into the single search box (rather than
+  // opening the dedicated bulk box) is common enough to auto-detect: a real search query is never
+  // multiple space/comma-separated full identifiers, so treat 2+ tokens as a bulk paste instead of
+  // a single (guaranteed-empty) search string. Only splits on whitespace/commas/semicolons, not
+  // full names' internal spaces — those still need the line-based bulk box below.
+  const handleAttendeeSearchPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text')
+    const tokens = text.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean)
+    if (tokens.length < 2) return // ordinary single-value paste — let it populate the search box as usual
+    e.preventDefault()
+    const { found, notFound } = matchIdentifierTokens(tokens)
+    if (found.length > 0) {
+      setPendingAttendees((prev) => [...prev, ...found])
+      setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: found[0].businessUnit }))
+    }
+    setAttendeeQuery('')
+    setBulkResult({ added: found.length, notFound })
+    if (notFound.length > 0) setBulkMode(true) // surface the not-found list somewhere visible
   }
 
   const downloadBulkTemplate = () => {
@@ -395,7 +423,8 @@ export function TrainingRecordsTab() {
               <input
                 value={attendeeQuery}
                 onChange={(e) => setAttendeeQuery(e.target.value)}
-                placeholder="Type a name, email, or Staff ID…"
+                onPaste={handleAttendeeSearchPaste}
+                placeholder="Type a name, email, or Staff ID… (or paste several at once)"
                 className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
               />
               {attendeeResults.length > 0 && (
@@ -420,13 +449,20 @@ export function TrainingRecordsTab() {
               </div>
             )}
 
+            {bulkResult && !bulkMode && (
+              <div className="text-xs space-y-0.5 mt-2">
+                <p className="text-emerald-700">{bulkResult.added} added from the pasted list.</p>
+                {bulkResult.notFound.length > 0 && <p className="text-red-600">Not found in the roster: {bulkResult.notFound.join(', ')}</p>}
+              </div>
+            )}
+
             {!bulkMode ? (
               <button onClick={() => { setBulkMode(true); setBulkResult(null) }} className="flex items-center gap-1.5 text-xs text-navy-600 hover:underline mt-2">
                 <Users className="w-3.5 h-3.5" /> Or paste/upload a list of many at once
               </button>
             ) : (
               <div className="mt-2 border border-dashed border-slate-300 rounded-lg p-3 space-y-2 bg-slate-50">
-                <p className="text-[11px] text-slate-500">One Staff ID, email, or full name per line. Paste directly, or download the template, fill it in, and upload it.</p>
+                <p className="text-[11px] text-slate-500">Staff IDs or emails — one per line, or several separated by spaces/commas (full names with spaces should be added one at a time above instead). Or download the template, fill it in, and upload it.</p>
                 <textarea
                   value={bulkText}
                   onChange={(e) => setBulkText(e.target.value)}
