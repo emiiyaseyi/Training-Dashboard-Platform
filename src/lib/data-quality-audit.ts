@@ -1,6 +1,23 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
+// A production roster backfill can touch thousands of rows (every pre-existing row across four
+// tables needed a Staff Email backfill the first time that field was added). Awaiting one Prisma
+// update at a time serializes every round trip to the database — over a pooled connection to a
+// remote Postgres instance, that's what turned this into a multi-minute (sometimes seemingly
+// hung) operation. Running a bounded number of updates concurrently cuts wall-clock time by
+// roughly the concurrency factor without opening enough connections to exhaust the pool.
+async function runConcurrent<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const item = items[next++]
+      await fn(item)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+}
+
 export interface TableAuditSample {
   id: string
   summary: string
@@ -322,15 +339,15 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
       select: { id: true, staffId: true, staffName: true, businessUnit: true, email: true },
     })
     const stat: TableBackfillStat = { table: 'training', label: 'Training Cost', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0, emailFixed: 0 }
-    for (const r of flagged) {
+    await runConcurrent(flagged, 15, async (r) => {
       const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast, byEmail)
-      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
-      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; return }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; return }
       const data: Record<string, unknown> = {}
       if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
       if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
       await prisma.trainingRecord.update({ where: { id: r.id }, data })
-    }
+    })
     // Separate pass: records that already have a real Staff ID but no Staff Email yet — every
     // pre-existing row, since this field is brand new. Pulls the email from that same Staff ID's
     // roster entry; never touches rows the roster itself has no email for.
@@ -338,12 +355,12 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
       where: { AND: [{ NOT: { staffId: { startsWith: 'UNKNOWN_' } } }, { OR: [{ email: null }, { email: '' }] }] },
       select: { id: true, staffId: true },
     })
-    for (const r of missingEmail) {
+    await runConcurrent(missingEmail, 15, async (r) => {
       const email = byStaffId.get(normalizeStaffIdKey(r.staffId))?.email
-      if (!email) continue
+      if (!email) return
       await prisma.trainingRecord.update({ where: { id: r.id }, data: { email } })
       stat.emailFixed++
-    }
+    })
     tables.push(stat)
   }
 
@@ -353,25 +370,25 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
       select: { id: true, staffId: true, staffName: true, businessUnit: true, email: true },
     })
     const stat: TableBackfillStat = { table: 'subscription', label: 'Subscriptions', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0, emailFixed: 0 }
-    for (const r of flagged) {
+    await runConcurrent(flagged, 15, async (r) => {
       const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast, byEmail)
-      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
-      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; return }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; return }
       const data: Record<string, unknown> = {}
       if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
       if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
       await prisma.subscriptionRecord.update({ where: { id: r.id }, data })
-    }
+    })
     const missingEmail = await prisma.subscriptionRecord.findMany({
       where: { AND: [{ NOT: { staffId: { startsWith: 'UNKNOWN_' } } }, { OR: [{ email: null }, { email: '' }] }] },
       select: { id: true, staffId: true },
     })
-    for (const r of missingEmail) {
+    await runConcurrent(missingEmail, 15, async (r) => {
       const email = byStaffId.get(normalizeStaffIdKey(r.staffId))?.email
-      if (!email) continue
+      if (!email) return
       await prisma.subscriptionRecord.update({ where: { id: r.id }, data: { email } })
       stat.emailFixed++
-    }
+    })
     tables.push(stat)
   }
 
@@ -381,25 +398,25 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
       select: { id: true, staffId: true, staffName: true, businessUnit: true, email: true },
     })
     const stat: TableBackfillStat = { table: 'kss', label: 'KSS', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0, emailFixed: 0 }
-    for (const r of flagged) {
+    await runConcurrent(flagged, 15, async (r) => {
       const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast, byEmail)
-      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
-      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; return }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; return }
       const data: Record<string, unknown> = {}
       if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
       if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
       await prisma.kSSRecord.update({ where: { id: r.id }, data })
-    }
+    })
     const missingEmail = await prisma.kSSRecord.findMany({
       where: { AND: [{ NOT: { staffId: { startsWith: 'UNKNOWN_' } } }, { OR: [{ email: null }, { email: '' }] }] },
       select: { id: true, staffId: true },
     })
-    for (const r of missingEmail) {
+    await runConcurrent(missingEmail, 15, async (r) => {
       const email = byStaffId.get(normalizeStaffIdKey(r.staffId))?.email
-      if (!email) continue
+      if (!email) return
       await prisma.kSSRecord.update({ where: { id: r.id }, data: { email } })
       stat.emailFixed++
-    }
+    })
     tables.push(stat)
   }
 
@@ -409,15 +426,15 @@ export async function backfillDataQualityFromRoster(): Promise<DataQualityBackfi
       select: { id: true, staffId: true, staffName: true, businessUnit: true },
     })
     const stat: TableBackfillStat = { table: 'manager-review', label: 'Post-Training Manager Reviews', staffIdFixed: 0, businessUnitFixed: 0, ambiguousNameSkipped: 0, noMatch: 0, emailFixed: 0 }
-    for (const r of flagged) {
+    await runConcurrent(flagged, 15, async (r) => {
       const resolved = resolveFromRoster(r, byStaffId, byName, byFirstLast, byEmail)
-      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; continue }
-      if (resolved.outcome === 'noMatch') { stat.noMatch++; continue }
+      if (resolved.outcome === 'ambiguous') { stat.ambiguousNameSkipped++; return }
+      if (resolved.outcome === 'noMatch') { stat.noMatch++; return }
       const data: Record<string, unknown> = {}
       if (resolved.staffId) { data.staffId = resolved.staffId.toUpperCase(); stat.staffIdFixed++ }
       if (resolved.businessUnit) { data.businessUnit = resolved.businessUnit; stat.businessUnitFixed++ }
       await prisma.managerReviewRecord.update({ where: { id: r.id }, data })
-    }
+    })
     tables.push(stat)
   }
 

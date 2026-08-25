@@ -775,3 +775,36 @@ export async function backfillRosterFromSheet(): Promise<RosterBackfillResult> {
   const fieldBreakdown = Object.entries(fieldStats).map(([field, s]) => ({ field, ...s }))
   return { checked, updated: updates.length, fieldsFilled, stillMissing, noSheetRow, ambiguousName, matchedByName, staffIdMismatch, fieldBreakdown }
 }
+
+// Which Staff IDs are present in the live Staff Roster tab RIGHT NOW — used to tell a genuinely
+// current record apart from a stale one when two different Staff IDs share the same name in
+// StaffRosterRecord (see auditStaffQuality's duplicateNameGroups in staff-quality.ts). DB insertion order
+// (createdAt) can't answer this: the roster only ever gets a NEW row for an ID it hasn't seen
+// before (see importRosterRows), so a stale, long-abandoned ID can still have a newer createdAt
+// than the ID the sheet was corrected back to. Returns null (never throws) on anything short of a
+// clean read — no sheet configured, tab missing, connection failure — so callers can fall back to
+// their existing best-guess heuristic instead of surfacing a hard error for what's a nice-to-have
+// verification.
+export async function getLiveRosterStaffIdKeys(): Promise<Set<string> | null> {
+  try {
+    const config = await prisma.googleSheetsConfig.findFirst()
+    const sheetName = config?.rosterSheetName?.trim()
+    if (!sheetName || !config?.spreadsheetUrl) return null
+
+    const connection = await connectToSpreadsheet(config.spreadsheetUrl)
+    if (!connection.tabTitles.includes(sheetName)) return null
+
+    const buffer = await fetchSheetAsBuffer(connection.spreadsheetId, sheetName, connection.accessToken)
+    const { rows, errors } = parseRosterExcel(buffer)
+    if (errors.length) return null
+
+    const keys = new Set<string>()
+    for (const r of rows) {
+      const key = normalizeStaffIdKey(r.staffId)
+      if (key) keys.add(key)
+    }
+    return keys
+  } catch {
+    return null
+  }
+}
