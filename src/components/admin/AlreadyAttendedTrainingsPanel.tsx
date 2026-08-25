@@ -129,7 +129,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     <SectionCard
       icon={History}
       title="Already Attended Trainings"
-      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Reminders are on by default (daily nudge until filled). Once a training has a schedule, it moves to Training Schedules below — that's also where you'll find every survey's send/response reports."
+      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Reminders are on by default (daily nudge until filled). This never touches Training Data or the Google Sheet mirror again — it's purely for tracking survey sends. Once sent, find it under Training Schedules below, in the &quot;Already Attended Trainings — Sent&quot; tab."
     >
       <div className="space-y-3">
         {groups.length > 5 && (
@@ -231,7 +231,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
 
                       {result && result.key === key && (
                         <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-                          <p className="text-emerald-700">Added {result.added} attendee{result.added === 1 ? '' : 's'} — scroll down to Training Schedules to send Post-1/Post-2.</p>
+                          <p className="text-emerald-700">Added {result.added} attendee{result.added === 1 ? '' : 's'} — switch to the &quot;Already Attended Trainings — Sent&quot; tab under Training Schedules below to send Post-1/Post-2.</p>
                           {result.notFound.length > 0 && <p className="text-amber-700">Not found in the roster: {result.notFound.join(', ')}</p>}
                           {result.noEmail.length > 0 && <p className="text-amber-700">No email on file: {result.noEmail.join(', ')}</p>}
                         </div>

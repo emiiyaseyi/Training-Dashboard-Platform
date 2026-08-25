@@ -156,6 +156,12 @@ export function SurveyAutomationPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [schedulePage, setSchedulePage] = useState(1)
   const [scheduleQuery, setScheduleQuery] = useState('')
+  // Already Attended Trainings creates its own schedule row purely to track Post-1/Post-2
+  // send/response status — it never touches Training Data or the Google Sheet mirror (see the
+  // `!schedule.sourcedFromHistoricalData` guard in training-schedule/[id]/attendees/route.ts).
+  // Kept out of the default "Active Schedules" view below so it doesn't read as a real, forward
+  // scheduled training — switch tabs to see and manage it.
+  const [scheduleView, setScheduleView] = useState<'active' | 'historical'>('active')
   const [attendeeTableQuery, setAttendeeTableQuery] = useState('')
   const [attendeePage, setAttendeePage] = useState(1)
 
@@ -490,10 +496,13 @@ export function SurveyAutomationPanel() {
     }
   }
 
-  const filteredSchedules = schedules.filter((s) => {
+  const viewSchedules = schedules.filter((s) => s.sourcedFromHistoricalData === (scheduleView === 'historical'))
+  const filteredSchedules = viewSchedules.filter((s) => {
     const sq = scheduleQuery.trim().toLowerCase()
     return !sq || s.trainingName.toLowerCase().includes(sq) || s.businessUnit.toLowerCase().includes(sq)
   })
+  const historicalCount = schedules.filter((s) => s.sourcedFromHistoricalData).length
+  const activeCount = schedules.length - historicalCount
 
   return (
     <div className="space-y-6">
@@ -637,20 +646,41 @@ export function SurveyAutomationPanel() {
           <div className="flex items-start gap-3">
             <Calendar className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-slate-800">Training Schedules</p>
-              <p className="text-xs text-slate-500 mt-0.5">Add an upcoming training, its attendees, and trigger survey emails — manually or in bulk.</p>
+              <p className="text-sm font-semibold text-slate-800">{scheduleView === 'historical' ? 'Already Attended Trainings — Sent' : 'Training Schedules'}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {scheduleView === 'historical'
+                  ? 'Post-1/Post-2 sends created from Already Attended Trainings, for training that happened before the platform tracked it — send/response status only, no writes to Training Data or the Google Sheet.'
+                  : 'Add an upcoming training, its attendees, and trigger survey emails — manually or in bulk.'}
+              </p>
             </div>
           </div>
+          {scheduleView === 'active' && (
+            <button
+              onClick={() => (showAddSchedule ? resetScheduleForm() : setShowAddSchedule(true))}
+              className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Schedule
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 mb-4">
           <button
-            onClick={() => (showAddSchedule ? resetScheduleForm() : setShowAddSchedule(true))}
-            className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 shrink-0"
+            onClick={() => { setScheduleView('active'); setSchedulePage(1) }}
+            className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${scheduleView === 'active' ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'}`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            Add Schedule
+            Active Schedules ({activeCount})
+          </button>
+          <button
+            onClick={() => { setScheduleView('historical'); setSchedulePage(1) }}
+            className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${scheduleView === 'historical' ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+          >
+            Already Attended Trainings — Sent ({historicalCount})
           </button>
         </div>
 
-        {schedules.length > 0 && (
+        {viewSchedules.length > 0 && (
           <div className="mb-5 overflow-x-auto">
             <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
               <thead>
@@ -667,8 +697,8 @@ export function SurveyAutomationPanel() {
                   ['post1', 'Post-1', 'post1Sent', 'post1Filled'],
                   ['post2', 'Post-2', 'post2Sent', 'post2Filled'],
                 ] as const).map(([key, label, sentKey, filledKey]) => {
-                  const sent = schedules.reduce((sum, s) => sum + s[sentKey], 0)
-                  const filled = schedules.reduce((sum, s) => sum + s[filledKey], 0)
+                  const sent = viewSchedules.reduce((sum, s) => sum + s[sentKey], 0)
+                  const filled = viewSchedules.reduce((sum, s) => sum + s[filledKey], 0)
                   return (
                     <tr key={key} className="border-t border-slate-100">
                       <td className="py-2 px-3 text-slate-700">{label}</td>
@@ -906,11 +936,11 @@ export function SurveyAutomationPanel() {
 
         {loadingSchedules ? (
           <p className="text-xs text-slate-400">Loading…</p>
-        ) : schedules.length === 0 ? (
-          <p className="text-xs text-slate-400">No training schedules yet.</p>
+        ) : viewSchedules.length === 0 ? (
+          <p className="text-xs text-slate-400">{scheduleView === 'historical' ? 'No Already Attended Trainings sends yet.' : 'No training schedules yet.'}</p>
         ) : (
           <div className="space-y-2">
-            {schedules.length > SCHEDULE_PAGE_SIZE && (
+            {viewSchedules.length > SCHEDULE_PAGE_SIZE && (
               <div className="relative mb-1">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
