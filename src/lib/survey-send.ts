@@ -64,6 +64,9 @@ export async function sendSurveyStage(
   if (stage === 'pre' && schedule.sourcedFromHistoricalData) {
     throw new Error('Pre-Training surveys can\'t be sent for a training added via Already Attended Trainings — it already happened.')
   }
+  if (stage === 'pre' && !schedule.preEnabled) {
+    throw new Error('Pre-Training is turned off for this schedule.')
+  }
   if (stage === 'post1' && !schedule.post1Enabled) {
     throw new Error('Post-1 is turned off for this schedule.')
   }
@@ -177,6 +180,7 @@ export async function sendSurveyReminders(
   const result: SendSurveyResult = { sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) return result
   if (!schedule.remindersEnabled) return result
+  if (stage === 'pre' && !schedule.preEnabled) return result
   if (stage === 'post1' && !schedule.post1Enabled) return result
   if (stage === 'post2' && !schedule.post2Enabled) return result
 

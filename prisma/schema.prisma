@@ -392,6 +392,7 @@ model TrainingSchedule {
   capability      String? // references DifferentiatingCapability.name
   vendor          String? // references Vendor.name — used by the TM Trainings report (training name, date, vendor)
   remindersEnabled Boolean @default(true) // daily reminder sweep skips this schedule entirely when false
+  preEnabled      Boolean @default(true) // when false, Pre-Training is never sent (initial or reminder) for this schedule — set at creation time, all three stages default on
   post1Enabled    Boolean @default(true) // when false, Post-1 is never sent (initial or reminder) for this schedule — lets "Already Attended Trainings" send only one of Post-1/Post-2 when that's all that's wanted
   post2Enabled    Boolean @default(true) // when false, Post-2 is never sent (initial or reminder) for this schedule
   sourcedFromHistoricalData Boolean @default(false) // true when created via "Already Attended Trainings" (from already-uploaded Training Data records, not a fresh nomination) — Pre-Training is never sent for these, and Post-1/Post-2 copy adjusts accordingly

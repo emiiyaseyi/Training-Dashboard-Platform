@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const daysSinceEnd = (now - schedule.endDate.getTime()) / DAY_MS
 
     const due: SurveyStage[] = []
-    if (daysUntilStart <= preDaysBefore && daysUntilStart >= -3) due.push('pre')
+    if (daysUntilStart <= preDaysBefore && daysUntilStart >= -3 && schedule.preEnabled) due.push('pre')
     if (daysSinceEnd >= post1DaysAfter && schedule.post1Enabled) due.push('post1')
     if (daysSinceEnd >= post2DaysAfter && schedule.post2Enabled) due.push('post2')
 
