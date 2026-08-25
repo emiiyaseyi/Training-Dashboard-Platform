@@ -149,28 +149,48 @@ export function TrainingRecordsTab() {
     return { found, notFound }
   }
 
-  // Splits on newlines, commas, semicolons, AND plain whitespace — Staff IDs and emails never
-  // contain spaces, so this handles a paste of either one-per-line (CSV-style) or several on one
-  // line (space-separated, e.g. copied from a table that lost its line breaks). A full name with
-  // an internal space won't survive this split — for that, add attendees one at a time via the
-  // normal search above instead of bulk paste.
+  // Line-by-line (CSV-style), but each line first tries to match AS A WHOLE (so "John Doe" on its
+  // own line resolves as one person's full name) before falling back to splitting that same line
+  // on spaces/commas (so "MSL-0001 MSL-0002" on one line still resolves as two people). Covers a
+  // one-per-line paste, several-per-line, or a mix of both in the same paste.
   const resolveBulkIdentifiers = (text: string): { found: RosterStaff[]; notFound: string[] } => {
-    const tokens = text.split(/[\s,;]+/).map((t) => t.replace(/^"|"$/g, '').trim()).filter(Boolean)
-      .filter((t) => !/^(staff ?id|name|email|identifier)$/i.test(t))
-    return matchIdentifierTokens(tokens)
+    const lines = text.split(/\r\n|\n/).map((l) => l.replace(/^"|"$/g, '').trim()).filter(Boolean)
+      .filter((l) => !/^(staff ?id|name|email|identifier)$/i.test(l))
+    const found: RosterStaff[] = []
+    const notFound: string[] = []
+    const addIfNew = (s: RosterStaff) => { if (!found.some((f) => f.staffId === s.staffId)) found.push(s) }
+
+    for (const line of lines) {
+      const whole = matchIdentifierTokens([line])
+      if (whole.found.length === 1) { addIfNew(whole.found[0]); continue }
+      const tokens = line.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean)
+      if (tokens.length > 1) {
+        const split = matchIdentifierTokens(tokens)
+        split.found.forEach(addIfNew)
+        notFound.push(...split.notFound)
+      } else {
+        notFound.push(line)
+      }
+    }
+    return { found, notFound }
   }
 
   // Pasting several Staff IDs/emails at once directly into the single search box (rather than
   // opening the dedicated bulk box) is common enough to auto-detect: a real search query is never
-  // multiple space/comma-separated full identifiers, so treat 2+ tokens as a bulk paste instead of
-  // a single (guaranteed-empty) search string. Only splits on whitespace/commas/semicolons, not
-  // full names' internal spaces — those still need the line-based bulk box below.
+  // multiple space/comma-separated identifiers, so 2+ tokens (even just two, separated by one
+  // space) means bulk paste, not a single search string. The one thing that ALSO produces 2
+  // tokens legitimately is a single full name ("John Doe") — checked first, as one identifier,
+  // before ever splitting, so a one-person paste doesn't get wrongly torn into two failed lookups.
   const handleAttendeeSearchPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text')
+    const text = e.clipboardData.getData('text').trim()
+    if (!text) return
     const tokens = text.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean)
     if (tokens.length < 2) return // ordinary single-value paste — let it populate the search box as usual
+
+    const wholeStringMatch = matchIdentifierTokens([text])
+    const { found, notFound } = wholeStringMatch.found.length === 1 ? wholeStringMatch : matchIdentifierTokens(tokens)
+
     e.preventDefault()
-    const { found, notFound } = matchIdentifierTokens(tokens)
     if (found.length > 0) {
       setPendingAttendees((prev) => [...prev, ...found])
       setNewTraining((prev) => (prev.businessUnit ? prev : { ...prev, businessUnit: found[0].businessUnit }))
