@@ -161,7 +161,7 @@ export default function UploadPage() {
           {[
             {
               title: 'Training Cost — Expected Columns',
-              columns: ['S/N', 'Name', 'Staff ID', 'Training', 'Business Units', 'Month', 'Cost', 'Learning Hours (optional)', 'Training Type (see Admin → Training Types)', 'Differentiating Capability (see Admin → Capabilities)'],
+              columns: ['S/N', 'Name', 'Staff ID', 'Staff Email (optional — fallback match if Staff ID fails)', 'Training', 'Business Units', 'Month', 'Cost', 'Learning Hours (optional)', 'Training Type (see Admin → Training Types)', 'Differentiating Capability (see Admin → Capabilities)'],
               color: 'blue',
             },
             {
@@ -171,12 +171,12 @@ export default function UploadPage() {
             },
             {
               title: 'Subscriptions — Expected Columns',
-              columns: ['Month', 'Staff ID', 'Name', 'Business Unit', 'Membership Organization', 'Amount'],
+              columns: ['Month', 'Staff ID', 'Name', 'Staff Email (optional — fallback match if Staff ID fails)', 'Business Unit', 'Membership Organization', 'Amount'],
               color: 'green',
             },
             {
               title: 'KSS — Expected Columns',
-              columns: ['Staff ID', 'Name', 'Business Unit', 'In-Meeting Duration', 'Month'],
+              columns: ['Staff ID', 'Name', 'Staff Email (optional — fallback match if Staff ID fails)', 'Business Unit', 'In-Meeting Duration', 'Month'],
               color: 'blue',
             },
             {

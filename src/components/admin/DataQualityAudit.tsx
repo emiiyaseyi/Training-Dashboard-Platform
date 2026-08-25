@@ -221,7 +221,7 @@ export function DataQualityAudit() {
   const [normalizeResult, setNormalizeResult] = useState<{ table: string; updated: number }[] | null>(null)
   const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
   const [backfilling, setBackfilling] = useState(false)
-  const [backfillResult, setBackfillResult] = useState<{ table: string; label: string; staffIdFixed: number; businessUnitFixed: number; ambiguousNameSkipped: number; noMatch: number }[] | null>(null)
+  const [backfillResult, setBackfillResult] = useState<{ table: string; label: string; staffIdFixed: number; businessUnitFixed: number; ambiguousNameSkipped: number; noMatch: number; emailFixed: number }[] | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -284,7 +284,7 @@ export function DataQualityAudit() {
           <button
             onClick={(e) => { e.stopPropagation(); backfillFromRoster() }}
             disabled={backfilling}
-            title="Fills a missing Staff ID (by exact name match, only when unambiguous) and/or Business Unit (by Staff ID lookup) on Training Cost, Subscriptions, KSS, and Post-Training Manager Reviews, cross-checked against the Staff Roster. Staff Roster's own gaps are fixed by the button in Staff Data Quality above instead."
+            title="Fills a missing Staff ID (by exact name or Staff Email match, only when unambiguous) and/or Business Unit (by Staff ID lookup) on Training Cost, Subscriptions, KSS, and Post-Training Manager Reviews, cross-checked against the Staff Roster. Also fills in Staff Email on Training/Subscription/KSS rows that already have a valid Staff ID. Staff Roster's own gaps are fixed by the button in Staff Data Quality above instead."
             className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1 hover:bg-navy-50 disabled:opacity-50"
           >
             {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
@@ -307,16 +307,17 @@ export function DataQualityAudit() {
     >
       {backfillResult && (
         <div className="mb-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-          {backfillResult.every((t) => t.staffIdFixed === 0 && t.businessUnitFixed === 0) ? (
+          {backfillResult.every((t) => t.staffIdFixed === 0 && t.businessUnitFixed === 0 && t.emailFixed === 0) ? (
             <p className="text-slate-600">
               Nothing to fill — none of the flagged records matched a roster entry.
               {backfillResult.reduce((s, t) => s + t.ambiguousNameSkipped, 0) > 0 &&
                 ` ${backfillResult.reduce((s, t) => s + t.ambiguousNameSkipped, 0)} were skipped because the name matches more than one person on the roster.`}
             </p>
           ) : (
-            backfillResult.filter((t) => t.staffIdFixed > 0 || t.businessUnitFixed > 0 || t.ambiguousNameSkipped > 0).map((t) => (
+            backfillResult.filter((t) => t.staffIdFixed > 0 || t.businessUnitFixed > 0 || t.ambiguousNameSkipped > 0 || t.emailFixed > 0).map((t) => (
               <p key={t.table} className="text-emerald-700">
                 {t.label}: {t.staffIdFixed} Staff ID{t.staffIdFixed === 1 ? '' : 's'} fixed, {t.businessUnitFixed} Business Unit{t.businessUnitFixed === 1 ? '' : 's'} fixed
+                {t.emailFixed > 0 && `, ${t.emailFixed} Staff Email${t.emailFixed === 1 ? '' : 's'} filled from Staff ID`}
                 {t.ambiguousNameSkipped > 0 && <span className="text-amber-700"> · {t.ambiguousNameSkipped} skipped (name matches multiple people)</span>}
               </p>
             ))
