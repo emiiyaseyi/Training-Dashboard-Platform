@@ -367,6 +367,7 @@ model SmtpSettings {
   password    String?
   fromName    String   @default("Meristem L&D")
   fromAddress String?
+  defaultCc   String?  // comma/semicolon-separated email addresses Cc'd on EVERY email the platform sends, no exceptions (surveys, reminders, custom surveys, cron failure alerts) — applied centrally in sendMail() itself
   updatedAt   DateTime @updatedAt
 }
 
@@ -396,6 +397,8 @@ model TrainingSchedule {
   post1Enabled    Boolean @default(true) // when false, Post-1 is never sent (initial or reminder) for this schedule — lets "Already Attended Trainings" send only one of Post-1/Post-2 when that's all that's wanted
   post2Enabled    Boolean @default(true) // when false, Post-2 is never sent (initial or reminder) for this schedule
   sourcedFromHistoricalData Boolean @default(false) // true when created via "Already Attended Trainings" (from already-uploaded Training Data records, not a fresh nomination) — Pre-Training is never sent for these, and Post-1/Post-2 copy adjusts accordingly
+  additionalCc     String? // comma/semicolon-separated email addresses Cc'd on top of the default line-manager/employee Cc and the global defaultCc — meaning depends on additionalCcMode
+  additionalCcMode String  @default("all") // "all" = additionalCc applies to every attendee's emails; "individual" = each attendee has their own additionalCc (TrainingScheduleAttendee.additionalCc) instead, left blank = just the global defaultCc for that person
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -413,6 +416,7 @@ model TrainingScheduleAttendee {
   email            String?
   lineManagerName  String?
   lineManagerEmail String?
+  additionalCc     String? // comma/semicolon-separated email addresses Cc'd on this attendee's survey emails — only used when the schedule's additionalCcMode is "individual"; blank means just the global defaultCc for this person
 
   preSurveySentAt   DateTime?
   post1SurveySentAt DateTime?

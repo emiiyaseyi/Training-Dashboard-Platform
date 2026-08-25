@@ -11,9 +11,10 @@ interface SmtpState {
   password: string
   fromName: string
   fromAddress: string
+  defaultCc: string
 }
 
-const EMPTY: SmtpState = { host: '', port: '', username: '', password: '', fromName: 'Meristem L&D', fromAddress: '' }
+const EMPTY: SmtpState = { host: '', port: '', username: '', password: '', fromName: 'Meristem L&D', fromAddress: '', defaultCc: '' }
 
 export function SmtpSettingsPanel() {
   const [state, setState] = useState<SmtpState>(EMPTY)
@@ -38,6 +39,7 @@ export function SmtpSettingsPanel() {
         password: '',
         fromName: data.fromName || 'Meristem L&D',
         fromAddress: data.fromAddress || '',
+        defaultCc: data.defaultCc || '',
       })
       setPasswordSet(!!data.passwordSet)
       setConfigured(!!data.configured)
@@ -160,6 +162,21 @@ export function SmtpSettingsPanel() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              Default Cc <span className="text-slate-400 font-normal">(optional — Cc&apos;d on every email the platform sends)</span>
+            </label>
+            <input
+              value={state.defaultCc}
+              onChange={(e) => setState({ ...state, defaultCc: e.target.value })}
+              placeholder="e.g. hr@meristemng.com, ld-lead@meristemng.com"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Comma-separated. Applies to survey emails, reminders, Custom Surveys, and system alert emails — no exceptions.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">

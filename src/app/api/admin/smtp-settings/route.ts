@@ -15,6 +15,7 @@ export async function GET() {
     passwordSet: !!s?.password,
     fromName: s?.fromName || 'Meristem L&D',
     fromAddress: s?.fromAddress || '',
+    defaultCc: s?.defaultCc || '',
     configured: !!(s?.host && s?.port && s?.username && s?.password),
   })
 }
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
       username: body.username || null,
       fromName: body.fromName || 'Meristem L&D',
       fromAddress: body.fromAddress || null,
+      defaultCc: body.defaultCc?.trim() || null,
     }
     // Only overwrite the stored password if a new one was actually typed — leaving the field
     // blank in the form means "keep the existing one", not "clear it".

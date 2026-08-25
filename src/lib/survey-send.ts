@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
-import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
+import { sendMail, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 
@@ -25,6 +25,13 @@ const STAGE_REMINDER_FIELD = {
 export interface SendSurveyResult {
   sent: number
   skipped: { staffName: string; reason: string }[]
+}
+
+// additionalCcMode "all" applies the schedule's own additionalCc to every attendee's emails;
+// "individual" uses each attendee's own additionalCc instead (left blank = none — that person
+// still gets the global defaultCc, applied centrally in sendMail(), just no schedule-level extra).
+function scheduleCcFor(schedule: TrainingSchedule, attendee: TrainingScheduleAttendee): string[] {
+  return parseCcList(schedule.additionalCcMode === 'individual' ? attendee.additionalCc : schedule.additionalCc)
 }
 
 // Sends a given survey stage to some/all attendees of a schedule. Pre and Post-1 go to the
@@ -100,7 +107,7 @@ export async function sendSurveyStage(
       continue
     }
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails]
+    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails, ...scheduleCcFor(schedule, attendee)]
     const { subject, html } = buildSurveyEmail({
       stage,
       recipientName: recipientName || 'there',
@@ -210,7 +217,7 @@ export async function sendSurveyReminders(
     const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
     if (!toAddress) continue // already reported as skipped by the original send
 
-    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails]
+    const cc = [...(ccAddress ? [ccAddress] : []), ...superAdminEmails, ...scheduleCcFor(schedule, attendee)]
     const { subject, html } = buildSurveyEmail({
       stage,
       recipientName: recipientName || 'there',
