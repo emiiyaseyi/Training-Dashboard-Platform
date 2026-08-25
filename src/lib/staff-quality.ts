@@ -24,12 +24,32 @@ export interface DuplicateIdGroup {
   shadowed: { id: string; name: string; businessUnit: string; createdAt: string }[]
 }
 
+// One candidate person within a "same name, different Staff IDs" group — almost always the same
+// real person uploaded under two different Staff ID spellings/schemes (the exact class of issue
+// the earlier Staff ID reconciliation work was fixing by hand). Sorted newest-first per group so
+// the UI can default to "the most recent upload is who this person actually is" without guessing.
+export interface DuplicateNameCandidate {
+  id: string
+  staffId: string
+  name: string
+  email: string | null
+  businessUnit: string
+  role: string | null
+  department: string | null
+  createdAt: string
+}
+
+export interface DuplicateNameGroup {
+  name: string
+  candidates: DuplicateNameCandidate[] // [0] is the newest — the suggested "keep this one"
+}
+
 export interface StaffQualityAudit {
   rows: StaffQualityRow[]
   flaggedCount: number
   totalStaff: number
   duplicateIdGroups: DuplicateIdGroup[]
-  duplicateNameGroups: { name: string; staffIds: string[] }[]
+  duplicateNameGroups: DuplicateNameGroup[]
 }
 
 // Roster uploads accumulate over time (same "most recent row per Staff ID wins" convention as
@@ -48,7 +68,7 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
   const rows: StaffQualityRow[] = []
   const duplicateIdGroups: DuplicateIdGroup[] = []
   const emailSeen = new Map<string, string[]>() // lowercased email -> staffIds
-  const nameSeen = new Map<string, string[]>() // lowercased full name -> staffIds
+  const nameSeen = new Map<string, DuplicateNameCandidate[]>() // lowercased full name -> one candidate per distinct Staff ID
 
   for (const [key, list] of groups) {
     const latest = list[list.length - 1]
@@ -98,7 +118,12 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
     }
     if (name) {
       const n = name.toLowerCase()
-      nameSeen.set(n, [...(nameSeen.get(n) || []), latest.staffId])
+      const candidate: DuplicateNameCandidate = {
+        id: latest.id, staffId: latest.staffId, name, email: latest.email,
+        businessUnit: latest.businessUnit, role: latest.role, department: latest.department,
+        createdAt: latest.createdAt.toISOString(),
+      }
+      nameSeen.set(n, [...(nameSeen.get(n) || []), candidate])
     }
   }
 
@@ -112,9 +137,12 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
     }
   }
 
-  const duplicateNameGroups = [...nameSeen.entries()]
-    .filter(([, ids]) => new Set(ids).size > 1)
-    .map(([name, ids]) => ({ name, staffIds: [...new Set(ids)] }))
+  const duplicateNameGroups: DuplicateNameGroup[] = [...nameSeen.entries()]
+    .filter(([, candidates]) => candidates.length > 1)
+    .map(([name, candidates]) => ({
+      name,
+      candidates: candidates.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    }))
 
   const flagged = rows.filter((r) => r.issues.length > 0)
 
@@ -135,4 +163,62 @@ export async function cleanDuplicateStaffRecords(): Promise<number> {
   if (idsToDelete.length === 0) return 0
   await prisma.staffRosterRecord.deleteMany({ where: { id: { in: idsToDelete } } })
   return idsToDelete.length
+}
+
+export interface MergeDuplicateNameResult {
+  keepStaffId: string
+  deletedRosterRows: number
+  repointedRecords: number
+}
+
+// Resolves a "same name, different Staff IDs" group: deletes EVERY StaffRosterRecord row (not
+// just the latest) under each losing Staff ID, and re-points any Training/Subscription/KSS/
+// Manager Review record still filed under one of those losing IDs to the surviving one — same
+// "propagate the ID correction everywhere, not just the flagged row" principle as
+// applyTrainingRecordChange (sheets-sync.ts) uses for Training Data edits. Matches by
+// normalizeStaffIdKey (not raw string equality) so a punctuation-only variant of the losing ID
+// (e.g. "MSL-IT-034" for a losing "MSL-IT034") is still caught and repointed.
+export async function mergeDuplicateNameGroup(keepStaffId: string, mergeStaffIds: string[]): Promise<MergeDuplicateNameResult> {
+  const keepKey = normalizeStaffIdKey(keepStaffId)
+  let deletedRosterRows = 0
+  let repointedRecords = 0
+
+  for (const mergeStaffId of mergeStaffIds) {
+    const mergeKey = normalizeStaffIdKey(mergeStaffId)
+    if (!mergeKey || mergeKey === keepKey) continue
+
+    const all = await prisma.staffRosterRecord.findMany({ where: {}, select: { id: true, staffId: true } })
+    const rosterIdsToDelete = all.filter((r) => normalizeStaffIdKey(r.staffId) === mergeKey).map((r) => r.id)
+    if (rosterIdsToDelete.length > 0) {
+      const { count } = await prisma.staffRosterRecord.deleteMany({ where: { id: { in: rosterIdsToDelete } } })
+      deletedRosterRows += count
+    }
+
+    // Written as 4 explicit blocks rather than looping over the model delegates — Prisma's
+    // per-model findMany/updateMany argument types don't unify cleanly under one generic loop.
+    const variantsIn = (rows: { staffId: string }[]) => rows.map((r) => r.staffId).filter((id) => normalizeStaffIdKey(id) === mergeKey)
+
+    const trainingVariants = variantsIn(await prisma.trainingRecord.findMany({ distinct: ['staffId'], select: { staffId: true } }))
+    if (trainingVariants.length > 0) {
+      const { count } = await prisma.trainingRecord.updateMany({ where: { staffId: { in: trainingVariants } }, data: { staffId: keepStaffId.toUpperCase() } })
+      repointedRecords += count
+    }
+    const subscriptionVariants = variantsIn(await prisma.subscriptionRecord.findMany({ distinct: ['staffId'], select: { staffId: true } }))
+    if (subscriptionVariants.length > 0) {
+      const { count } = await prisma.subscriptionRecord.updateMany({ where: { staffId: { in: subscriptionVariants } }, data: { staffId: keepStaffId.toUpperCase() } })
+      repointedRecords += count
+    }
+    const kssVariants = variantsIn(await prisma.kSSRecord.findMany({ distinct: ['staffId'], select: { staffId: true } }))
+    if (kssVariants.length > 0) {
+      const { count } = await prisma.kSSRecord.updateMany({ where: { staffId: { in: kssVariants } }, data: { staffId: keepStaffId.toUpperCase() } })
+      repointedRecords += count
+    }
+    const managerReviewVariants = variantsIn(await prisma.managerReviewRecord.findMany({ distinct: ['staffId'], select: { staffId: true } }))
+    if (managerReviewVariants.length > 0) {
+      const { count } = await prisma.managerReviewRecord.updateMany({ where: { staffId: { in: managerReviewVariants } }, data: { staffId: keepStaffId.toUpperCase() } })
+      repointedRecords += count
+    }
+  }
+
+  return { keepStaffId, deletedRosterRows, repointedRecords }
 }

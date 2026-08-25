@@ -27,12 +27,28 @@ interface DuplicateIdGroup {
   shadowed: { id: string; name: string; businessUnit: string; createdAt: string }[]
 }
 
+interface DuplicateNameCandidate {
+  id: string
+  staffId: string
+  name: string
+  email: string | null
+  businessUnit: string
+  role: string | null
+  department: string | null
+  createdAt: string
+}
+
+interface DuplicateNameGroup {
+  name: string
+  candidates: DuplicateNameCandidate[] // [0] = newest, the suggested "keep"
+}
+
 interface Audit {
   rows: StaffQualityRow[]
   flaggedCount: number
   totalStaff: number
   duplicateIdGroups: DuplicateIdGroup[]
-  duplicateNameGroups: { name: string; staffIds: string[] }[]
+  duplicateNameGroups: DuplicateNameGroup[]
 }
 
 interface RosterStaff {
@@ -84,6 +100,10 @@ export function StaffDataQuality() {
   const [rowQuery, setRowQuery] = useState('')
   const [saveResult, setSaveResult] = useState<{ level: 'success' | 'warning' | 'error'; message: string } | null>(null)
 
+  const [mergingKey, setMergingKey] = useState<string | null>(null)
+  const [mergingAll, setMergingAll] = useState(false)
+  const [mergeResult, setMergeResult] = useState<{ merged: number; deletedRosterRows: number; repointedRecords: number } | null>(null)
+
   const load = async () => {
     setLoading(true)
     try {
@@ -117,6 +137,52 @@ export function StaffDataQuality() {
       await load()
     } finally {
       setCleaning(false)
+    }
+  }
+
+  const mergeDuplicateName = async (g: DuplicateNameGroup, keepStaffId: string, skipConfirm = false) => {
+    const mergeStaffIds = g.candidates.map((c) => c.staffId).filter((id) => id !== keepStaffId)
+    if (!skipConfirm && !confirm(
+      `Merge "${g.name}"? Keeps ${keepStaffId}, deletes the roster record(s) for ${mergeStaffIds.join(', ')}, and re-points any ` +
+      `Training/Subscription/KSS/Manager Review record still filed under ${mergeStaffIds.length === 1 ? 'that ID' : 'those IDs'} to ${keepStaffId}. This cannot be undone.`
+    )) return false
+
+    setMergingKey(g.name)
+    try {
+      const res = await fetch('/api/admin/staff-quality/merge-duplicate-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepStaffId, mergeStaffIds }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMergeResult((prev) => ({
+          merged: (prev?.merged || 0) + 1,
+          deletedRosterRows: (prev?.deletedRosterRows || 0) + data.deletedRosterRows,
+          repointedRecords: (prev?.repointedRecords || 0) + data.repointedRecords,
+        }))
+        await load()
+        return true
+      }
+      alert(data.error || 'Merge failed.')
+      return false
+    } finally {
+      setMergingKey(null)
+    }
+  }
+
+  const mergeAllDuplicateNames = async () => {
+    const groups = audit?.duplicateNameGroups || []
+    if (groups.length === 0) return
+    if (!confirm(`Merge all ${groups.length} duplicate-name group(s)? Each keeps its most recently uploaded Staff ID and retires the other(s). This cannot be undone.`)) return
+    setMergingAll(true)
+    setMergeResult(null)
+    try {
+      for (const g of groups) {
+        await mergeDuplicateName(g, g.candidates[0].staffId, true)
+      }
+    } finally {
+      setMergingAll(false)
     }
   }
 
@@ -314,13 +380,79 @@ export function StaffDataQuality() {
 
           {audit.duplicateNameGroups.length > 0 && (
             <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
-              <p className="text-xs font-medium text-amber-800 flex items-center gap-1.5">
-                <Copy className="w-3.5 h-3.5" /> Same name, different Staff IDs — check these aren&apos;t duplicate entries for one person
-              </p>
-              <div className="mt-1.5 space-y-0.5">
-                {audit.duplicateNameGroups.map((g) => (
-                  <p key={g.name} className="text-xs text-amber-700">{g.name}: {g.staffIds.join(', ')}</p>
-                ))}
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <p className="text-xs font-medium text-amber-800 flex items-center gap-1.5">
+                  <Copy className="w-3.5 h-3.5" /> Same name, different Staff IDs — almost always one person uploaded under two IDs
+                </p>
+                <button
+                  onClick={mergeAllDuplicateNames}
+                  disabled={mergingAll || mergingKey !== null}
+                  className="flex items-center gap-1.5 text-xs font-medium text-amber-800 border border-amber-300 rounded-lg px-2.5 py-1 hover:bg-amber-100 disabled:opacity-50 shrink-0"
+                >
+                  {mergingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Accept All ({audit.duplicateNameGroups.length})
+                </button>
+              </div>
+
+              {mergeResult && (
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-2">
+                  Merged {mergeResult.merged} group(s) — removed {mergeResult.deletedRosterRows} duplicate roster row(s) and
+                  re-pointed {mergeResult.repointedRecords} Training/Subscription/KSS/Manager Review record(s) to the surviving Staff ID.
+                </p>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-amber-700 border-b border-amber-200">
+                      <th className="text-left font-medium py-1.5 pr-3">Staff Name</th>
+                      <th className="text-left font-medium py-1.5 pr-3">Previous Record</th>
+                      <th className="text-left font-medium py-1.5 pr-3">Current Record</th>
+                      <th className="py-1.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audit.duplicateNameGroups.map((g) => {
+                      const [current, ...previous] = g.candidates
+                      return (
+                        <tr key={g.name} className="border-b border-amber-100 align-top">
+                          <td className="py-2 pr-3 text-amber-900 font-medium">{g.name}</td>
+                          <td className="py-2 pr-3 text-amber-700">
+                            {previous.map((c) => (
+                              <div key={c.id} className="mb-1.5 last:mb-0">
+                                <p className="font-medium">{c.staffId}</p>
+                                <p className="text-amber-500">{c.businessUnit}{c.role ? ` · ${c.role}` : ''}{c.email ? ` · ${c.email}` : ' · no email'}</p>
+                              </div>
+                            ))}
+                          </td>
+                          <td className="py-2 pr-3 text-amber-700">
+                            <p className="font-medium">{current.staffId}</p>
+                            <p className="text-amber-500">{current.businessUnit}{current.role ? ` · ${current.role}` : ''}{current.email ? ` · ${current.email}` : ' · no email'}</p>
+                          </td>
+                          <td className="py-2 text-right">
+                            <button
+                              onClick={() => mergeDuplicateName(g, current.staffId)}
+                              disabled={mergingKey === g.name || mergingAll}
+                              className="flex items-center gap-1 text-[11px] font-medium text-white bg-amber-600 rounded-md px-2 py-1 hover:bg-amber-700 disabled:opacity-50 ml-auto"
+                            >
+                              {mergingKey === g.name ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                              Accept
+                            </button>
+                            {previous.length === 1 && (
+                              <button
+                                onClick={() => mergeDuplicateName(g, previous[0].staffId)}
+                                disabled={mergingKey === g.name || mergingAll}
+                                className="block mt-1 text-[10px] text-amber-600 hover:underline ml-auto disabled:opacity-50"
+                              >
+                                keep {previous[0].staffId} instead
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
