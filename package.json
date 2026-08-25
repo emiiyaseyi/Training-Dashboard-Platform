@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@sparticuz/chromium": "^149.0.0",
     "bcryptjs": "^3.0.3",
     "date-fns": "^3.6.0",
     "google-auth-library": "^11.0.2",
@@ -29,6 +30,7 @@
     "nodemailer": "^8.0.11",
     "plotly.js-dist-min": "^2.35.2",
     "pptxgenjs": "^4.0.1",
+    "puppeteer-core": "^25.9.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "xlsx": "^0.18.5"

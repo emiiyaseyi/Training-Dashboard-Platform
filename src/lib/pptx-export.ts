@@ -9,17 +9,17 @@ import type { GroupAnalytics } from '@/lib/analytics'
 // PowerPoint rather than being a flattened screenshot. Icon badges are rasterized once per export
 // (see icon-rasterizer.ts) and embedded as images, since pptxgenjs has no vector icon support.
 
-const PAGE_W = 13.333
-const PAGE_H = 7.5
-const MARGIN = 0.5
-const CONTENT_TOP = 1.35
-const FOOTER_Y = 7.05
+export const PAGE_W = 13.333
+export const PAGE_H = 7.5
+export const MARGIN = 0.5
+export const CONTENT_TOP = 1.35
+export const FOOTER_Y = 7.05
 
 const C = REPORT_COLORS_HEX // bare hex, no leading '#'
 
-type IconImages = Record<string, string>
+export type IconImages = Record<string, string>
 
-interface Tile {
+export interface Tile {
   iconKey: string
   title: string
   value: string
@@ -28,11 +28,11 @@ interface Tile {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PptxSlide = any
+export type PptxSlide = any
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PptxGen = any
+export type PptxGen = any
 
-function addHeader(slide: PptxSlide, title: string, subtitle: string) {
+export function addHeader(slide: PptxSlide, title: string, subtitle: string) {
   slide.addText(title, {
     x: MARGIN, y: 0.4, w: PAGE_W - MARGIN * 2, h: 0.55,
     fontFace: 'Georgia', fontSize: 28, bold: true, color: C.navy,
@@ -43,7 +43,7 @@ function addHeader(slide: PptxSlide, title: string, subtitle: string) {
   })
 }
 
-function addFooter(slide: PptxSlide, pageNumber: number, periodLabel: string) {
+export function addFooter(slide: PptxSlide, pageNumber: number, periodLabel: string) {
   slide.addText(`Meristem Group  |  Learning & Development Investment Report  |  ${periodLabel}`, {
     x: MARGIN, y: FOOTER_Y, w: PAGE_W - MARGIN * 2 - 0.6, h: 0.3,
     fontFace: 'Calibri', fontSize: 9, color: C.gray,
@@ -58,7 +58,7 @@ function addFooter(slide: PptxSlide, pageNumber: number, periodLabel: string) {
   })
 }
 
-function addTileGrid(slide: PptxSlide, tiles: Tile[], icons: IconImages, cols: number, top = CONTENT_TOP, bottom = FOOTER_Y - 0.25) {
+export function addTileGrid(slide: PptxSlide, tiles: Tile[], icons: IconImages, cols: number, top = CONTENT_TOP, bottom = FOOTER_Y - 0.25) {
   const gap = 0.18
   const rows = Math.ceil(tiles.length / cols)
   const tileW = (PAGE_W - MARGIN * 2 - gap * (cols - 1)) / cols
@@ -374,7 +374,7 @@ const SLIDE_BUILDERS = [
   (pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) => buildSlide8(pptx, data, periodLabel, icons),
 ]
 
-async function newPresentation() {
+export async function newPresentation() {
   const mod = await import('pptxgenjs')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const PptxGenJS = ((mod as any).default ?? mod) as new () => PptxGen
@@ -395,6 +395,12 @@ export async function buildReportPptx(data: GroupAnalytics, periodLabel: string)
 export async function exportFullDeckPptx(data: GroupAnalytics, periodLabel: string, filename = 'LD_Investment_Report') {
   const pptx = await buildReportPptx(data, periodLabel)
   await pptx.writeFile({ fileName: `${filename}.pptx` })
+}
+
+/** Build the full report deck server-side and return it as a Buffer (for email attachments). */
+export async function buildReportPptxBuffer(data: GroupAnalytics, periodLabel: string): Promise<Buffer> {
+  const pptx = await buildReportPptx(data, periodLabel)
+  return (await pptx.write({ outputType: 'nodebuffer' })) as Buffer
 }
 
 /** Build and download a single slide (1-indexed) as its own one-slide .pptx. */
