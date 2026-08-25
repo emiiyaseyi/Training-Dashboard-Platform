@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Trash2, Save, Loader2, X, Pencil } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, Plus, Trash2, Save, Loader2, X, Pencil, Users, Download, Upload } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 
 interface KSSRow {
@@ -44,6 +44,14 @@ export function KSSRecordsTab() {
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()))
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState('')
+
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkMonth, setBulkMonth] = useState(MONTHS[new Date().getMonth()])
+  const [bulkYear, setBulkYear] = useState(String(new Date().getFullYear()))
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ added: number; notFound: string[]; invalid: string[] } | null>(null)
+  const bulkCsvRef = useRef<HTMLInputElement>(null)
 
   const load = async () => {
     setLoading(true)
@@ -134,6 +142,58 @@ export function KSSRecordsTab() {
     }
   }
 
+  // Accepts "identifier, duration" per line — same loose parser whether the lines came from the
+  // paste box or a CSV file, so both entry paths share one code path.
+  const parseBulkLines = (text: string): { identifier: string; durationMinutes: number }[] => {
+    return text.split(/\r\n|\n/).map((l) => l.trim()).filter(Boolean)
+      .filter((l) => !/^(staff ?id|name|email|identifier)\s*,/i.test(l)) // skip an obvious header row
+      .map((line) => {
+        const [identifier, duration] = line.split(',').map((s) => s.trim())
+        return { identifier: identifier?.replace(/^"|"$/g, '') || '', durationMinutes: parseFloat(duration) }
+      })
+      .filter((r) => r.identifier)
+  }
+
+  const downloadBulkTemplate = () => {
+    const csv = 'Staff ID or Email or Name,Duration (minutes)\nMSL-0123,45\nsomeone@meristemng.com,30\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'kss_bulk_template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleBulkCsv = async (file: File) => {
+    setBulkText(await file.text())
+  }
+
+  const submitBulk = async () => {
+    const rows = parseBulkLines(bulkText)
+    if (rows.length === 0) return
+    setBulkSaving(true)
+    setBulkResult(null)
+    try {
+      const res = await fetch('/api/admin/records/kss/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: bulkMonth, year: parseInt(bulkYear), rows }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setBulkResult(data)
+        setBulkText('')
+        setPage(1)
+        await load()
+      } else {
+        alert(data.error || 'Bulk add failed.')
+      }
+    } finally {
+      setBulkSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -146,12 +206,70 @@ export function KSSRecordsTab() {
             className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
           />
         </div>
-        {!addingNew && (
-          <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
-            <Plus className="w-4 h-4" /> Add KSS Record
-          </button>
+        {!addingNew && !bulkMode && (
+          <>
+            <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
+              <Plus className="w-4 h-4" /> Add KSS Record
+            </button>
+            <button onClick={() => setBulkMode(true)} className="flex items-center gap-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-50">
+              <Users className="w-4 h-4" /> Bulk Add
+            </button>
+          </>
         )}
       </div>
+
+      {bulkMode && (
+        <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50/30">
+          <p className="text-xs text-slate-500">
+            One person per line: <code className="bg-slate-100 px-1 rounded">Staff ID or email or name, duration in minutes</code>.
+            Each person can have a different duration. Paste directly, or download the template, fill it in, and upload it.
+          </p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            placeholder={'MSL-0123, 45\nsomeone@meristemng.com, 30'}
+            rows={6}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Month</label>
+              <select value={bulkMonth} onChange={(e) => setBulkMonth(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Year</label>
+              <input type="number" value={bulkYear} onChange={(e) => setBulkYear(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+            </div>
+          </div>
+          {bulkResult && (
+            <div className="text-xs space-y-0.5">
+              <p className="text-emerald-700">{bulkResult.added} record(s) added.</p>
+              {bulkResult.notFound.length > 0 && <p className="text-red-600">Not found in the roster: {bulkResult.notFound.join(', ')}</p>}
+              {bulkResult.invalid.length > 0 && <p className="text-amber-700">Missing/invalid duration: {bulkResult.invalid.join(', ')}</p>}
+            </div>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={submitBulk}
+              disabled={bulkSaving || parseBulkLines(bulkText).length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {bulkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Add {parseBulkLines(bulkText).length > 0 ? `${parseBulkLines(bulkText).length} ` : ''}Record(s)
+            </button>
+            <button onClick={downloadBulkTemplate} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
+              <Download className="w-3.5 h-3.5" /> Download Template
+            </button>
+            <button onClick={() => bulkCsvRef.current?.click()} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
+              <Upload className="w-3.5 h-3.5" /> Upload CSV
+            </button>
+            <input ref={bulkCsvRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkCsv(f); e.target.value = '' }} />
+            <button onClick={() => { setBulkMode(false); setBulkText(''); setBulkResult(null) }} className="text-sm text-slate-500 hover:text-slate-700 ml-auto">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {addingNew && (
         <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50/30">

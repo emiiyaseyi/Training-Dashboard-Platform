@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json() as {
-      staffId: string; staffName: string; businessUnit: string; membershipOrg: string; amount: number; month?: string
+      staffId: string; staffName: string; businessUnit: string; membershipOrg: string; amount: number; month?: string; category?: string
     }
     if (!body.staffId?.trim() || !body.staffName?.trim() || !body.businessUnit?.trim() || !body.membershipOrg?.trim()) {
       return NextResponse.json({ error: 'Staff ID, Name, Business Unit, and Membership Organization are required.' }, { status: 400 })
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         membershipOrg: body.membershipOrg.trim(),
         amount: Number(body.amount),
         month: body.month || null,
+        category: body.category === 'certification' ? 'certification' : 'membership',
         batchId: batch.id,
       },
     })

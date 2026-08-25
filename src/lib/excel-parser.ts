@@ -44,9 +44,18 @@ export interface SubscriptionRow {
   staffId: string
   staffName: string
   email: string // optional "Staff Email" column — fallback match key alongside Staff ID
+  category: string // "membership" | "certification" — defaults to "membership" when the column is absent or unrecognized
   businessUnit: string
   membershipOrg: string
   amount: number
+}
+
+// Recognizes the two categories from a wide range of admin-typed labels — never rejects the row
+// over this, just falls back to "membership" (the original, only category this table ever had).
+function parseSubscriptionCategory(val: unknown): string {
+  const s = String(val ?? '').trim().toLowerCase()
+  if (/certif|refund/.test(s)) return 'certification'
+  return 'membership'
 }
 
 export interface RosterRow {
@@ -310,6 +319,7 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
     bu:      findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     org:     findHeader(headers, ['membershiporganization', 'membershiporganisation', 'organization', 'organisation', 'membership', 'body', 'professionalbody']),
     amount:  findHeader(headers, ['amount', 'cost', 'fee', 'subscriptioncost', 'subscriptionfee']),
+    category: findHeader(headers, ['category', 'subscriptiontype', 'type']),
   }
 
   if (!col.name)   errors.push('Could not find a "Name" column.')
@@ -334,6 +344,7 @@ export function parseSubscriptionExcel(buffer: Buffer): ParseResult<Subscription
       staffId:      staffId || `UNKNOWN_${i + 1}`,
       staffName:    name,
       email:        normalise(r[col.email ?? ''] ?? '').toLowerCase(),
+      category:     parseSubscriptionCategory(r[col.category ?? '']),
       businessUnit: normalise(r[col.bu!]),
       membershipOrg:normalise(r[col.org!]),
       amount,

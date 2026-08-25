@@ -532,6 +532,7 @@ model SubscriptionRecord {
   staffId        String
   staffName      String
   email          String?  // optional "Staff Email" upload column — fallback match key when Staff ID resolution fails
+  category       String   @default("membership") // "membership" | "certification" — Membership Subscription vs Certification Refund
   businessUnit   String
   membershipOrg  String
   amount         Float
