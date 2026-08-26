@@ -7,9 +7,11 @@ import { requirePermission } from '@/lib/session-guard'
 // Post-1/Post-2 surveys to its attendees via "Already Attended Trainings". Business Unit is a
 // property of each attendee, not of the training itself (the same session commonly has attendees
 // from several BUs), so it's tracked per-attendee rather than splitting one training into a
-// separate card per BU. A training that already has a TrainingSchedule is excluded entirely —
-// once scheduled, it's managed (attendees, sending, reports) from the Training Schedules section
-// below instead, not re-offered here as a fresh candidate.
+// separate card per BU. A training with a REGULAR schedule (entered normally, not through this
+// panel) is excluded — that one's managed from Training Schedules instead. A training this panel
+// itself already created a schedule for stays listed, though — the whole point of surfacing it
+// again is so the admin can see its send/fill status and catch up stragglers right here, instead
+// of it vanishing the moment a schedule exists.
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
   if (gate instanceof NextResponse) return gate
@@ -19,10 +21,12 @@ export async function GET() {
       prisma.trainingRecord.findMany({
         select: { training: true, businessUnit: true, month: true, year: true, staffId: true, staffName: true },
       }),
-      prisma.trainingSchedule.findMany({ select: { trainingName: true } }),
+      prisma.trainingSchedule.findMany({ select: { trainingName: true, sourcedFromHistoricalData: true } }),
     ])
 
-    const existingScheduleNames = new Set(schedules.map((s) => s.trainingName.trim().toLowerCase()))
+    const existingScheduleNames = new Set(
+      schedules.filter((s) => !s.sourcedFromHistoricalData).map((s) => s.trainingName.trim().toLowerCase())
+    )
 
     const groups = new Map<string, {
       training: string; month: string; year: number

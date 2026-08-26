@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { History, Search, ChevronDown, ChevronUp, Loader2, Send } from 'lucide-react'
+import { History, Search, ChevronDown, ChevronUp, Loader2, Send, RefreshCw, UserPlus } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface HistoricalAttendee { staffId: string; staffName: string; businessUnit: string }
 interface HistoricalGroup {
@@ -14,7 +15,27 @@ interface HistoricalGroup {
   attendees: HistoricalAttendee[]
 }
 
+interface ScheduleAttendee {
+  id: string
+  staffId: string
+  staffName: string
+  post1SurveySentAt: string | null
+  post1SurveyRespondedAt: string | null
+  post2SurveySentAt: string | null
+  post2SurveyRespondedAt: string | null
+}
+interface Schedule {
+  id: string
+  trainingName: string
+  sourcedFromHistoricalData: boolean
+  post1Enabled: boolean
+  post2Enabled: boolean
+  attendees: ScheduleAttendee[]
+}
+
 type StageChoice = 'both' | 'post1' | 'post2'
+type Status = 'none' | 'yellow' | 'green'
+const PAGE_SIZE = 10
 
 function monthIndex(month: string): number {
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -32,14 +53,45 @@ function firstOfMonth(month: string, year: number): string {
   return `${year}-${String(monthIndex(month) + 1).padStart(2, '0')}-01`
 }
 
+// Yellow = a schedule exists here and at least one send has gone out, but not everyone enabled
+// has responded yet. Green = every enabled stage has been filled by every attendee on the
+// schedule — fully done, nothing left to chase. Neither color at all means no schedule yet (the
+// original "pick attendees and send" flow still applies).
+function scheduleStatus(schedule: Schedule | undefined): Status {
+  if (!schedule) return 'none'
+  const stages: ('post1' | 'post2')[] = []
+  if (schedule.post1Enabled) stages.push('post1')
+  if (schedule.post2Enabled) stages.push('post2')
+  if (stages.length === 0 || schedule.attendees.length === 0) return 'none'
+
+  let totalSlots = 0, totalSent = 0, totalFilled = 0
+  for (const a of schedule.attendees) {
+    for (const stage of stages) {
+      totalSlots++
+      if (a[`${stage}SurveySentAt`]) totalSent++
+      if (a[`${stage}SurveyRespondedAt`]) totalFilled++
+    }
+  }
+  if (totalSent === 0) return 'none'
+  return totalFilled === totalSlots ? 'green' : 'yellow'
+}
+
+function TickCell({ sentAt, respondedAt }: { sentAt: string | null; respondedAt: string | null }) {
+  if (respondedAt) return <span className="text-blue-600 font-bold text-base">✓</span>
+  if (sentAt) return <span className="text-emerald-600 font-bold text-base">✓</span>
+  return <span className="text-slate-300 font-bold text-base">—</span>
+}
+
 interface Props {
   onScheduleCreated: () => void
 }
 
 export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [groups, setGroups] = useState<HistoricalGroup[]>([])
+  const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [startDate, setStartDate] = useState('')
@@ -49,19 +101,30 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [creating, setCreating] = useState(false)
   const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[]; post1Sent?: number; post2Sent?: number } | null>(null)
 
+  const [sendingKey, setSendingKey] = useState<string | null>(null)
+  const [addingMoreFor, setAddingMoreFor] = useState<string | null>(null)
+  const [addMoreSelected, setAddMoreSelected] = useState<Set<string>>(new Set())
+
   const load = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/historical-trainings')
-      setGroups(await res.json())
+      const [groupsRes, schedulesRes] = await Promise.all([
+        fetch('/api/admin/historical-trainings'),
+        fetch('/api/admin/training-schedule'),
+      ])
+      setGroups(await groupsRes.json())
+      const allSchedules: Schedule[] = await schedulesRes.json()
+      setSchedules(allSchedules.filter((s) => s.sourcedFromHistoricalData))
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => { setPage(1) }, [query])
 
   const groupKey = (g: HistoricalGroup) => `${g.training}|${g.month}|${g.year}`
+  const scheduleFor = (g: HistoricalGroup) => schedules.find((s) => s.trainingName.trim().toLowerCase() === g.training.trim().toLowerCase())
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -82,6 +145,8 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     setRemindersEnabled(true)
     setStageChoice('both')
     setResult(null)
+    setAddingMoreFor(null)
+    setAddMoreSelected(new Set())
   }
 
   const toggleAttendee = (staffId: string) => {
@@ -147,6 +212,55 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
 
       setResult({ key: groupKey(g), added: data.added ?? 0, notFound: data.notFound ?? [], noEmail: data.noEmail ?? [], post1Sent, post2Sent })
       onScheduleCreated()
+      await load()
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const sendToPending = async (scheduleId: string, stage: 'post1' | 'post2', key: string) => {
+    setSendingKey(`${key}:${stage}`)
+    try {
+      await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }),
+      })
+      await load()
+    } finally {
+      setSendingKey(null)
+    }
+  }
+
+  const toggleAddMoreSelected = (staffId: string) => {
+    setAddMoreSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(staffId)) next.delete(staffId)
+      else next.add(staffId)
+      return next
+    })
+  }
+
+  const addMoreAndSend = async (schedule: Schedule) => {
+    if (addMoreSelected.size === 0) return
+    setCreating(true)
+    try {
+      await fetch(`/api/admin/training-schedule/${schedule.id}/attendees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiers: [...addMoreSelected] }),
+      })
+      if (schedule.post1Enabled) {
+        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+        }).catch(() => {})
+      }
+      if (schedule.post2Enabled) {
+        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+        }).catch(() => {})
+      }
+      setAddMoreSelected(new Set())
+      setAddingMoreFor(null)
+      await load()
     } finally {
       setCreating(false)
     }
@@ -156,7 +270,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     <SectionCard
       icon={History}
       title="Already Attended Trainings"
-      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Emails go out immediately when you create the schedule below, and daily reminders follow automatically until each person responds (reminders are on by default). This never touches Training Data or the Google Sheet mirror again — it's purely for tracking survey sends. Find it under Training Schedules below, in the &quot;Already Attended Trainings — Sent&quot; tab."
+      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Emails go out immediately when you create the schedule below, and daily reminders follow automatically until each person responds (reminders are on by default). This never touches Training Data or the Google Sheet mirror again — it's purely for tracking survey sends. A training name turns yellow once its surveys are sending and green once everyone enabled has responded."
     >
       <div className="space-y-3">
         {groups.length > 5 && (
@@ -176,113 +290,213 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
         ) : filtered.length === 0 ? (
           <p className="text-xs text-slate-400">No uploaded Training Data found yet.</p>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((g) => {
-              const key = groupKey(g)
-              const isExpanded = expandedKey === key
-              return (
-                <div key={key} className="border border-slate-200 rounded-lg">
-                  <button
-                    onClick={() => expand(g)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 truncate">{g.training}</p>
-                      <p className="text-xs text-slate-500">
-                        {g.businessUnits.length <= 2 ? g.businessUnits.join(', ') : `${g.businessUnits.length} Business Units`} · {g.month} {g.year} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                    {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
-                  </button>
+          <>
+            <div className="space-y-2">
+              {paginate(filtered, page, PAGE_SIZE).map((g) => {
+                const key = groupKey(g)
+                const isExpanded = expandedKey === key
+                const schedule = scheduleFor(g)
+                const status = scheduleStatus(schedule)
+                const notYetAdded = schedule
+                  ? g.attendees.filter((a) => !schedule.attendees.some((sa) => sa.staffId === a.staffId))
+                  : []
 
-                  {isExpanded && (
-                    <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-slate-600">Attendees ({selected.size} of {g.attendees.length} selected)</p>
-                        <div className="flex items-center gap-2 text-xs">
-                          <button onClick={() => setSelected(new Set(g.attendees.map((a) => a.staffId)))} className="text-blue-600 hover:underline">Select all</button>
-                          <button onClick={() => setSelected(new Set())} className="text-slate-500 hover:underline">Clear</button>
+                return (
+                  <div key={key} className="border border-slate-200 rounded-lg">
+                    <button
+                      onClick={() => expand(g)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium truncate ${
+                          status === 'green' ? 'text-emerald-600' : status === 'yellow' ? 'text-amber-600' : 'text-slate-800'
+                        }`}>
+                          {g.training}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {g.businessUnits.length <= 2 ? g.businessUnits.join(', ') : `${g.businessUnits.length} Business Units`} · {g.month} {g.year} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+                    </button>
+
+                    {isExpanded && schedule ? (
+                      <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-slate-600">Survey status</p>
+                          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                            status === 'green' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {status === 'green' ? 'All responses received' : 'In progress'}
+                          </span>
                         </div>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
-                        {g.attendees.map((a) => (
-                          <label key={a.staffId} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 cursor-pointer">
-                            <input type="checkbox" checked={selected.has(a.staffId)} onChange={() => toggleAttendee(a.staffId)} />
-                            <span className="text-slate-700">{a.staffName}</span>
-                            <span className="text-slate-400">{a.businessUnit}</span>
-                            <span className="text-slate-400 ml-auto">{a.staffId}</span>
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <label className="text-xs text-slate-500">
-                          Training start date
-                          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-                        </label>
-                        <label className="text-xs text-slate-500">
-                          Training end date
-                          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-                        </label>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Defaulted to the 1st of {g.month} {g.year} (the recorded month) — confirm or adjust to the actual training dates.
-                      </p>
-
-                      <div>
-                        <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {([
-                            ['both', 'Both (default)'],
-                            ['post1', 'Post-1 only'],
-                            ['post2', 'Post-2 only'],
-                          ] as const).map(([value, label]) => (
+                        <div className="border border-slate-100 rounded-lg overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 text-slate-500">
+                                <th className="text-left font-medium px-3 py-1.5">Name</th>
+                                {schedule.post1Enabled && <th className="text-center font-medium px-3 py-1.5">Post-1</th>}
+                                {schedule.post2Enabled && <th className="text-center font-medium px-3 py-1.5">Post-2</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {schedule.attendees.map((a) => (
+                                <tr key={a.id} className="border-t border-slate-50">
+                                  <td className="px-3 py-1.5 text-slate-700">{a.staffName}</td>
+                                  {schedule.post1Enabled && <td className="text-center px-3 py-1.5"><TickCell sentAt={a.post1SurveySentAt} respondedAt={a.post1SurveyRespondedAt} /></td>}
+                                  {schedule.post2Enabled && <td className="text-center px-3 py-1.5"><TickCell sentAt={a.post2SurveySentAt} respondedAt={a.post2SurveyRespondedAt} /></td>}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {schedule.post1Enabled && (
                             <button
-                              key={value}
-                              type="button"
-                              onClick={() => setStageChoice(value)}
-                              className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
-                                stageChoice === value ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
-                              }`}
+                              onClick={() => sendToPending(schedule.id, 'post1', key)}
+                              disabled={sendingKey === `${key}:post1`}
+                              className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1.5 hover:bg-navy-50 disabled:opacity-50"
                             >
-                              {label}
+                              {sendingKey === `${key}:post1` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                              Trigger Post-1 for pending
                             </button>
+                          )}
+                          {schedule.post2Enabled && (
+                            <button
+                              onClick={() => sendToPending(schedule.id, 'post2', key)}
+                              disabled={sendingKey === `${key}:post2`}
+                              className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1.5 hover:bg-navy-50 disabled:opacity-50"
+                            >
+                              {sendingKey === `${key}:post2` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                              Trigger Post-2 for pending
+                            </button>
+                          )}
+                        </div>
+
+                        {notYetAdded.length > 0 && (
+                          <div>
+                            <button
+                              onClick={() => { setAddingMoreFor(addingMoreFor === key ? null : key); setAddMoreSelected(new Set()) }}
+                              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                              {addingMoreFor === key ? 'Hide' : `Add more attendees (${notYetAdded.length} not yet added)`}
+                            </button>
+                            {addingMoreFor === key && (
+                              <div className="mt-2 space-y-2">
+                                <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
+                                  {notYetAdded.map((a) => (
+                                    <label key={a.staffId} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 cursor-pointer">
+                                      <input type="checkbox" checked={addMoreSelected.has(a.staffId)} onChange={() => toggleAddMoreSelected(a.staffId)} />
+                                      <span className="text-slate-700">{a.staffName}</span>
+                                      <span className="text-slate-400">{a.businessUnit}</span>
+                                      <span className="text-slate-400 ml-auto">{a.staffId}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => addMoreAndSend(schedule)}
+                                  disabled={creating || addMoreSelected.size === 0}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+                                >
+                                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                  Add {addMoreSelected.size} &amp; Send
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : isExpanded ? (
+                      <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-slate-600">Attendees ({selected.size} of {g.attendees.length} selected)</p>
+                          <div className="flex items-center gap-2 text-xs">
+                            <button onClick={() => setSelected(new Set(g.attendees.map((a) => a.staffId)))} className="text-blue-600 hover:underline">Select all</button>
+                            <button onClick={() => setSelected(new Set())} className="text-slate-500 hover:underline">Clear</button>
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border border-slate-100 rounded-lg divide-y divide-slate-50">
+                          {g.attendees.map((a) => (
+                            <label key={a.staffId} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 cursor-pointer">
+                              <input type="checkbox" checked={selected.has(a.staffId)} onChange={() => toggleAttendee(a.staffId)} />
+                              <span className="text-slate-700">{a.staffName}</span>
+                              <span className="text-slate-400">{a.businessUnit}</span>
+                              <span className="text-slate-400 ml-auto">{a.staffId}</span>
+                            </label>
                           ))}
                         </div>
-                      </div>
 
-                      <label className="flex items-center gap-2 text-xs text-slate-600">
-                        <input type="checkbox" checked={remindersEnabled} onChange={(e) => setRemindersEnabled(e.target.checked)} />
-                        Enable daily reminder nudges for this training (on by default)
-                      </label>
-
-                      {result && result.key === key && (
-                        <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-                          <p className="text-emerald-700">
-                            Added {result.added} attendee{result.added === 1 ? '' : 's'}.
-                            {result.post1Sent !== undefined && ` Post-1 sent to ${result.post1Sent}.`}
-                            {result.post2Sent !== undefined && ` Post-2 sent to ${result.post2Sent}.`}
-                            {' '}Daily reminders will follow automatically until each person responds — see the &quot;Already Attended Trainings — Sent&quot; tab under Training Schedules below for status.
-                          </p>
-                          {result.notFound.length > 0 && <p className="text-amber-700">Not found in the roster: {result.notFound.join(', ')}</p>}
-                          {result.noEmail.length > 0 && <p className="text-amber-700">No email on file: {result.noEmail.join(', ')}</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <label className="text-xs text-slate-500">
+                            Training start date
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                          </label>
+                          <label className="text-xs text-slate-500">
+                            Training end date
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                          </label>
                         </div>
-                      )}
+                        <p className="text-[11px] text-slate-400">
+                          Defaulted to the 1st of {g.month} {g.year} (the recorded month) — confirm or adjust to the actual training dates.
+                        </p>
 
-                      <button
-                        onClick={() => createAndSend(g)}
-                        disabled={creating || selected.size === 0 || !startDate || !endDate}
-                        className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
-                      >
-                        {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        Create Schedule for {selected.size} Attendee{selected.size === 1 ? '' : 's'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                        <div>
+                          <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {([
+                              ['both', 'Both (default)'],
+                              ['post1', 'Post-1 only'],
+                              ['post2', 'Post-2 only'],
+                            ] as const).map(([value, label]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setStageChoice(value)}
+                                className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                                  stageChoice === value ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-600">
+                          <input type="checkbox" checked={remindersEnabled} onChange={(e) => setRemindersEnabled(e.target.checked)} />
+                          Enable daily reminder nudges for this training (on by default)
+                        </label>
+
+                        {result && result.key === key && (
+                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
+                            <p className="text-emerald-700">
+                              Added {result.added} attendee{result.added === 1 ? '' : 's'}.
+                              {result.post1Sent !== undefined && ` Post-1 sent to ${result.post1Sent}.`}
+                              {result.post2Sent !== undefined && ` Post-2 sent to ${result.post2Sent}.`}
+                              {' '}Daily reminders will follow automatically until each person responds.
+                            </p>
+                            {result.notFound.length > 0 && <p className="text-amber-700">Not found in the roster: {result.notFound.join(', ')}</p>}
+                            {result.noEmail.length > 0 && <p className="text-amber-700">No email on file: {result.noEmail.join(', ')}</p>}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => createAndSend(g)}
+                          disabled={creating || selected.size === 0 || !startDate || !endDate}
+                          className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+                        >
+                          {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          Create Schedule for {selected.size} Attendee{selected.size === 1 ? '' : 's'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+            <Pagination page={page} totalItems={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+          </>
         )}
       </div>
     </SectionCard>
