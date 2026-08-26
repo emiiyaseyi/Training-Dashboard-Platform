@@ -4,6 +4,22 @@ import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 
+// A pooled SMTP transport supports several connections at once, but a plain sequential
+// for-await loop never actually uses more than one of them — each send blocks the next from
+// starting. That's what made a 7-person batch take over a minute (14 sequential SMTP round
+// trips for Post-1+Post-2, real network latency each). Running attendees with bounded
+// concurrency (matching mailer.ts's maxConnections) actually uses the pool it already pays for.
+async function runConcurrent<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const item = items[next++]
+      await fn(item)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+}
+
 const STAGE_SENT_FIELD = {
   pre: 'preSurveySentAt',
   post1: 'post1SurveySentAt',
@@ -90,12 +106,12 @@ export async function sendSurveyStage(
     : schedule.attendees.filter((a) => (onlyUnsent ? !a[sentField] : !a[respondedField]))
 
   // One pooled transport reused for every attendee in this call, instead of a fresh SMTP
-  // connection + handshake per email — with a schedule of any real size, sending fully
-  // sequentially through a brand-new connection each time was slow enough to risk the request
-  // outliving the route's timeout with no error ever reaching the admin's screen.
+  // connection + handshake per email — and actually sent with bounded concurrency (matching the
+  // pool's own maxConnections), not one at a time, since a sequential await loop never uses more
+  // than one pooled connection regardless of how many are available.
   const mailer = await createMailSender()
   try {
-    for (const attendee of targets) {
+    await runConcurrent(targets, 3, async (attendee) => {
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
@@ -107,7 +123,7 @@ export async function sendSurveyStage(
             ? 'No line manager email on file — cannot send the manager review.'
             : 'No email address on file for this staff member.',
         })
-        continue
+        return
       }
 
       const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
@@ -140,7 +156,7 @@ export async function sendSurveyStage(
         result.skipped.push({ staffName: attendee.staffName, reason: message })
         await logSend(schedule, stage, attendee, toAddress, false, false, message)
       }
-    }
+    })
   } finally {
     mailer.close()
   }
@@ -220,11 +236,11 @@ export async function sendSurveyReminders(
 
   const mailer = await createMailSender()
   try {
-    for (const attendee of due) {
+    await runConcurrent(due, 3, async (attendee) => {
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
-      if (!toAddress) continue // already reported as skipped by the original send
+      if (!toAddress) return // already reported as skipped by the original send
 
       const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
@@ -252,7 +268,7 @@ export async function sendSurveyReminders(
         result.skipped.push({ staffName: attendee.staffName, reason: message })
         await logSend(schedule, stage, attendee, toAddress, true, false, message)
       }
-    }
+    })
   } finally {
     mailer.close()
   }

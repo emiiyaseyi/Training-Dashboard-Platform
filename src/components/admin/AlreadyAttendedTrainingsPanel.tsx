@@ -102,6 +102,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[]; post1Sent?: number; post2Sent?: number } | null>(null)
 
   const [sendingKey, setSendingKey] = useState<string | null>(null)
+  const [sendFeedback, setSendFeedback] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
   const [addingMoreFor, setAddingMoreFor] = useState<string | null>(null)
   const [addMoreSelected, setAddMoreSelected] = useState<Set<string>>(new Set())
 
@@ -145,6 +146,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     setRemindersEnabled(true)
     setStageChoice('both')
     setResult(null)
+    setSendFeedback(null)
     setAddingMoreFor(null)
     setAddMoreSelected(new Set())
   }
@@ -220,10 +222,17 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
 
   const sendToPending = async (scheduleId: string, stage: 'post1' | 'post2', key: string) => {
     setSendingKey(`${key}:${stage}`)
+    setSendFeedback(null)
     try {
-      await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
+      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }),
       })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data) {
+        setSendFeedback({ key: `${key}:${stage}`, sent: data.sent ?? 0, skipped: data.skipped ?? [] })
+      } else {
+        setSendFeedback({ key: `${key}:${stage}`, sent: 0, skipped: [{ staffName: '', reason: data?.error || `Failed (server returned ${res.status}).` }] })
+      }
       await load()
     } finally {
       setSendingKey(null)
@@ -325,9 +334,9 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-medium text-slate-600">Survey status</p>
                           <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                            status === 'green' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                            status === 'green' ? 'bg-emerald-100 text-emerald-700' : status === 'yellow' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
                           }`}>
-                            {status === 'green' ? 'All responses received' : 'In progress'}
+                            {status === 'green' ? 'All responses received' : status === 'yellow' ? 'In progress' : 'Not yet sent'}
                           </span>
                         </div>
                         <div className="border border-slate-100 rounded-lg overflow-x-auto">
@@ -372,6 +381,17 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                             </button>
                           )}
                         </div>
+
+                        {sendFeedback && (sendFeedback.key === `${key}:post1` || sendFeedback.key === `${key}:post2`) && (
+                          <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
+                            <p className={sendFeedback.sent > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                              {sendFeedback.sent} email{sendFeedback.sent === 1 ? '' : 's'} sent.
+                            </p>
+                            {sendFeedback.skipped.map((s, i) => (
+                              <p key={i} className="text-red-600">{s.staffName ? `${s.staffName}: ` : ''}{s.reason}</p>
+                            ))}
+                          </div>
+                        )}
 
                         {notYetAdded.length > 0 && (
                           <div>

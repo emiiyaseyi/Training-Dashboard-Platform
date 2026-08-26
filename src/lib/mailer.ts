@@ -31,8 +31,21 @@ async function getTransportAndSettings() {
   // here — re-encrypt and persist it before it's ever used, so it doesn't stay exposed.
   let storedPassword = s.password
   if (!isEncryptedSecret(storedPassword)) {
-    storedPassword = encryptSecret(storedPassword)
+    storedPassword = encryptSecret(storedPassword.trim())
     await prisma.smtpSettings.update({ where: { id: s.id }, data: { password: storedPassword } })
+  } else {
+    // Same self-heal for a value that WAS already encrypted, but from before the save route
+    // trimmed input — a stray leading/trailing space or newline (a very common copy-paste
+    // artifact) gets stored and sent byte-for-byte, while most other mail clients silently trim
+    // credential fields before authenticating. That mismatch is exactly what makes an
+    // otherwise-correct password fail here and nowhere else. Re-persisted only when trimming
+    // actually changes something, so this is a no-op once already clean.
+    const decrypted = decryptSecret(storedPassword)
+    const trimmed = decrypted.trim()
+    if (trimmed !== decrypted) {
+      storedPassword = encryptSecret(trimmed)
+      await prisma.smtpSettings.update({ where: { id: s.id }, data: { password: storedPassword } })
+    }
   }
   // Pooled so a caller sending several emails off ONE resolved transport (see createMailSender
   // below) reuses live SMTP connections across them instead of a fresh TLS handshake + auth per
@@ -49,7 +62,7 @@ async function getTransportAndSettings() {
     host: s.host,
     port: s.port,
     secure: s.port === 465,
-    auth: { user: s.username, pass: decryptSecret(storedPassword) },
+    auth: { user: s.username.trim(), pass: decryptSecret(storedPassword) },
     pool: true,
     maxConnections: 3,
     connectionTimeout: 15_000,
