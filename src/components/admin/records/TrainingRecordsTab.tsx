@@ -71,7 +71,13 @@ export function TrainingRecordsTab() {
   const [addingVendorForId, setAddingVendorForId] = useState<string | null>(null)
   const [newVendorInput, setNewVendorInput] = useState('')
   const [savingNewVendor, setSavingNewVendor] = useState(false)
-  const [newTraining, setNewTraining] = useState({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+  const [newTraining, setNewTraining] = useState({
+    trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
+    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
+    preEnabled: true, post1Enabled: true, post2Enabled: true,
+    additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
+  })
+  const [surveyDaysAfter, setSurveyDaysAfter] = useState({ post1DaysAfter: 1, post2DaysAfter: 30 })
   const [attendeeQuery, setAttendeeQuery] = useState('')
   const [pendingAttendees, setPendingAttendees] = useState<RosterStaff[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
@@ -106,6 +112,9 @@ export function TrainingRecordsTab() {
     fetch('/api/training-types').then((r) => r.json()).then((d) => setTrainingTypes(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/capabilities').then((r) => r.json()).then((d) => setCapabilities(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/vendors').then((r) => r.json()).then((d) => setVendors(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/admin/survey-settings').then((r) => r.json()).then((d) => setSurveyDaysAfter({
+      post1DaysAfter: d.post1DaysAfter ?? 1, post2DaysAfter: d.post2DaysAfter ?? 30,
+    })).catch(() => {})
   }, [])
 
   const attendeeResults = useMemo(() => {
@@ -116,7 +125,12 @@ export function TrainingRecordsTab() {
   }, [attendeeQuery, directory, pendingAttendees])
 
   const resetNewTrainingForm = () => {
-    setNewTraining({ trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '' })
+    setNewTraining({
+      trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
+      trainingMode: 'physical', location: '', meetingLink: '',
+      preEnabled: true, post1Enabled: true, post2Enabled: true,
+      additionalCc: '', additionalCcMode: 'all',
+    })
     setPendingAttendees([])
     setAttendeeQuery('')
     setAddingNew(false)
@@ -242,6 +256,14 @@ export function TrainingRecordsTab() {
           trainingType: newTraining.trainingType || undefined,
           capability: newTraining.capability || undefined,
           vendor: newTraining.vendor || undefined,
+          trainingMode: newTraining.trainingMode,
+          location: newTraining.location || undefined,
+          meetingLink: newTraining.meetingLink || undefined,
+          preEnabled: newTraining.preEnabled,
+          post1Enabled: newTraining.post1Enabled,
+          post2Enabled: newTraining.post2Enabled,
+          additionalCc: newTraining.additionalCc || undefined,
+          additionalCcMode: newTraining.additionalCcMode,
         }),
       })
       if (!scheduleRes.ok) {
@@ -255,6 +277,23 @@ export function TrainingRecordsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifiers: pendingAttendees.map((p) => p.staffId) }),
       })
+
+      // A training logged with an end date already far enough in the past that Post-1/Post-2 are
+      // already due (per Admin -> Survey Automation's "days after end date" settings) sends right
+      // away instead of waiting for tomorrow's daily cron tick. A future end date does nothing
+      // here — the cron picks it up once actually due, same as always.
+      const daysSinceEnd = (Date.now() - new Date(newTraining.endDate).getTime()) / 86400000
+      if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) {
+        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+        }).catch(() => {})
+      }
+      if (newTraining.post2Enabled && daysSinceEnd >= surveyDaysAfter.post2DaysAfter) {
+        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+        }).catch(() => {})
+      }
+
       resetNewTrainingForm()
       setPage(1)
       await load()
@@ -558,6 +597,105 @@ export function TrainingRecordsTab() {
             Cost, type, and capability feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added.
             Vendor is used by the Talent Members report (Admin → Vendors manages this list). All are set once here and apply to the whole schedule.
           </p>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Where</p>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {([
+                ['physical', 'Physical'],
+                ['virtual', 'Virtual'],
+                ['platform', 'Learning Platform'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setNewTraining({ ...newTraining, trainingMode: value })}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                    newTraining.trainingMode === value ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {newTraining.trainingMode === 'physical' ? (
+              <input
+                value={newTraining.location}
+                onChange={(e) => setNewTraining({ ...newTraining, location: e.target.value })}
+                placeholder="Venue address"
+                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+              />
+            ) : (
+              <input
+                value={newTraining.meetingLink}
+                onChange={(e) => setNewTraining({ ...newTraining, meetingLink: e.target.value })}
+                placeholder={newTraining.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : 'Learning platform link'}
+                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+              />
+            )}
+            <p className="text-[11px] text-slate-400 mt-1">Included in the Pre-Training email so attendees know where to go.</p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
+            <div className="flex flex-wrap items-center gap-4">
+              {([
+                ['preEnabled', 'Pre-Training'],
+                ['post1Enabled', 'Post-1'],
+                ['post2Enabled', 'Post-2'],
+              ] as const).map(([field, label]) => (
+                <label key={field} className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={newTraining[field]}
+                    onChange={(e) => setNewTraining({ ...newTraining, [field]: e.target.checked })}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              All three are on by default. Uncheck any stage to disable it entirely for this schedule — it will never be sent, initially or as a reminder.
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Additional Cc (optional)</p>
+            <div className="flex flex-wrap items-center gap-4 mb-2">
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="radio"
+                  checked={newTraining.additionalCcMode === 'all'}
+                  onChange={() => setNewTraining({ ...newTraining, additionalCcMode: 'all' })}
+                />
+                Same for every participant
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="radio"
+                  checked={newTraining.additionalCcMode === 'individual'}
+                  onChange={() => setNewTraining({ ...newTraining, additionalCcMode: 'individual' })}
+                />
+                Different per participant
+              </label>
+            </div>
+            {newTraining.additionalCcMode === 'all' ? (
+              <input
+                value={newTraining.additionalCc}
+                onChange={(e) => setNewTraining({ ...newTraining, additionalCc: e.target.value })}
+                placeholder="e.g. hr@meristemng.com, someone@meristemng.com"
+                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+              />
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                Set per attendee from Survey Automation → Training Schedules (after creating this schedule). Anyone left blank still gets
+                the platform-wide default Cc (Admin → SMTP Settings), just no extra addresses of their own.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-400 mt-1">
+              Added on top of the automatic line-manager Cc and the platform-wide default Cc — never replaces either.
+            </p>
+          </div>
 
           {createError && <p className="text-xs text-red-600">{createError}</p>}
           <div className="flex items-center gap-2">
