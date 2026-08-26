@@ -66,6 +66,11 @@ export interface SendMailInput {
   html: string
   fromName?: string
   attachments?: { filename: string; content: Buffer }[]
+  // Skips merging in SmtpSettings.defaultCc for this one send — used by the reminder sweep (see
+  // SurveySettings.excludeDefaultCcOnReminders) so a daily nudge doesn't keep copying the
+  // platform-wide default Cc list every single day. Every other caller leaves this unset, so
+  // "every email, no exceptions" still holds everywhere else.
+  skipDefaultCc?: boolean
 }
 
 // Splits an admin-typed "a@x.com, b@y.com; c@z.com" field into a clean address list — the one
@@ -83,7 +88,7 @@ function buildMessage(settings: { fromAddress: string | null; fromName: string; 
   // Applied here, not at each call site — this is the one choke point every email the platform
   // sends passes through (surveys, reminders, custom surveys, cron failure alerts), so this is
   // the only place that can guarantee "every email, no exceptions" without touching every caller.
-  const allCc = [...new Set([...(input.cc || []), ...parseCcList(settings.defaultCc)])]
+  const allCc = [...new Set([...(input.cc || []), ...(input.skipDefaultCc ? [] : parseCcList(settings.defaultCc))])]
   return {
     from,
     to: input.to,

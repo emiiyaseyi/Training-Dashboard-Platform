@@ -19,6 +19,7 @@ export async function GET() {
     expiryEnabled: settings?.expiryEnabled ?? true,
     expiryDays: settings?.expiryDays ?? 7,
     maxFileUploadMB: settings?.maxFileUploadMB ?? 20,
+    excludeDefaultCcOnReminders: settings?.excludeDefaultCcOnReminders ?? true,
   })
 }
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       expiryEnabled: !!body.expiryEnabled,
       expiryDays: Number.isFinite(Number(body.expiryDays)) ? Number(body.expiryDays) : 7,
       maxFileUploadMB: [5, 10, 20, 50, 100].includes(Number(body.maxFileUploadMB)) ? Number(body.maxFileUploadMB) : 20,
+      excludeDefaultCcOnReminders: !!body.excludeDefaultCcOnReminders,
     }
     const existing = await prisma.surveySettings.findFirst()
     const updated = existing

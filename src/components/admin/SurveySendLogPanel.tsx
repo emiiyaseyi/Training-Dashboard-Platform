@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { History } from 'lucide-react'
+import { History, Search } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { DataTable } from '@/components/ui/DataTable'
 
@@ -25,20 +25,25 @@ export function SurveySendLogPanel() {
   const [stageFilter, setStageFilter] = useState('ALL')
   const [typeFilter, setTypeFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
-    fetch('/api/admin/survey-send-log?limit=100')
+    fetch('/api/admin/survey-send-log?limit=300')
       .then((r) => r.json())
       .then((data) => setLog(Array.isArray(data) ? data : []))
       .finally(() => setLoading(false))
   }, [])
 
-  const filtered = useMemo(() => log.filter((r) => {
-    if (stageFilter !== 'ALL' && r.stage !== stageFilter) return false
-    if (typeFilter !== 'ALL' && (typeFilter === 'reminder') !== r.isReminder) return false
-    if (statusFilter !== 'ALL' && (statusFilter === 'sent') !== r.success) return false
-    return true
-  }), [log, stageFilter, typeFilter, statusFilter])
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return log.filter((r) => {
+      if (stageFilter !== 'ALL' && r.stage !== stageFilter) return false
+      if (typeFilter !== 'ALL' && (typeFilter === 'reminder') !== r.isReminder) return false
+      if (statusFilter !== 'ALL' && (statusFilter === 'sent') !== r.success) return false
+      if (q && !(r.trainingName.toLowerCase().includes(q) || r.staffName.toLowerCase().includes(q))) return false
+      return true
+    })
+  }, [log, stageFilter, typeFilter, statusFilter, query])
 
   return (
     <SectionCard
@@ -51,6 +56,15 @@ export function SurveySendLogPanel() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by training or attendee…"
+                className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs w-56"
+              />
+            </div>
             <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1.5 text-xs">
               <option value="ALL">All Stages</option>
               {Object.entries(STAGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

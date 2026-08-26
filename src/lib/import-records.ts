@@ -172,6 +172,7 @@ export async function importRosterRows(rows: RosterRow[], filename: string, peri
       department: r.department || null,
       employmentDate: r.employmentDate ? new Date(r.employmentDate) : null,
       confirmed: r.confirmed,
+      active: r.active,
       batchId: batch.id,
     })),
   })
