@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { createMailSender } from '@/lib/mailer'
+import { buildScheduleChangeEmail, type ScheduleChangeReason } from '@/lib/schedule-change-email'
 
 // Lets an already-created schedule's details be corrected (wrong date, missing vendor, etc.)
 // without deleting and re-creating it — which would also wipe its attendee list and survey
@@ -56,12 +58,52 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+// Deleting a schedule is often really "this training got cancelled or moved" — the admin can
+// optionally pass a reason (and, for a reschedule, the new dates or a note that they'll follow
+// later), which sends a personalised heads-up to every attendee (cc: their line manager, matching
+// every other survey email's own Cc convention) BEFORE the schedule and its attendees are removed.
+// No reason passed = a plain delete with no notification, unchanged from before.
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
 
   try {
     const { id } = await params
+    const body = (await req.json().catch(() => null)) as {
+      reason?: ScheduleChangeReason
+      newStartDate?: string
+      newEndDate?: string
+      communicateLater?: boolean
+    } | null
+
+    if (body?.reason) {
+      const schedule = await prisma.trainingSchedule.findUnique({ where: { id }, include: { attendees: true } })
+      if (schedule) {
+        const mailer = await createMailSender()
+        try {
+          for (const a of schedule.attendees) {
+            if (!a.email) continue
+            const { subject, html } = buildScheduleChangeEmail({
+              recipientName: a.staffName,
+              trainingName: schedule.trainingName,
+              originalStartDate: schedule.startDate,
+              originalEndDate: schedule.endDate,
+              reason: body.reason,
+              newStartDate: body.newStartDate || null,
+              newEndDate: body.newEndDate || null,
+              communicateLater: body.communicateLater,
+            })
+            const cc = a.lineManagerEmail ? [a.lineManagerEmail] : []
+            await mailer.send({ to: a.email, cc, subject, html }).catch((err) => {
+              console.error('[admin/training-schedule DELETE] notify failed for', a.staffId, err)
+            })
+          }
+        } finally {
+          mailer.close()
+        }
+      }
+    }
+
     await prisma.trainingSchedule.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (err) {

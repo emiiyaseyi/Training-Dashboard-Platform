@@ -188,6 +188,15 @@ export function SurveyAutomationPanel() {
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
+  // Delete flow: asks WHY (cancelled vs. rescheduled, and if rescheduled, the new dates or "will
+  // be communicated later") before actually deleting, since that reason drives the heads-up email
+  // every attendee gets sent first.
+  const [deleteFlowId, setDeleteFlowId] = useState<string | null>(null)
+  const [deleteReason, setDeleteReason] = useState<'cancelled' | 'rescheduled'>('cancelled')
+  const [deleteNewStart, setDeleteNewStart] = useState('')
+  const [deleteNewEnd, setDeleteNewEnd] = useState('')
+  const [deleteCommunicateLater, setDeleteCommunicateLater] = useState(true)
+  const [deletingInProgress, setDeletingInProgress] = useState(false)
 
   // Per-attendee "Additional Cc" edits (only relevant when a schedule's additionalCcMode is
   // "individual") — a local draft per attendee id so typing doesn't fight the list re-render on
@@ -397,10 +406,33 @@ export function SurveyAutomationPanel() {
     setNewSchedulePending((prev) => prev.filter((p) => p.staffId !== staffId))
   }
 
-  const deleteSchedule = async (id: string) => {
-    if (!confirm('Delete this training schedule and all its attendees? This cannot be undone.')) return
-    await fetch(`/api/admin/training-schedule/${id}`, { method: 'DELETE' })
-    await loadSchedules()
+  const openDeleteFlow = (id: string) => {
+    setDeleteFlowId(id)
+    setDeleteReason('cancelled')
+    setDeleteNewStart('')
+    setDeleteNewEnd('')
+    setDeleteCommunicateLater(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteFlowId) return
+    setDeletingInProgress(true)
+    try {
+      await fetch(`/api/admin/training-schedule/${deleteFlowId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: deleteReason,
+          newStartDate: deleteReason === 'rescheduled' && !deleteCommunicateLater ? deleteNewStart : undefined,
+          newEndDate: deleteReason === 'rescheduled' && !deleteCommunicateLater ? deleteNewEnd : undefined,
+          communicateLater: deleteReason === 'rescheduled' ? deleteCommunicateLater : undefined,
+        }),
+      })
+      setDeleteFlowId(null)
+      await loadSchedules()
+    } finally {
+      setDeletingInProgress(false)
+    }
   }
 
   const toggleReminders = async (s: Schedule) => {
@@ -1099,13 +1131,59 @@ export function SurveyAutomationPanel() {
                           Edit
                         </button>
                         <button
-                          onClick={() => deleteSchedule(s.id)}
+                          onClick={() => openDeleteFlow(s.id)}
                           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Delete schedule
                         </button>
                       </div>
+                      {deleteFlowId === s.id && (
+                        <div className="border border-red-200 bg-red-50 rounded-lg p-3 space-y-2.5">
+                          <p className="text-xs font-medium text-red-800">Deleting this schedule will notify every attendee by email first — what&apos;s the reason?</p>
+                          <div className="flex flex-wrap gap-3">
+                            <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                              <input type="radio" checked={deleteReason === 'cancelled'} onChange={() => setDeleteReason('cancelled')} />
+                              Cancelled
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                              <input type="radio" checked={deleteReason === 'rescheduled'} onChange={() => setDeleteReason('rescheduled')} />
+                              Rescheduled
+                            </label>
+                          </div>
+                          {deleteReason === 'rescheduled' && (
+                            <div className="space-y-2">
+                              <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                                <input type="checkbox" checked={deleteCommunicateLater} onChange={(e) => setDeleteCommunicateLater(e.target.checked)} />
+                                New date will be communicated separately (don&apos;t have it yet)
+                              </label>
+                              {!deleteCommunicateLater && (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <label className="text-xs text-slate-500">
+                                    New start date
+                                    <input type="date" value={deleteNewStart} onChange={(e) => setDeleteNewStart(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                                  </label>
+                                  <label className="text-xs text-slate-500">
+                                    New end date
+                                    <input type="date" value={deleteNewEnd} onChange={(e) => setDeleteNewEnd(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                                  </label>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={confirmDelete}
+                              disabled={deletingInProgress || (deleteReason === 'rescheduled' && !deleteCommunicateLater && (!deleteNewStart || !deleteNewEnd))}
+                              className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {deletingInProgress ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                              Notify attendees &amp; delete
+                            </button>
+                            <button onClick={() => setDeleteFlowId(null)} className="text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+                          </div>
+                        </div>
+                      )}
                       {refreshResult && refreshResult.scheduleId === s.id && (
                         <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
                           <p className="text-emerald-700">Refreshed {refreshResult.updated} of {refreshResult.total} attendee(s) from the roster.</p>
