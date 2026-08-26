@@ -30,17 +30,21 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.smtpSettings.findFirst({ orderBy: { updatedAt: 'desc' } })
 
     const data: Record<string, unknown> = {
-      host: body.host || null,
+      host: body.host?.trim() || null,
       port: body.port ? parseInt(body.port, 10) : null,
-      username: body.username || null,
+      username: body.username?.trim() || null,
       fromName: body.fromName || 'Meristem L&D',
-      fromAddress: body.fromAddress || null,
+      fromAddress: body.fromAddress?.trim() || null,
       defaultCc: body.defaultCc?.trim() || null,
     }
     // Only overwrite the stored password if a new one was actually typed — leaving the field
     // blank in the form means "keep the existing one", not "clear it". Encrypted at rest —
     // mailer.ts's decryptSecret() reverses this (and tolerates old plaintext rows) when sending.
-    if (body.password) data.password = encryptSecret(body.password)
+    // Trimmed first — a stray leading/trailing space or newline from a copy-paste (password
+    // manager, Slack, Notes app — all common sources) gets stored and sent byte-for-byte here,
+    // while most other mail clients silently trim credential fields before authenticating. That
+    // mismatch is exactly what makes an otherwise-correct password fail ONLY on this platform.
+    if (body.password) data.password = encryptSecret(body.password.trim())
 
     const updated = existing
       ? await prisma.smtpSettings.update({ where: { id: existing.id }, data })
