@@ -80,10 +80,10 @@ function tickState(sentAt: string | null, respondedAt: string | null, expiryEnab
 }
 
 const TICK_STYLE: Record<TickState, string> = {
-  unsent: 'text-slate-300',
-  sent: 'text-emerald-600',
-  filled: 'text-blue-600',
-  expired: 'text-red-600',
+  unsent: 'text-slate-300 font-bold text-base',
+  sent: 'text-emerald-600 font-bold text-base',
+  filled: 'text-blue-600 font-bold text-base',
+  expired: 'text-red-600 font-bold text-base',
 }
 const TICK_SYMBOL: Record<TickState, string> = { unsent: '—', sent: '✓', filled: '✓', expired: '✕' }
 
