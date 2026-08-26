@@ -77,7 +77,7 @@ export function TrainingRecordsTab() {
     preEnabled: true, post1Enabled: true, post2Enabled: true,
     additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
   })
-  const [surveyDaysAfter, setSurveyDaysAfter] = useState({ post1DaysAfter: 1, post2DaysAfter: 30 })
+  const [surveyDaysAfter, setSurveyDaysAfter] = useState({ preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30 })
   // Only used when additionalCcMode === 'individual' — who (beyond the automatic line-manager Cc
   // and the platform-wide default Cc) each specific attendee should also Cc, picked from the same
   // roster search as the attendee picker itself.
@@ -118,7 +118,7 @@ export function TrainingRecordsTab() {
     fetch('/api/capabilities').then((r) => r.json()).then((d) => setCapabilities(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/vendors').then((r) => r.json()).then((d) => setVendors(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/admin/survey-settings').then((r) => r.json()).then((d) => setSurveyDaysAfter({
-      post1DaysAfter: d.post1DaysAfter ?? 1, post2DaysAfter: d.post2DaysAfter ?? 30,
+      preDaysBefore: d.preDaysBefore ?? 7, post1DaysAfter: d.post1DaysAfter ?? 1, post2DaysAfter: d.post2DaysAfter ?? 30,
     })).catch(() => {})
   }, [])
 
@@ -302,11 +302,16 @@ export function TrainingRecordsTab() {
         }
       }
 
-      // A training logged with an end date already far enough in the past that Post-1/Post-2 are
-      // already due (per Admin -> Survey Automation's "days after end date" settings) sends right
-      // away instead of waiting for tomorrow's daily cron tick. A future end date does nothing
-      // here — the cron picks it up once actually due, same as always.
+      // If any stage is already due right now — same exact windows the daily cron itself checks —
+      // send it immediately instead of making everyone wait for tomorrow's tick. A stage that
+      // ISN'T due yet is untouched here; the cron picks it up once it actually becomes due.
+      const daysUntilStart = (new Date(newTraining.startDate).getTime() - Date.now()) / 86400000
       const daysSinceEnd = (Date.now() - new Date(newTraining.endDate).getTime()) / 86400000
+      if (newTraining.preEnabled && daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3) {
+        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre' }),
+        }).catch(() => {})
+      }
       if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) {
         await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
