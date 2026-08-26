@@ -58,13 +58,19 @@ async function getTransportAndSettings() {
   // instead of hanging — without these, nodemailer has no timeout of its own on some of these
   // stages, so a single stuck connection can sit open indefinitely, which from the admin's screen
   // looks exactly like "keeps loading and never sends," with no error ever surfacing.
+  // maxConnections is 1, not several: many company mail servers cap concurrent authenticated
+  // SMTP sessions per account (often to exactly one), silently rejecting the 2nd+ simultaneous
+  // login with what looks like a bad-credential error even though the password is fine — this is
+  // what "first send in a batch works, the next one moments later fails" turned out to be. Pooling
+  // stays on so a multi-email send still reuses one live connection instead of a fresh TLS+auth
+  // handshake per email; only true concurrency (several connections open at once) is removed.
   const transport = nodemailer.createTransport({
     host: s.host,
     port: s.port,
     secure: s.port === 465,
     auth: { user: s.username.trim(), pass: decryptSecret(storedPassword) },
     pool: true,
-    maxConnections: 3,
+    maxConnections: 1,
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
     socketTimeout: 20_000,
