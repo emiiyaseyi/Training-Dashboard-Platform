@@ -81,11 +81,17 @@ export function buildSurveyEmail(input: {
   // No max-width here — a fixed narrow column made the text wrap well before reaching the edge of
   // the actual reading pane, which read as broken/premature wrapping rather than a deliberate
   // readable-line-length choice.
+  //
+  // Outlook desktop's Word rendering engine is well known to only reliably apply font styling
+  // inside TABLE cells — a bare <div> wrapper (even with every <p>/<span> inside individually
+  // styled, as P() already does) can still get silently overridden by Outlook's own compose
+  // default font/size. Wrapping the whole body in a one-cell presentational table is the standard
+  // fix for this exact "styles are all there but Outlook ignores them anyway" symptom.
   const wrap = (bodyHtml: string) => `
-    <div style="${FONT}color:#1B1F3B;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${FONT}color:#1B1F3B;">
       ${isReminder ? P('Reminder: we haven\'t received your response yet.', 'color:#C9A24B;font-weight:600;') : ''}
       ${bodyHtml}
-    </div>
+    </td></tr></table>
   `
 
   if (stage === 'pre') {
