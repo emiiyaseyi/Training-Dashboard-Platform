@@ -95,9 +95,9 @@ export async function POST(req: NextRequest) {
         additionalCc: additionalCc?.trim() || null,
         additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all',
         sourcedFromHistoricalData: sourcedFromHistoricalData ?? false,
-        trainingMode: ['physical', 'virtual', 'platform'].includes(trainingMode || '') ? trainingMode! : 'physical',
-        location: trainingMode === 'physical' ? (location?.trim() || null) : null,
-        meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' ? (meetingLink?.trim() || null) : null,
+        trainingMode: ['physical', 'virtual', 'platform', 'hybrid'].includes(trainingMode || '') ? trainingMode! : 'physical',
+        location: trainingMode === 'physical' || trainingMode === 'hybrid' ? (location?.trim() || null) : null,
+        meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' || trainingMode === 'hybrid' ? (meetingLink?.trim() || null) : null,
       },
     })
     return NextResponse.json(schedule)

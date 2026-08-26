@@ -97,13 +97,15 @@ export function buildSurveyEmail(input: {
       ? `scheduled to hold from ${fmtDate(startDate)} to ${fmtDate(endDate)}`
       : 'scheduled to hold soon'
     const typeLine = trainingType ? ` and it will be ${articleFor(trainingType)} ${trainingType} training` : ''
-    const venueLine = trainingMode === 'physical' && location
-      ? P(`This training will hold in person at: <strong>${location}</strong>.`)
-      : trainingMode === 'virtual' && meetingLink
-        ? P(`This training will hold virtually — join here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
-        : trainingMode === 'platform' && meetingLink
-          ? P(`This training will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
-          : ''
+    const venueLine = trainingMode === 'hybrid' && (location || meetingLink)
+      ? P(`This is a hybrid training.${location ? ` In-person venue: <strong>${location}</strong>.` : ''}${meetingLink ? ` Join virtually here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.` : ''}`)
+      : trainingMode === 'physical' && location
+        ? P(`This training will hold in person at: <strong>${location}</strong>.`)
+        : trainingMode === 'virtual' && meetingLink
+          ? P(`This training will hold virtually — join here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+          : trainingMode === 'platform' && meetingLink
+            ? P(`This training will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+            : ''
     return {
       subject,
       html: wrap(`
