@@ -4,11 +4,13 @@ import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 
-// A pooled SMTP transport supports several connections at once, but a plain sequential
-// for-await loop never actually uses more than one of them — each send blocks the next from
-// starting. That's what made a 7-person batch take over a minute (14 sequential SMTP round
-// trips for Post-1+Post-2, real network latency each). Running attendees with bounded
-// concurrency (matching mailer.ts's maxConnections) actually uses the pool it already pays for.
+// Concurrency is bounded to mailer.ts's own maxConnections (currently 1 — many company mail
+// servers reject a 2nd simultaneous authenticated session per account with what looks like a bad
+// password) so this never opens more simultaneous SMTP connections than the transport actually
+// supports. A pooled transport still means each send after the first reuses the live connection
+// instead of paying a fresh TLS+auth handshake — that's what actually fixed the "7 people took
+// over a minute" complaint; running them in parallel was a secondary, and on this mail server
+// unsafe, optimization on top of it.
 async function runConcurrent<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
   let next = 0
   async function worker() {
@@ -111,7 +113,7 @@ export async function sendSurveyStage(
   // than one pooled connection regardless of how many are available.
   const mailer = await createMailSender()
   try {
-    await runConcurrent(targets, 3, async (attendee) => {
+    await runConcurrent(targets, 1, async (attendee) => {
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
@@ -236,7 +238,7 @@ export async function sendSurveyReminders(
 
   const mailer = await createMailSender()
   try {
-    await runConcurrent(due, 3, async (attendee) => {
+    await runConcurrent(due, 1, async (attendee) => {
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
