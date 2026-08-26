@@ -7,8 +7,10 @@ const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
 // A "send/resend to everyone" on a schedule with more than a handful of attendees can take a
 // while even with the pooled-connection reuse in mailer.ts — headroom beyond Vercel's default so
-// it can actually finish instead of the request silently outliving its timeout.
-export const maxDuration = 120
+// it can actually finish instead of the request silently outliving its timeout. Capped at 60s: a
+// maxDuration beyond what the Vercel plan allows fails the ENTIRE deployment at build time, not
+// just this route.
+export const maxDuration = 60
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
