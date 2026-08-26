@@ -427,18 +427,23 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                           ))}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <label className="text-xs text-slate-500">
-                            Training start date
-                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-                          </label>
-                          <label className="text-xs text-slate-500">
-                            Training end date
-                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-                          </label>
-                        </div>
+                        <label className="text-xs text-slate-500 block max-w-xs">
+                          Training month
+                          <input
+                            type="month"
+                            value={startDate.slice(0, 7)}
+                            onChange={(e) => {
+                              const ym = e.target.value // "YYYY-MM"
+                              if (!ym) return
+                              const monthStart = `${ym}-01`
+                              setStartDate(monthStart)
+                              setEndDate(monthStart)
+                            }}
+                            className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                          />
+                        </label>
                         <p className="text-[11px] text-slate-400">
-                          Defaulted to the 1st of {g.month} {g.year} (the recorded month) — confirm or adjust to the actual training dates.
+                          Defaulted to {g.month} {g.year} — the month recorded against this training in the sheet. Change it if that needs correcting before sending.
                         </p>
 
                         <div>
