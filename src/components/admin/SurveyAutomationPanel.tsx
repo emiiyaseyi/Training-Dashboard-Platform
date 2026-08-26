@@ -153,7 +153,7 @@ export function SurveyAutomationPanel() {
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
     costPerAttendee: '', trainingType: '', capability: '', vendor: '',
     preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
-    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
+    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform' | 'hybrid', location: '', meetingLink: '',
   })
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
@@ -293,7 +293,7 @@ export function SurveyAutomationPanel() {
     setNewSchedule({
       trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
       preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
-      trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
+      trainingMode: 'physical' as 'physical' | 'virtual' | 'platform' | 'hybrid', location: '', meetingLink: '',
     })
     setNewSchedulePending([])
     setNewScheduleSearchQuery('')
@@ -318,7 +318,7 @@ export function SurveyAutomationPanel() {
       additionalCc: s.additionalCc ?? '',
       additionalCcMode: (s.additionalCcMode === 'individual' ? 'individual' : 'all') as 'all' | 'individual',
       isHistorical: s.sourcedFromHistoricalData,
-      trainingMode: (['physical', 'virtual', 'platform'].includes(s.trainingMode) ? s.trainingMode : 'physical') as 'physical' | 'virtual' | 'platform',
+      trainingMode: (['physical', 'virtual', 'platform', 'hybrid'].includes(s.trainingMode) ? s.trainingMode : 'physical') as 'physical' | 'virtual' | 'platform' | 'hybrid',
       location: s.location ?? '',
       meetingLink: s.meetingLink ?? '',
     })
@@ -939,6 +939,7 @@ export function SurveyAutomationPanel() {
                   ['physical', 'Physical'],
                   ['virtual', 'Virtual'],
                   ['platform', 'Learning Platform'],
+                  ['hybrid', 'Hybrid'],
                 ] as const).map(([value, label]) => (
                   <button
                     key={value}
@@ -952,18 +953,19 @@ export function SurveyAutomationPanel() {
                   </button>
                 ))}
               </div>
-              {newSchedule.trainingMode === 'physical' ? (
+              {(newSchedule.trainingMode === 'physical' || newSchedule.trainingMode === 'hybrid') && (
                 <input
                   value={newSchedule.location}
                   onChange={(e) => setNewSchedule({ ...newSchedule, location: e.target.value })}
                   placeholder="Venue address"
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mb-2"
                 />
-              ) : (
+              )}
+              {newSchedule.trainingMode !== 'physical' && (
                 <input
                   value={newSchedule.meetingLink}
                   onChange={(e) => setNewSchedule({ ...newSchedule, meetingLink: e.target.value })}
-                  placeholder={newSchedule.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : 'Learning platform link'}
+                  placeholder={newSchedule.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : newSchedule.trainingMode === 'hybrid' ? 'Meeting link for remote attendees' : 'Learning platform link'}
                   className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
                 />
               )}

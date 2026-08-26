@@ -73,7 +73,7 @@ export function TrainingRecordsTab() {
   const [savingNewVendor, setSavingNewVendor] = useState(false)
   const [newTraining, setNewTraining] = useState({
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
-    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
+    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform' | 'hybrid', location: '', meetingLink: '',
     preEnabled: true, post1Enabled: true, post2Enabled: true,
     additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
   })
@@ -642,6 +642,7 @@ export function TrainingRecordsTab() {
                 ['physical', 'Physical'],
                 ['virtual', 'Virtual'],
                 ['platform', 'Learning Platform'],
+                ['hybrid', 'Hybrid'],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -655,18 +656,19 @@ export function TrainingRecordsTab() {
                 </button>
               ))}
             </div>
-            {newTraining.trainingMode === 'physical' ? (
+            {(newTraining.trainingMode === 'physical' || newTraining.trainingMode === 'hybrid') && (
               <input
                 value={newTraining.location}
                 onChange={(e) => setNewTraining({ ...newTraining, location: e.target.value })}
                 placeholder="Venue address"
-                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mb-2"
               />
-            ) : (
+            )}
+            {newTraining.trainingMode !== 'physical' && (
               <input
                 value={newTraining.meetingLink}
                 onChange={(e) => setNewTraining({ ...newTraining, meetingLink: e.target.value })}
-                placeholder={newTraining.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : 'Learning platform link'}
+                placeholder={newTraining.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : newTraining.trainingMode === 'hybrid' ? 'Meeting link for remote attendees' : 'Learning platform link'}
                 className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
               />
             )}

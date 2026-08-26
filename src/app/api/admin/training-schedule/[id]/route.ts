@@ -44,10 +44,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(post2Enabled !== undefined ? { post2Enabled } : {}),
         ...(additionalCc !== undefined ? { additionalCc: additionalCc.trim() || null } : {}),
         ...(additionalCcMode !== undefined ? { additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all' } : {}),
-        ...(trainingMode !== undefined && ['physical', 'virtual', 'platform'].includes(trainingMode) ? {
+        ...(trainingMode !== undefined && ['physical', 'virtual', 'platform', 'hybrid'].includes(trainingMode) ? {
           trainingMode,
-          location: trainingMode === 'physical' ? (location?.trim() || null) : null,
-          meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' ? (meetingLink?.trim() || null) : null,
+          location: trainingMode === 'physical' || trainingMode === 'hybrid' ? (location?.trim() || null) : null,
+          meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' || trainingMode === 'hybrid' ? (meetingLink?.trim() || null) : null,
         } : {}),
       },
     })
