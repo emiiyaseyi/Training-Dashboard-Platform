@@ -1,6 +1,8 @@
 export type ScheduleChangeReason = 'cancelled' | 'rescheduled'
 
-const FONT = 'font-family:Tahoma,Geneva,sans-serif;font-size:12px;'
+// !important on both properties — without it, Outlook's Word engine can substitute its own
+// default font/size even when every element already carries an explicit style (see survey-email.ts).
+const FONT = 'font-family:Tahoma,Geneva,sans-serif !important;font-size:12px !important;'
 const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${FONT}${extraStyle}"><span style="${FONT}${extraStyle}">${html}</span></p>`
 const SIGNOFF = P('Best Regards,<br/>Meristem Learning &amp; Development Team')
 
