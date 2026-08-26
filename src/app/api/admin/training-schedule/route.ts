@@ -31,6 +31,9 @@ export async function GET() {
       additionalCc: s.additionalCc,
       additionalCcMode: s.additionalCcMode,
       sourcedFromHistoricalData: s.sourcedFromHistoricalData,
+      trainingMode: s.trainingMode,
+      location: s.location,
+      meetingLink: s.meetingLink,
       attendeeCount: s.attendees.length,
       preSent: s.attendees.filter((a) => a.preSurveySentAt).length,
       post1Sent: s.attendees.filter((a) => a.post1SurveySentAt).length,
@@ -63,11 +66,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, sourcedFromHistoricalData } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, sourcedFromHistoricalData, trainingMode, location, meetingLink } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
       remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
       additionalCc?: string; additionalCcMode?: string; sourcedFromHistoricalData?: boolean
+      trainingMode?: string; location?: string; meetingLink?: string
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
@@ -91,6 +95,9 @@ export async function POST(req: NextRequest) {
         additionalCc: additionalCc?.trim() || null,
         additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all',
         sourcedFromHistoricalData: sourcedFromHistoricalData ?? false,
+        trainingMode: ['physical', 'virtual', 'platform'].includes(trainingMode || '') ? trainingMode! : 'physical',
+        location: trainingMode === 'physical' ? (location?.trim() || null) : null,
+        meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' ? (meetingLink?.trim() || null) : null,
       },
     })
     return NextResponse.json(schedule)

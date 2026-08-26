@@ -20,6 +20,7 @@ interface SettingsState {
   expiryEnabled: boolean
   expiryDays: number
   maxFileUploadMB: number
+  excludeDefaultCcOnReminders: boolean
 }
 
 interface Attendee {
@@ -56,6 +57,9 @@ interface Schedule {
   additionalCc: string | null
   additionalCcMode: string
   sourcedFromHistoricalData: boolean
+  trainingMode: string
+  location: string | null
+  meetingLink: string | null
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -135,6 +139,7 @@ export function SurveyAutomationPanel() {
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
     expiryEnabled: true, expiryDays: 7, maxFileUploadMB: 20,
+    excludeDefaultCcOnReminders: true,
   })
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -148,6 +153,7 @@ export function SurveyAutomationPanel() {
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
     costPerAttendee: '', trainingType: '', capability: '', vendor: '',
     preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
+    trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
   })
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
@@ -215,6 +221,7 @@ export function SurveyAutomationPanel() {
         expiryEnabled: data.expiryEnabled ?? true,
         expiryDays: data.expiryDays ?? 7,
         maxFileUploadMB: data.maxFileUploadMB ?? 20,
+        excludeDefaultCcOnReminders: data.excludeDefaultCcOnReminders ?? true,
       })
     } finally {
       setLoadingSettings(false)
@@ -277,6 +284,7 @@ export function SurveyAutomationPanel() {
     setNewSchedule({
       trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '', costPerAttendee: '', trainingType: '', capability: '', vendor: '',
       preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
+      trainingMode: 'physical' as 'physical' | 'virtual' | 'platform', location: '', meetingLink: '',
     })
     setNewSchedulePending([])
     setNewScheduleSearchQuery('')
@@ -301,6 +309,9 @@ export function SurveyAutomationPanel() {
       additionalCc: s.additionalCc ?? '',
       additionalCcMode: (s.additionalCcMode === 'individual' ? 'individual' : 'all') as 'all' | 'individual',
       isHistorical: s.sourcedFromHistoricalData,
+      trainingMode: (['physical', 'virtual', 'platform'].includes(s.trainingMode) ? s.trainingMode : 'physical') as 'physical' | 'virtual' | 'platform',
+      location: s.location ?? '',
+      meetingLink: s.meetingLink ?? '',
     })
     setEditingScheduleId(s.id)
     setShowAddSchedule(true)
@@ -614,6 +625,14 @@ export function SurveyAutomationPanel() {
                   />
                 </label>
               </div>
+              <label className="flex items-center gap-2 text-xs text-slate-600 mt-3">
+                <input
+                  type="checkbox"
+                  checked={settings.excludeDefaultCcOnReminders}
+                  onChange={(e) => setSettings({ ...settings, excludeDefaultCcOnReminders: e.target.checked })}
+                />
+                Exclude the platform-wide Default Cc from reminder emails (on by default — the original send still includes it; only the daily nudge skips it, so it doesn&apos;t clog inboxes)
+              </label>
             </div>
 
             <div>
@@ -859,6 +878,43 @@ export function SurveyAutomationPanel() {
               Cost, type, and capability feed the Training Data sheet (Admin → Live Data Source → Training Cost tab) for every attendee added.
               Vendor is used by the Talent Members report (Admin → Vendors manages this list). All are set once here and apply to the whole schedule.
             </p>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Where</p>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {([
+                  ['physical', 'Physical'],
+                  ['virtual', 'Virtual'],
+                  ['platform', 'Learning Platform'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNewSchedule({ ...newSchedule, trainingMode: value })}
+                    className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                      newSchedule.trainingMode === value ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {newSchedule.trainingMode === 'physical' ? (
+                <input
+                  value={newSchedule.location}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, location: e.target.value })}
+                  placeholder="Venue address"
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                />
+              ) : (
+                <input
+                  value={newSchedule.meetingLink}
+                  onChange={(e) => setNewSchedule({ ...newSchedule, meetingLink: e.target.value })}
+                  placeholder={newSchedule.trainingMode === 'virtual' ? 'Meeting link (Zoom, Teams, etc.)' : 'Learning platform link'}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                />
+              )}
+              <p className="text-[11px] text-slate-400 mt-1">Included in the Pre-Training email so attendees know where to go.</p>
+            </div>
             <div>
               <p className="text-xs font-medium text-slate-600 mb-1.5">Surveys to send</p>
               <div className="flex flex-wrap items-center gap-4">

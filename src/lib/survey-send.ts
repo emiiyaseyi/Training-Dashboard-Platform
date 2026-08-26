@@ -120,6 +120,9 @@ export async function sendSurveyStage(
         startDate: schedule.startDate,
         endDate: schedule.endDate,
         trainingType: schedule.trainingType,
+        trainingMode: schedule.trainingMode,
+        location: schedule.location,
+        meetingLink: schedule.meetingLink,
         isHistorical: schedule.sourcedFromHistoricalData,
       })
       try {
@@ -188,7 +191,7 @@ const DAY_MS = 86400000
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { expiryEnabled: boolean; expiryDays: number }
+  settings: { expiryEnabled: boolean; expiryDays: number; excludeDefaultCcOnReminders?: boolean }
 ): Promise<SendSurveyResult> {
   const result: SendSurveyResult = { sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) return result
@@ -233,11 +236,14 @@ export async function sendSurveyReminders(
         startDate: schedule.startDate,
         endDate: schedule.endDate,
         trainingType: schedule.trainingType,
+        trainingMode: schedule.trainingMode,
+        location: schedule.location,
+        meetingLink: schedule.meetingLink,
         isReminder: true,
         isHistorical: schedule.sourcedFromHistoricalData,
       })
       try {
-        await mailer.send({ to: toAddress, cc, subject, html })
+        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: settings.excludeDefaultCcOnReminders })
         await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
         result.sent++
         await logSend(schedule, stage, attendee, toAddress, true, true, null)

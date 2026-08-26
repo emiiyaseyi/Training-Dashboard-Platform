@@ -42,7 +42,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [remindersEnabled, setRemindersEnabled] = useState(true)
   const [stageChoice, setStageChoice] = useState<StageChoice>('both')
   const [creating, setCreating] = useState(false)
-  const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[] } | null>(null)
+  const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[]; post1Sent?: number; post2Sent?: number } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -118,7 +118,29 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
         body: JSON.stringify({ identifiers: [...selected] }),
       })
       const data = await attendeesRes.json().catch(() => ({ added: 0, notFound: [], noEmail: [] }))
-      setResult({ key: groupKey(g), added: data.added ?? 0, notFound: data.notFound ?? [], noEmail: data.noEmail ?? [] })
+
+      // Send immediately — the whole point of "Already Attended Trainings" is catching up surveys
+      // for training that already happened, so there's no reason to make the admin separately find
+      // the new schedule and click Send by hand. The daily reminder sweep then picks these up
+      // automatically from here, exactly like it does for any other schedule.
+      let post1Sent: number | undefined
+      let post2Sent: number | undefined
+      if (data.added > 0) {
+        if (stageChoice !== 'post2') {
+          const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+          }).then((res) => res.json()).catch(() => null)
+          post1Sent = r?.sent
+        }
+        if (stageChoice !== 'post1') {
+          const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+          }).then((res) => res.json()).catch(() => null)
+          post2Sent = r?.sent
+        }
+      }
+
+      setResult({ key: groupKey(g), added: data.added ?? 0, notFound: data.notFound ?? [], noEmail: data.noEmail ?? [], post1Sent, post2Sent })
       onScheduleCreated()
     } finally {
       setCreating(false)
@@ -129,7 +151,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     <SectionCard
       icon={History}
       title="Already Attended Trainings"
-      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Reminders are on by default (daily nudge until filled). This never touches Training Data or the Google Sheet mirror again — it's purely for tracking survey sends. Once sent, find it under Training Schedules below, in the &quot;Already Attended Trainings — Sent&quot; tab."
+      description="Send Post-1 / Post-2 surveys retroactively for trainings already uploaded to Training Data — Pre-Training doesn't apply since the training already happened. Emails go out immediately when you create the schedule below, and daily reminders follow automatically until each person responds (reminders are on by default). This never touches Training Data or the Google Sheet mirror again — it's purely for tracking survey sends. Find it under Training Schedules below, in the &quot;Already Attended Trainings — Sent&quot; tab."
     >
       <div className="space-y-3">
         {groups.length > 5 && (
@@ -231,7 +253,12 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
 
                       {result && result.key === key && (
                         <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-                          <p className="text-emerald-700">Added {result.added} attendee{result.added === 1 ? '' : 's'} — switch to the &quot;Already Attended Trainings — Sent&quot; tab under Training Schedules below to send Post-1/Post-2.</p>
+                          <p className="text-emerald-700">
+                            Added {result.added} attendee{result.added === 1 ? '' : 's'}.
+                            {result.post1Sent !== undefined && ` Post-1 sent to ${result.post1Sent}.`}
+                            {result.post2Sent !== undefined && ` Post-2 sent to ${result.post2Sent}.`}
+                            {' '}Daily reminders will follow automatically until each person responds — see the &quot;Already Attended Trainings — Sent&quot; tab under Training Schedules below for status.
+                          </p>
                           {result.notFound.length > 0 && <p className="text-amber-700">Not found in the roster: {result.notFound.join(', ')}</p>}
                           {result.noEmail.length > 0 && <p className="text-amber-700">No email on file: {result.noEmail.join(', ')}</p>}
                         </div>

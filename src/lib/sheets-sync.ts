@@ -249,7 +249,7 @@ async function dedupeKSS(rows: KSSRow[]): Promise<KSSRow[]> {
 function rosterFingerprint(r: {
   firstName: string; middleName: string | null; lastName: string; email: string | null
   lineManagerStaffId: string | null; businessUnit: string; role: string | null; department: string | null
-  employmentDate: Date | null; confirmed: boolean
+  employmentDate: Date | null; confirmed: boolean; active: boolean
 }): string {
   return [
     r.firstName.trim().toLowerCase(),
@@ -262,6 +262,7 @@ function rosterFingerprint(r: {
     (r.department || '').trim().toLowerCase(),
     r.employmentDate ? r.employmentDate.toISOString().slice(0, 10) : '',
     String(r.confirmed),
+    String(r.active),
   ].join('|')
 }
 
@@ -287,6 +288,7 @@ async function dedupeRoster(rows: RosterRow[]): Promise<RosterRow[]> {
       role: row.role || null, department: row.department || null,
       employmentDate: row.employmentDate ? new Date(row.employmentDate) : null,
       confirmed: row.confirmed,
+      active: row.active,
     })
     return incoming !== rosterFingerprint(existing)
   })

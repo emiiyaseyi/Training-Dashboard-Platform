@@ -70,6 +70,7 @@ export interface RosterRow {
   department: string
   employmentDate: string | null // ISO date string, or null if unparseable
   confirmed: boolean
+  active: boolean // false when the sheet's status column reads as exited/resigned/terminated
 }
 
 export interface ManagerReviewRow {
@@ -129,6 +130,18 @@ function parseConfirmed(val: unknown): boolean {
   const s = String(val ?? '').trim().toLowerCase()
   if (!s) return true // no column/empty — default to confirmed rather than silently dropping real staff
   return !['no', 'false', 'unconfirmed', 'not confirmed', '0', 'n', 'n/a', 'na'].includes(s)
+}
+
+// A staff member marked exited/resigned/terminated in the roster sheet's status column is
+// synced as active=false — excluded from surveys and no longer flagged for missing data (see
+// auditStaffQuality), while their existing training/subscription/KSS history and reports stay
+// exactly as they are. Substring match (not exact), so "Exited - 2026-08-01" or "Resigned
+// (voluntary)" both still match.
+const EXIT_KEYWORDS = ['exited', 'exit', 'resigned', 'resign', 'terminated', 'terminate', 'left the company', 'inactive', 'ex-staff', 'exstaff', 'no longer with']
+function parseActiveFromStatus(val: unknown): boolean {
+  const s = String(val ?? '').trim().toLowerCase()
+  if (!s) return true
+  return !EXIT_KEYWORDS.some((kw) => s.includes(kw))
 }
 
 export function findHeader(headers: string[], candidates: string[]): string | undefined {
@@ -447,6 +460,12 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
     dept:           findHeader(headers, ['department', 'dept', 'division', 'team']),
     employmentDate: findHeader(headers, ['employmentdate', 'dateofemployment', 'joindate', 'dateofjoining', 'startdate', 'hiredate']),
     confirmed:      findHeader(headers, ['confirmationstatus', 'confirmed', 'isconfirmed', 'staffstatus', 'status']),
+    // Tried separately from (and before) the confirmation-status column above — a sheet that has
+    // both a "Confirmation Status" (probation) and a distinct "Employment Status" (active/exited)
+    // column needs each read from the right place, not one clobbering the other. A sheet with just
+    // one combined "Status" column still works fine, since both `confirmed` and `active` fall back
+    // to reading it.
+    employmentStatus: findHeader(headers, ['employmentstatus', 'exitstatus', 'staffactivestatus', 'activestatus']),
     email:          findHeader(headers, ['email', 'emailaddress', 'staffemail', 'workemail']),
     lineManager:    findHeader(headers, ['linemanagerstaffid', 'linemanagerid', 'reportsto', 'managerstaffid', 'manager', 'linemanager', 'supervisor']),
   }
@@ -482,6 +501,7 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
       department:     normalise(r[col.dept ?? ''] ?? ''),
       employmentDate,
       confirmed:      parseConfirmed(r[col.confirmed ?? '']),
+      active:         parseActiveFromStatus(r[col.employmentStatus ?? col.confirmed ?? '']),
     })
   })
 

@@ -75,10 +75,13 @@ export function buildSurveyEmail(input: {
   startDate?: Date | string | null
   endDate?: Date | string | null
   trainingType?: string | null
+  trainingMode?: string | null // "physical" | "virtual" | "platform" — only rendered on the Pre-Training email
+  location?: string | null // address, when trainingMode is "physical"
+  meetingLink?: string | null // join link, when trainingMode is "virtual" or "platform"
   isReminder?: boolean // prefixes the subject and adds a short nudge line — used by the daily reminder sweep
   isHistorical?: boolean // sent via "Already Attended Trainings" (retroactively created schedule) — adds a duplicate-fill caveat to Post-1 and reframes Post-2's intro
 }): { subject: string; html: string } {
-  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, isReminder, isHistorical } = input
+  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, trainingMode, location, meetingLink, isReminder, isHistorical } = input
   const firstName = firstNameOf(recipientName)
   const subject = stage === 'pre'
     ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
@@ -96,11 +99,19 @@ export function buildSurveyEmail(input: {
       ? `scheduled to hold from ${fmtDate(startDate)} to ${fmtDate(endDate)}`
       : 'scheduled to hold soon'
     const typeLine = trainingType ? ` and it will be ${articleFor(trainingType)} ${trainingType} training` : ''
+    const venueLine = trainingMode === 'physical' && location
+      ? P(`This training will hold in person at: <strong>${location}</strong>.`)
+      : trainingMode === 'virtual' && meetingLink
+        ? P(`This training will hold virtually — join here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+        : trainingMode === 'platform' && meetingLink
+          ? P(`This training will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+          : ''
     return {
       subject,
       html: wrap(`
         ${P(`Dear ${firstName},`)}
         ${P(`You have been nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
+        ${venueLine}
         ${P('As part of your preparation, kindly complete the pre-training survey using the link below:')}
         ${BUTTON(formUrl, 'Pre-Training Survey')}
         ${P('Kindly note that the training provider will communicate further details, including venue and time, in due course.')}

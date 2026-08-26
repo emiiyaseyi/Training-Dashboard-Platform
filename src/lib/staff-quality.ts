@@ -76,12 +76,18 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
     const name = [latest.firstName, latest.middleName, latest.lastName].filter(Boolean).join(' ').trim()
     const issues: string[] = []
 
-    if (!latest.staffId.trim()) issues.push('Missing Staff ID')
-    if (!latest.firstName.trim() || !latest.lastName.trim()) issues.push('Missing name')
-    if (!latest.email?.trim()) issues.push('Missing email')
-    if (!latest.businessUnit.trim()) issues.push('Missing Business Unit')
-    if (latest.lineManagerStaffId && normalizeStaffIdKey(latest.lineManagerStaffId) === key) {
-      issues.push('Line manager is set to self')
+    // Exited/deactivated staff (Employees page -> Deactivate, or synced from the roster sheet's
+    // status column) are done being onboarded — there's no value flagging a leaver's missing
+    // email or Business Unit for an admin to go fix, and doing so also blocks nothing since
+    // deactivated staff are already excluded from surveys wherever attendees get resolved.
+    if (latest.active) {
+      if (!latest.staffId.trim()) issues.push('Missing Staff ID')
+      if (!latest.firstName.trim() || !latest.lastName.trim()) issues.push('Missing name')
+      if (!latest.email?.trim()) issues.push('Missing email')
+      if (!latest.businessUnit.trim()) issues.push('Missing Business Unit')
+      if (latest.lineManagerStaffId && normalizeStaffIdKey(latest.lineManagerStaffId) === key) {
+        issues.push('Line manager is set to self')
+      }
     }
 
     rows.push({
