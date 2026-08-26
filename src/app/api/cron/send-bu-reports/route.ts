@@ -3,11 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { sendBUReports } from '@/lib/bu-report-send'
 import { sendCronFailureAlert } from '@/lib/cron-alert'
 
-// Rendering a PDF via headless Chromium (and a PPTX) per Business Unit is far heavier than the
-// other cron jobs — generous headroom vs. the platform's other routes. NOTE: unverified against
-// this project's actual Vercel plan tier; if reports start timing out in production logs, this
-// (or the plan's function duration limit) is the first thing to check.
-export const maxDuration = 300
+// Capped at 60s, not the 300s this ideally wants for rendering a PDF + PPTX per Business Unit —
+// a maxDuration beyond what the Vercel plan allows fails the ENTIRE deployment at build time, not
+// just this route. If this still isn't enough once deploys are confirmed working again, that's
+// the signal to check the actual plan tier and raise this deliberately.
+export const maxDuration = 60
 
 // Runs daily (see vercel.json) but only actually sends on the admin-configured day of month —
 // same "daily cron, gated by a stored setting" shape as send-surveys.ts, so a missed run (Vercel
