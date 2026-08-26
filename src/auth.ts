@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffId, normalizeEmail } from '@/lib/permissions'
 import { authConfig } from '@/auth.config'
+import { logAudit } from '@/lib/audit-log'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
@@ -30,14 +31,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           },
           include: { permissions: true },
         })
-        if (!user) return null
-
-        if (user.requiresPassword) {
-          if (!password || !user.passwordHash) return null
-          const valid = await bcrypt.compare(password, user.passwordHash)
-          if (!valid) return null
+        if (!user) {
+          await logAudit({ action: 'login_failure', detail: `Unknown identifier: ${rawIdentifier}` })
+          return null
         }
 
+        if (user.requiresPassword) {
+          if (!password || !user.passwordHash) {
+            await logAudit({ userId: user.id, userName: user.name, userEmail: user.email, action: 'login_failure', detail: 'No password provided.' })
+            return null
+          }
+          const valid = await bcrypt.compare(password, user.passwordHash)
+          if (!valid) {
+            await logAudit({ userId: user.id, userName: user.name, userEmail: user.email, action: 'login_failure', detail: 'Incorrect password.' })
+            return null
+          }
+        }
+
+        await logAudit({ userId: user.id, userName: user.name, userEmail: user.email, action: 'login_success' })
         return {
           id: user.id,
           name: user.name,

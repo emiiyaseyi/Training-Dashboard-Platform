@@ -33,6 +33,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // open over the new page (links also call onClose directly, but this covers back/forward nav).
   useEffect(() => { setMobileNavOpen(false) }, [pathname])
 
+  // Audit trail: one entry per navigation, not per API call — skips /login and the public survey
+  // forms (no platform account to attribute the visit to). Fire-and-forget on purpose: a page view
+  // is the lowest-stakes audit entry here, not worth making navigation feel slower if it's slow to
+  // write or briefly fails.
+  useEffect(() => {
+    if (isPublicPage || status !== 'authenticated') return
+    fetch('/api/audit/page-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathname }),
+    }).catch(() => {})
+  }, [pathname, isPublicPage, status])
+
   if (isPublicPage) {
     return <main className="w-full min-h-screen overflow-y-auto overflow-x-hidden">{children}</main>
   }

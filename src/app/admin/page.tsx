@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
-import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail, Search } from 'lucide-react'
+import { Save, RefreshCw, Plus, Building2, Settings, Upload, FileText, CheckCircle, XCircle, Download, PenLine, Trash2, Users, ChevronRight, Mail, Search, ShieldCheck } from 'lucide-react'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -66,6 +66,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'survey-automation', label: 'Survey Automation', tab: 'communication' },
   { id: 'smtp-settings', label: 'SMTP / Email Settings', tab: 'communication' },
   { id: 'security-settings', label: 'Security Settings', tab: 'communication' },
+  { id: 'audit-log', label: 'Audit Trail', tab: 'communication' },
   { id: 'pdf-signature', label: 'PDF Signature Block', tab: 'communication' },
 ]
 
@@ -793,6 +794,24 @@ export default function AdminPage() {
 
             <div id="security-settings" className={sectionWrapClass('security-settings')}>
               <SecuritySettingsPanel />
+            </div>
+
+            <div id="audit-log" className={sectionWrapClass('audit-log')}>
+              <Link
+                href="/admin/audit-log"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">Audit Trail</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Login attempts (successful and failed), page visits, and admin-level actions across the platform, with timestamps.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+              </Link>
             </div>
 
             <div id="pdf-signature" className={sectionWrapClass('pdf-signature')}>
