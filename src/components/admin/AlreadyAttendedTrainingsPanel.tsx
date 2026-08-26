@@ -22,9 +22,14 @@ function monthIndex(month: string): number {
   return idx === -1 ? 0 : idx
 }
 
+// Builds the date string directly from the numbers, deliberately never routing through a Date
+// object + toISOString() — that pairing constructs the date at LOCAL midnight, then formats it
+// in UTC, which for anyone west-of-UTC... no, EAST of UTC (Nigeria, WAT = UTC+1) rolls local
+// midnight on the 1st back to 23:00 UTC the day before — i.e. the LAST day of the PREVIOUS
+// month. That's exactly what silently turned a July training into a June one in the email: the
+// schedule's startDate landed on June 30th instead of July 1st.
 function firstOfMonth(month: string, year: number): string {
-  const d = new Date(year, monthIndex(month), 1)
-  return d.toISOString().slice(0, 10)
+  return `${year}-${String(monthIndex(month) + 1).padStart(2, '0')}-01`
 }
 
 interface Props {
