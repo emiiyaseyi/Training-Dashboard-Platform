@@ -27,18 +27,25 @@ function fmt(n: number) {
 }
 function pct(n: number) { return `${n.toFixed(1)}%` }
 
+type CategoryFilter = 'all' | 'membership' | 'certification'
+
 export default function SubscriptionsDashboard() {
   const [data, setData] = useState<DashData | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<PeriodFilter>({ mode: 'all' })
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
 
-  const load = useCallback(async (f: PeriodFilter) => {
+  const load = useCallback(async (f: PeriodFilter, category: CategoryFilter) => {
     setLoading(true)
-    try { setData(await (await fetch(`/api/analytics/group${filterToQuery(f)}`)).json()) }
+    try {
+      const qs = filterToQuery(f)
+      const catParam = category !== 'all' ? `${qs ? '&' : '?'}subscriptionCategory=${category}` : ''
+      setData(await (await fetch(`/api/analytics/group${qs}${catParam}`)).json())
+    }
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load(filter) }, [filter, load])
+  useEffect(() => { load(filter, categoryFilter) }, [filter, categoryFilter, load])
 
   const kpiRef = useRef<HTMLDivElement>(null)
   const liRef = useRef<HTMLDivElement>(null)
@@ -74,7 +81,7 @@ export default function SubscriptionsDashboard() {
           <div className="flex items-center gap-2">
             <FilterBar availableYears={data.availableYears} value={filter} onChange={setFilter} />
             <PDFExportButton reportTitle="Professional Subscriptions — Learning Intelligence Dashboard" />
-            <button onClick={() => load(filter)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
+            <button onClick={() => load(filter, categoryFilter)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
           </div>
@@ -83,6 +90,36 @@ export default function SubscriptionsDashboard() {
 
       <div className="p-4 sm:p-8 space-y-8">
         {isEmpty && <AlertBadge variant="info" message="No subscription data uploaded yet." />}
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 no-print">
+            {([
+              ['all', 'All'],
+              ['membership', 'Membership'],
+              ['certification', 'Certification'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setCategoryFilter(value)}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 transition-colors ${
+                  categoryFilter === value ? 'bg-white text-navy-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {categoryFilter === 'all' && data.subscriptionByCategory.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              {data.subscriptionByCategory.map((c) => (
+                <span key={c.category} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${c.category === 'membership' ? 'bg-navy-500' : 'bg-gold-500'}`} />
+                  {c.category === 'membership' ? 'Membership' : 'Certification'}: <strong className="text-slate-700">{fmt(c.totalAmount)}</strong> ({c.count})
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div ref={kpiRef}>
           <div className="no-print flex justify-end mb-2">

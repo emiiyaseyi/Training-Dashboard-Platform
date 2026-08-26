@@ -341,6 +341,23 @@ export function SurveyAutomationPanel() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifiers: newSchedulePending.map((p) => p.staffId) }),
           })
+
+          // A schedule entered for a training whose end date is already in the past (e.g. logging
+          // it a few days late) shouldn't have to wait for tomorrow's cron tick to catch up —
+          // if Post-1/Post-2's own "days after end date" threshold is already satisfied right now,
+          // send it immediately instead. If the end date is still in the future, this does
+          // nothing, and the daily cron picks it up on its own once due, exactly as normal.
+          const daysSinceEnd = (Date.now() - new Date(newSchedule.endDate).getTime()) / 86400000
+          if (newSchedule.post1Enabled && daysSinceEnd >= settings.post1DaysAfter) {
+            await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+            }).catch(() => {})
+          }
+          if (newSchedule.post2Enabled && daysSinceEnd >= settings.post2DaysAfter) {
+            await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+            }).catch(() => {})
+          }
         }
         resetScheduleForm()
         await loadSchedules()

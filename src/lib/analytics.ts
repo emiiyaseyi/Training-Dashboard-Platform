@@ -130,6 +130,7 @@ export interface GroupAnalytics {
   monthlySpend: { month: string; cost: number }[]
   topTrainings: { training: string; count: number; totalCost: number }[]
   topMembershipOrgs: { org: string; count: number; totalAmount: number }[]
+  subscriptionByCategory: { category: string; count: number; totalAmount: number }[] // "membership" | "certification"
   impactDistribution: { range: string; count: number }[]
   applicationRates: { category: string; count: number }[]
   forecastedSpend: number
@@ -597,7 +598,7 @@ function computeCapabilityCoverage(
 
 // ─── Core analytics function ──────────────────────────────────────────────────
 
-export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }, buScope?: string[] | null): Promise<GroupAnalytics> {
+export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all' }, buScope?: string[] | null, subscriptionCategory?: 'membership' | 'certification' | null): Promise<GroupAnalytics> {
   const [
     rawTraining,
     rawFeedbackRecords,
@@ -668,6 +669,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     subscriptionRecords = allSubscriptionRecords.filter(
       (r) => !r.month || months.has(r.month as typeof MONTHS[number])
     )
+  }
+  // Optional category narrowing (Subscriptions page filter) — affects every subscription-derived
+  // figure below (totalSubscriptionCost, topMembershipOrgs, subscriptionParticipation, etc.) since
+  // they all read from this same filtered array; everything else (training, KSS, feedback) is
+  // untouched.
+  if (subscriptionCategory) {
+    subscriptionRecords = subscriptionRecords.filter((r) => (r.category || 'membership') === subscriptionCategory)
   }
 
   // Apply month filter to feedback records
@@ -760,6 +768,18 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     .map(([org, v]) => ({ org, ...v }))
     .sort((a, b) => b.totalAmount - a.totalAmount)
     .slice(0, 10)
+
+  // ── Subscription split: membership dues vs certification refunds ──
+  const subCategoryMap: Record<string, { count: number; totalAmount: number }> = {}
+  subscriptionRecords.forEach((r) => {
+    const c = r.category || 'membership'
+    if (!subCategoryMap[c]) subCategoryMap[c] = { count: 0, totalAmount: 0 }
+    subCategoryMap[c].count++
+    subCategoryMap[c].totalAmount += r.amount
+  })
+  const subscriptionByCategory = Object.entries(subCategoryMap)
+    .map(([category, v]) => ({ category, ...v }))
+    .sort((a, b) => b.totalAmount - a.totalAmount)
 
   // ── Impact distribution (0–5 scale) ──
   const bands = [
@@ -949,6 +969,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     monthlySpend,
     topTrainings,
     topMembershipOrgs,
+    subscriptionByCategory,
     impactDistribution,
     applicationRates,
     forecastedSpend,
