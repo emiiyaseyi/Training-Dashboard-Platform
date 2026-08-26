@@ -137,7 +137,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    return NextResponse.json({ added: added.length, notFound, noEmail, alreadyAdded, inactive, trainingRecordError })
+    return NextResponse.json({
+      added: added.length, notFound, noEmail, alreadyAdded, inactive, trainingRecordError,
+      createdAttendees: createdAttendees.map((a) => ({ id: a.id, staffId: a.staffId })),
+    })
   } catch (err) {
     console.error('[admin/training-schedule/attendees POST]', err)
     return NextResponse.json({ error: 'Failed to add attendees.' }, { status: 500 })

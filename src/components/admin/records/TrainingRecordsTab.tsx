@@ -78,6 +78,11 @@ export function TrainingRecordsTab() {
     additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
   })
   const [surveyDaysAfter, setSurveyDaysAfter] = useState({ post1DaysAfter: 1, post2DaysAfter: 30 })
+  // Only used when additionalCcMode === 'individual' — who (beyond the automatic line-manager Cc
+  // and the platform-wide default Cc) each specific attendee should also Cc, picked from the same
+  // roster search as the attendee picker itself.
+  const [pendingAttendeeCc, setPendingAttendeeCc] = useState<Record<string, RosterStaff[]>>({})
+  const [ccSearchQuery, setCcSearchQuery] = useState<Record<string, string>>({})
   const [attendeeQuery, setAttendeeQuery] = useState('')
   const [pendingAttendees, setPendingAttendees] = useState<RosterStaff[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
@@ -133,6 +138,8 @@ export function TrainingRecordsTab() {
     })
     setPendingAttendees([])
     setAttendeeQuery('')
+    setPendingAttendeeCc({})
+    setCcSearchQuery({})
     setAddingNew(false)
     setCreateError('')
   }
@@ -272,11 +279,28 @@ export function TrainingRecordsTab() {
         return
       }
       const schedule = await scheduleRes.json()
-      await fetch(`/api/admin/training-schedule/${schedule.id}/attendees`, {
+      const attendeesRes = await fetch(`/api/admin/training-schedule/${schedule.id}/attendees`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifiers: pendingAttendees.map((p) => p.staffId) }),
       })
+
+      // Individual mode: push each attendee's own picked Cc list now that we finally have their
+      // real attendeeId (createdAttendees maps staffId -> id) — anyone with none stays blank,
+      // which still gets the automatic line-manager Cc and platform-wide default Cc, just no
+      // extra addresses of their own.
+      if (newTraining.additionalCcMode === 'individual') {
+        const { createdAttendees } = await attendeesRes.json().catch(() => ({ createdAttendees: [] as { id: string; staffId: string }[] }))
+        for (const a of (createdAttendees || [])) {
+          const ccList = pendingAttendeeCc[a.staffId]
+          if (!ccList || ccList.length === 0) continue
+          const ccString = ccList.map((c) => c.email).filter(Boolean).join(', ')
+          if (!ccString) continue
+          await fetch(`/api/admin/training-schedule/${schedule.id}/attendees/${a.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ additionalCc: ccString }),
+          }).catch(() => {})
+        }
+      }
 
       // A training logged with an end date already far enough in the past that Post-1/Post-2 are
       // already due (per Admin -> Survey Automation's "days after end date" settings) sends right
@@ -502,7 +526,15 @@ export function TrainingRecordsTab() {
                 {pendingAttendees.map((p) => (
                   <span key={p.staffId} className="flex items-center gap-1 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
                     {p.name}
-                    <button onClick={() => setPendingAttendees(pendingAttendees.filter((x) => x.staffId !== p.staffId))} className="hover:text-red-600"><X className="w-3 h-3" /></button>
+                    <button
+                      onClick={() => {
+                        setPendingAttendees(pendingAttendees.filter((x) => x.staffId !== p.staffId))
+                        setPendingAttendeeCc((prev) => { const next = { ...prev }; delete next[p.staffId]; return next })
+                      }}
+                      className="hover:text-red-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -660,41 +692,84 @@ export function TrainingRecordsTab() {
           </div>
 
           <div>
-            <p className="text-xs font-medium text-slate-600 mb-1.5">Additional Cc (optional)</p>
-            <div className="flex flex-wrap items-center gap-4 mb-2">
-              <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                <input
-                  type="radio"
-                  checked={newTraining.additionalCcMode === 'all'}
-                  onChange={() => setNewTraining({ ...newTraining, additionalCcMode: 'all' })}
-                />
-                Same for every participant
-              </label>
-              <label className="flex items-center gap-1.5 text-xs text-slate-600">
-                <input
-                  type="radio"
-                  checked={newTraining.additionalCcMode === 'individual'}
-                  onChange={() => setNewTraining({ ...newTraining, additionalCcMode: 'individual' })}
-                />
-                Different per participant
-              </label>
-            </div>
-            {newTraining.additionalCcMode === 'all' ? (
+            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 mb-1.5">
               <input
-                value={newTraining.additionalCc}
-                onChange={(e) => setNewTraining({ ...newTraining, additionalCc: e.target.value })}
-                placeholder="e.g. hr@meristemng.com, someone@meristemng.com"
-                className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                type="checkbox"
+                checked={newTraining.additionalCcMode === 'individual'}
+                onChange={(e) => setNewTraining({ ...newTraining, additionalCcMode: e.target.checked ? 'individual' : 'all' })}
               />
-            ) : (
-              <p className="text-[11px] text-slate-400">
-                Set per attendee from Survey Automation → Training Schedules (after creating this schedule). Anyone left blank still gets
-                the platform-wide default Cc (Admin → SMTP Settings), just no extra addresses of their own.
-              </p>
-            )}
-            <p className="text-[11px] text-slate-400 mt-1">
-              Added on top of the automatic line-manager Cc and the platform-wide default Cc — never replaces either.
+              Add a different Cc per participant
+            </label>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Everyone already gets the automatic line-manager Cc and the platform-wide default Cc (Admin → SMTP Settings) — this is only for
+              extra people on top of that, and only for specific participants who need it. Leave unchecked to just use the defaults for everyone.
             </p>
+            {newTraining.additionalCcMode === 'individual' && (
+              <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-white">
+                {pendingAttendees.length === 0 ? (
+                  <p className="text-[11px] text-slate-400">Add attendees above first, then pick extra Cc recipients for each of them here.</p>
+                ) : (
+                  pendingAttendees.map((p) => {
+                    const query = ccSearchQuery[p.staffId] || ''
+                    const selected = pendingAttendeeCc[p.staffId] || []
+                    const selectedIds = new Set(selected.map((c) => c.staffId))
+                    const results = query.trim()
+                      ? directory.filter((s) => s.staffId !== p.staffId && !selectedIds.has(s.staffId) &&
+                          (s.name.toLowerCase().includes(query.toLowerCase()) || s.staffId.toLowerCase().includes(query.toLowerCase()) || s.email?.toLowerCase().includes(query.toLowerCase())))
+                        .slice(0, 6)
+                      : []
+                    return (
+                      <div key={p.staffId} className="border-b border-slate-100 last:border-0 pb-2 last:pb-0">
+                        <p className="text-xs font-medium text-slate-700 mb-1">{p.name}</p>
+                        <div className="relative">
+                          <input
+                            value={query}
+                            onChange={(e) => setCcSearchQuery({ ...ccSearchQuery, [p.staffId]: e.target.value })}
+                            placeholder="Search by name, email, or Staff ID to add a Cc…"
+                            className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+                          />
+                          {results.length > 0 && (
+                            <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                              {results.map((s) => (
+                                <button
+                                  key={s.staffId}
+                                  type="button"
+                                  onClick={() => {
+                                    setPendingAttendeeCc({ ...pendingAttendeeCc, [p.staffId]: [...selected, s] })
+                                    setCcSearchQuery({ ...ccSearchQuery, [p.staffId]: '' })
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                                >
+                                  <span className="text-slate-700">{s.name}</span>
+                                  <span className="text-slate-400">{s.email || s.staffId}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {selected.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {selected.map((c) => (
+                              <span key={c.staffId} className="flex items-center gap-1 text-[11px] bg-slate-100 text-slate-700 rounded-full pl-2 pr-1 py-0.5">
+                                {c.name}
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingAttendeeCc({ ...pendingAttendeeCc, [p.staffId]: selected.filter((x) => x.staffId !== c.staffId) })}
+                                  className="hover:text-red-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+                <p className="text-[11px] text-slate-400 pt-1">Anyone left blank here still gets the automatic line-manager Cc and the platform-wide default Cc, just no extra addresses of their own.</p>
+              </div>
+            )}
           </div>
 
           {createError && <p className="text-xs text-red-600">{createError}</p>}
