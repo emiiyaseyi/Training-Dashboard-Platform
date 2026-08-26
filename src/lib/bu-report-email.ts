@@ -6,8 +6,11 @@ import type { BUReportComparison, MetricDelta } from '@/lib/bu-report-comparison
 // bu-report-html.ts / bu-report-pptx.ts), per the agreed design: "body covers a summary... the
 // attachment will show it in details."
 
+// Same belt-and-suspenders font enforcement as survey-email.ts (P() wraps content in a styled
+// <span> too, since Outlook's rendering engine can substitute its own default font for a bare
+// text run even inside a correctly-styled <p>).
 const FONT = 'font-family:Tahoma,Geneva,sans-serif;font-size:12px;'
-const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.6;${FONT}${extraStyle}">${html}</p>`
+const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.6;${FONT}${extraStyle}"><span style="${FONT}${extraStyle}">${html}</span></p>`
 
 function monthYearLabel(year: number, monthIdx: number): string {
   return new Date(year, monthIdx, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
@@ -56,7 +59,7 @@ export function buildBUReportEmail(input: {
     : ''
 
   const html = `
-    <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 600px;">
+    <div style="${FONT}color:#1B1F3B;">
       ${P(`Dear ${firstName},`)}
       ${P(`Attached is ${businessUnit}'s Learning &amp; Development Investment Report for ${periodLabel}, comparing this month against the prior month.`)}
       ${P(`<strong>Highlights:</strong>`)}

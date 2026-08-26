@@ -35,25 +35,16 @@ function articleFor(word: string): string {
   return /^[aeiou]/i.test(word) ? 'an' : 'a'
 }
 
-// N working days (Mon-Fri) after a given date, skipping weekends entirely.
-function addWorkingDays(date: Date, days: number): Date {
-  const result = new Date(date)
-  let added = 0
-  while (added < days) {
-    result.setDate(result.getDate() + 1)
-    const day = result.getDay()
-    if (day !== 0 && day !== 6) added++
-  }
-  return result
-}
-
 // Outlook (the client these went out through) ignores CSS margin collapsing AND font inheritance
 // from a parent element almost entirely — its Word rendering engine falls back to its own default
 // font/size on any element that doesn't carry its own explicit style, which is why the body read
 // as smaller than a normal Outlook-composed email despite the wrapping <div> saying Tahoma 12px.
-// Every paragraph goes through P() so font, size, and spacing are all repeated on every element.
+// Every paragraph goes through P() so font, size, and spacing are all repeated on every element —
+// AND on an inner <span> too, since Word's rendering engine can still substitute its own default
+// font for a bare text run even inside a correctly-styled <p>; wrapping the text itself in a
+// styled <span> is the belt-and-suspenders fix Outlook HTML emails generally need.
 const FONT = 'font-family:Tahoma,Geneva,sans-serif;font-size:12px;'
-const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${FONT}${extraStyle}">${html}</p>`
+const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${FONT}${extraStyle}"><span style="${FONT}${extraStyle}">${html}</span></p>`
 
 // Survey CTA green — sampled visually from the shade the admin specified; adjust SURVEY_BUTTON_GREEN
 // if it doesn't match exactly (a hex code would let us match it precisely).
@@ -87,8 +78,11 @@ export function buildSurveyEmail(input: {
     ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
     : `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
 
+  // No max-width here — a fixed narrow column made the text wrap well before reaching the edge of
+  // the actual reading pane, which read as broken/premature wrapping rather than a deliberate
+  // readable-line-length choice.
   const wrap = (bodyHtml: string) => `
-    <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 560px;">
+    <div style="${FONT}color:#1B1F3B;">
       ${isReminder ? P('Reminder: we haven\'t received your response yet.', 'color:#C9A24B;font-weight:600;') : ''}
       ${bodyHtml}
     </div>
@@ -122,10 +116,6 @@ export function buildSurveyEmail(input: {
   }
 
   if (stage === 'post1') {
-    // KSS is due within 10 working days of the training ending — computed from endDate so the
-    // email states a real date instead of a vague "as soon as possible".
-    const kssDeadline = endDate ? fmtDate(addWorkingDays(new Date(endDate), 10)) : null
-    const kssDeadlineText = kssDeadline ? `on or before ${kssDeadline}` : 'within 10 working days of the training ending'
     return {
       subject,
       html: wrap(`
@@ -133,7 +123,6 @@ export function buildSurveyEmail(input: {
         ${P(`Thank you for participating in the ${trainingName} training${monthPhraseOf(startDate)}.`)}
         ${P('As part of our learning evaluation process, kindly complete the post-training survey using the link below:')}
         ${BUTTON(formUrl, 'Post-Training Survey')}
-        ${P(`In addition, kindly prepare for a Knowledge Sharing Session (KSS) to share the key insights and practical takeaways from the programme with your team. You are to share your presentation slides ahead of the session and communicate your preferred KSS date and time with the Learning &amp; Development Team ${kssDeadlineText}.`)}
         ${isHistorical ? P('If you have previously completed a post-training survey for this programme, please disregard this email.', 'color:#6B7280;') : ''}
         ${P('Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.')}
         ${P('Thank you for your participation, and we look forward to receiving your feedback.')}
