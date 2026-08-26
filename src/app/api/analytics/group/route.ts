@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
     const full = sp.get('full') === 'true'
     const scope = full ? null : buScopeFilter(session)
 
-    const analytics = await computeGroupAnalytics(filter, scope)
+    const subCategoryParam = sp.get('subscriptionCategory')
+    const subscriptionCategory = subCategoryParam === 'membership' || subCategoryParam === 'certification' ? subCategoryParam : null
+
+    const analytics = await computeGroupAnalytics(filter, scope, subscriptionCategory)
     const narrative = generateExecutiveNarrative(analytics)
     return NextResponse.json({ ...analytics, narrative })
   } catch (err) {
