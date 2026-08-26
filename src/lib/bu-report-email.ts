@@ -59,7 +59,7 @@ export function buildBUReportEmail(input: {
     : ''
 
   const html = `
-    <div style="${FONT}color:#1B1F3B;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${FONT}color:#1B1F3B;">
       ${P(`Dear ${firstName},`)}
       ${P(`Attached is ${businessUnit}'s Learning &amp; Development Investment Report for ${periodLabel}, comparing this month against the prior month.`)}
       ${P(`<strong>Highlights:</strong>`)}
@@ -70,7 +70,7 @@ export function buildBUReportEmail(input: {
       ${P(`<a href="${baseUrl}/login" style="color:#1E2761;font-weight:600;">${baseUrl}/login</a>`, '')}
       ${P(`Your login: <strong>${loginHint}</strong>`, 'color:#6B7280;')}
       ${P('Best Regards,<br/>Meristem Learning &amp; Development Team')}
-    </div>
+    </td></tr></table>
   `
 
   return { subject, html }
