@@ -35,15 +35,13 @@ function articleFor(word: string): string {
   return /^[aeiou]/i.test(word) ? 'an' : 'a'
 }
 
-// Outlook (the client these went out through) ignores CSS margin collapsing AND font inheritance
-// from a parent element almost entirely — its Word rendering engine falls back to its own default
-// font/size on any element that doesn't carry its own explicit style, which is why the body read
-// as smaller than a normal Outlook-composed email despite the wrapping <div> saying Tahoma 12px.
-// Every paragraph goes through P() so font, size, and spacing are all repeated on every element —
-// AND on an inner <span> too, since Word's rendering engine can still substitute its own default
-// font for a bare text run even inside a correctly-styled <p>; wrapping the text itself in a
-// styled <span> is the belt-and-suspenders fix Outlook HTML emails generally need.
-const FONT = 'font-family:Tahoma,Geneva,sans-serif;font-size:12px;'
+// Outlook desktop's Word rendering engine silently substitutes its own default font/size on a
+// text run unless every level (table cell, <p>, and the <span> actually wrapping the text) both
+// repeats the declaration AND marks it !important — confirmed against Email on Acid's documented
+// fix for this exact "Outlook keeps overriding my font no matter where I put the style" failure
+// mode. Without !important here, Outlook's own compose default (Aptos/Calibri, sized differently
+// from Tahoma) can win even when every element already carries an explicit style.
+const FONT = 'font-family:Tahoma,Geneva,sans-serif !important;font-size:12px !important;'
 const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-height:1.5;${FONT}${extraStyle}"><span style="${FONT}${extraStyle}">${html}</span></p>`
 
 // Survey CTA green — sampled visually from the shade the admin specified; adjust SURVEY_BUTTON_GREEN
