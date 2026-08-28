@@ -63,6 +63,7 @@ export default function TalentMembersPage() {
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null)
   const [vendorDraft, setVendorDraft] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [vendors, setVendors] = useState<{ id: string; name: string }[]>([])
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
   const [rechecking, setRechecking] = useState(false)
 
@@ -82,15 +83,37 @@ export default function TalentMembersPage() {
 
   useEffect(() => { load(filter) }, [filter, load])
 
+  const loadVendors = useCallback(async () => {
+    try {
+      const res = await fetch('/api/vendors')
+      if (res.ok) setVendors(await res.json())
+    } catch {
+      // Non-fatal — the vendor input still works as a plain text field without suggestions.
+    }
+  }, [])
+
+  useEffect(() => { loadVendors() }, [loadVendors])
+
   const saveVendor = async (recordId: string) => {
     setSavingVendor(true)
     try {
+      const name = vendorDraft.trim()
       const res = await fetch(`/api/admin/training-record/${recordId}/vendor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendor: vendorDraft }),
+        body: JSON.stringify({ vendor: name }),
       })
       if (res.ok) {
+        // Registers a newly-typed vendor into the shared Vendor list too (upsert by name — a
+        // no-op if it already exists), so it's immediately available everywhere else a vendor is
+        // picked (e.g. Training Schedule), not just saved on this one training record.
+        if (name && !vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) {
+          fetch('/api/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          }).then(() => loadVendors())
+        }
         setEditingVendorId(null)
         await load(filter)
       } else {
@@ -284,10 +307,12 @@ export default function TalentMembersPage() {
                       <div className="flex items-center gap-1.5">
                         <input
                           autoFocus
+                          list="tm-vendor-options"
                           value={vendorDraft}
                           onChange={(e) => setVendorDraft(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') saveVendor(row.recordId!) }}
-                          className="text-xs border border-slate-300 rounded px-2 py-1 w-32"
+                          placeholder="Pick or type a new vendor"
+                          className="text-xs border border-slate-300 rounded px-2 py-1 w-40"
                         />
                         <button onClick={() => saveVendor(row.recordId!)} disabled={savingVendor} className="text-emerald-600 hover:text-emerald-800">
                           {savingVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -313,6 +338,11 @@ export default function TalentMembersPage() {
             data={data.attended as unknown as Record<string, unknown>[]}
             emptyMessage="No TM training attendance recorded yet."
           />
+          {/* Backs the vendor input's `list` attribute above — browser-native autocomplete over
+              the shared Vendor list (Admin → Vendors), while still allowing free text for a new one. */}
+          <datalist id="tm-vendor-options">
+            {vendors.map((v) => <option key={v.id} value={v.name} />)}
+          </datalist>
         </SectionCard>
 
         <SectionCard
