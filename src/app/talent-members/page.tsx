@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { RefreshCw, Users, UserCheck, UserX, UserMinus, Gauge, CalendarCheck, CalendarClock, Pencil, Check, X, Loader2, AlertTriangle, Trash2, GraduationCap } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
@@ -368,6 +369,18 @@ export default function TalentMembersPage() {
               { key: 'vendor', header: 'Vendor', render: (r) => (r.vendor as string) || '—' },
               { key: 'attendeeNames', header: 'Staff Name(s)', render: (r) => (r.attendeeNames as string[]).join(', ') || '—' },
               { key: 'attendeeCount', header: 'Attendees', align: 'right' },
+              ...(isPlatformAdmin ? [{
+                key: 'scheduleId', header: '', align: 'center' as const,
+                render: (r: Record<string, unknown>) => (
+                  <Link
+                    href={`/admin/surveys?editSchedule=${r.scheduleId as string}`}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
+                    title="Edit this training schedule"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </Link>
+                ),
+              }] : []),
             ]}
             data={data.upcoming as unknown as Record<string, unknown>[]}
             emptyMessage="No upcoming TM trainings scheduled."

@@ -134,7 +134,7 @@ function parseCSV(text: string): string[] {
   return values
 }
 
-export function SurveyAutomationPanel() {
+export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditScheduleId?: string } = {}) {
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
@@ -272,6 +272,29 @@ export function SurveyAutomationPanel() {
     loadBusinessUnits()
     loadTaxonomies()
   }, [])
+
+  // Deep link from elsewhere (e.g. Talent Members' "TM Trainings Coming Up" table) — opens
+  // straight into editing a specific schedule instead of making the admin hunt for it in the
+  // list. Only fires once (appliedInitialEdit), so it doesn't keep re-opening the form every time
+  // `schedules` refreshes after the admin saves or does something else entirely.
+  const appliedInitialEdit = useRef(false)
+  const editFormRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!initialEditScheduleId || appliedInitialEdit.current || schedules.length === 0) return
+    const match = schedules.find((s) => s.id === initialEditScheduleId)
+    if (!match) return
+    appliedInitialEdit.current = true
+    startEditSchedule(match)
+  }, [schedules, initialEditScheduleId])
+
+  // Scrolling has to happen in its own effect, not right after startEditSchedule() above — the
+  // form only mounts (and editFormRef only gets populated) on the render triggered by that call's
+  // setShowAddSchedule(true), which hasn't happened yet at that exact point.
+  useEffect(() => {
+    if (initialEditScheduleId && editingScheduleId === initialEditScheduleId) {
+      editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [editingScheduleId, initialEditScheduleId])
 
   const saveSettings = async () => {
     setSavingSettings(true)
@@ -789,7 +812,7 @@ export function SurveyAutomationPanel() {
         )}
 
         {showAddSchedule && (
-          <div className="mb-5 border border-dashed border-slate-300 rounded-lg p-4 space-y-3">
+          <div ref={editFormRef} className="mb-5 border border-dashed border-slate-300 rounded-lg p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 placeholder="Training name"

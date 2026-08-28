@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -16,6 +16,13 @@ import { UploadedFilesPanel } from '@/components/admin/UploadedFilesPanel'
 
 export default function AdminSurveysPage() {
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0)
+  // Read directly off window.location rather than next/navigation's useSearchParams, which
+  // requires a Suspense boundary around any page that uses it — this page is fully client-
+  // rendered already, so a plain query-string read on mount is simpler and needs none of that.
+  const [editScheduleId, setEditScheduleId] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    setEditScheduleId(new URLSearchParams(window.location.search).get('editSchedule') || undefined)
+  }, [])
 
   return (
     <div className="flex flex-col">
@@ -34,7 +41,7 @@ export default function AdminSurveysPage() {
         <SurveyResponseMirrorPanel />
         <TrainingDataMirrorPanel />
         <AlreadyAttendedTrainingsPanel onScheduleCreated={() => setScheduleRefreshKey((k) => k + 1)} />
-        <SurveyAutomationPanel key={scheduleRefreshKey} />
+        <SurveyAutomationPanel key={scheduleRefreshKey} initialEditScheduleId={editScheduleId} />
         <SurveyQuestionEditor />
         <CustomSurveyPanel />
         <UploadedFilesPanel />
