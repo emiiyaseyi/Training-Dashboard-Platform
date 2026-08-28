@@ -21,6 +21,7 @@ interface TMAttendedRecord {
 interface TMUpcomingRecord {
   scheduleId: string; trainingName: string; businessUnit: string
   startDate: string; endDate: string; vendor: string | null; attendeeCount: number
+  attendeeNames: string[]
 }
 interface TMExemptedRecord {
   id: string; staffId: string | null; name: string | null; email: string | null; reason: string | null; resolved: boolean
@@ -114,8 +115,15 @@ export default function TalentMembersPage() {
             body: JSON.stringify({ name }),
           }).then(() => loadVendors())
         }
+        // Patches this one row in place from the PATCH response instead of re-fetching the whole
+        // report — a full reload here flashed/collapsed the table and interrupted editing the
+        // next row, for no reason since we already know exactly what changed.
+        const { vendor: savedVendor } = await res.json() as { vendor: string | null }
+        setData((prev) => prev && {
+          ...prev,
+          attended: prev.attended.map((a) => (a.recordId === recordId ? { ...a, vendor: savedVendor } : a)),
+        })
         setEditingVendorId(null)
-        await load(filter)
       } else {
         alert('Failed to save vendor.')
       }
@@ -181,7 +189,7 @@ export default function TalentMembersPage() {
   const upcomingRows = data.upcoming.map((u) => ({
     Training: u.trainingName, 'Business Unit': u.businessUnit,
     'Start Date': fmtDate(u.startDate), 'End Date': fmtDate(u.endDate),
-    Vendor: u.vendor || '', Attendees: u.attendeeCount,
+    Vendor: u.vendor || '', Attendees: u.attendeeCount, 'Staff Name(s)': u.attendeeNames.join(', '),
   }))
   const exemptedRows = data.exempted.map((e) => ({
     Name: e.name || '', 'Staff ID': e.staffId || '', Email: e.email || '',
@@ -358,6 +366,7 @@ export default function TalentMembersPage() {
               { key: 'startDate', header: 'Start', render: (r) => fmtDate(r.startDate as string) },
               { key: 'endDate', header: 'End', render: (r) => fmtDate(r.endDate as string) },
               { key: 'vendor', header: 'Vendor', render: (r) => (r.vendor as string) || '—' },
+              { key: 'attendeeNames', header: 'Staff Name(s)', render: (r) => (r.attendeeNames as string[]).join(', ') || '—' },
               { key: 'attendeeCount', header: 'Attendees', align: 'right' },
             ]}
             data={data.upcoming as unknown as Record<string, unknown>[]}
