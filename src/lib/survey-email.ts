@@ -96,7 +96,13 @@ export function buildSurveyEmail(input: {
     const scheduleLine = startDate && endDate
       ? `scheduled to hold from ${fmtDate(startDate)} to ${fmtDate(endDate)}`
       : 'scheduled to hold soon'
-    const typeLine = trainingType ? ` and it will be ${articleFor(trainingType)} ${trainingType} training` : ''
+    // trainingType names vary — some are bare categories ("Summit", "Workshop") that read
+    // naturally with " training" appended, others ("Internal Training", "External Training")
+    // already end in the word themselves, which would otherwise double up as "External Training
+    // training". Only append the suffix when the name doesn't already end with it.
+    const typeLine = trainingType
+      ? ` and it will be ${articleFor(trainingType)} ${trainingType}${/training$/i.test(trainingType.trim()) ? '' : ' training'}`
+      : ''
     const venueLine = trainingMode === 'hybrid' && (location || meetingLink)
       ? P(`This is a hybrid training.${location ? ` In-person venue: <strong>${location}</strong>.` : ''}${meetingLink ? ` Join virtually here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.` : ''}`)
       : trainingMode === 'physical' && location
