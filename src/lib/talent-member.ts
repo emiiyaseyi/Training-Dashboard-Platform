@@ -38,6 +38,7 @@ export interface TMUpcomingRecord {
   endDate: Date
   vendor: string | null
   attendeeCount: number
+  attendeeNames: string[] // same set as attendeeCount (every attendee on the schedule) — lengths always match
 }
 
 export interface TMExemptedRecord {
@@ -203,6 +204,14 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     }
     const monthIdx = MONTHS.indexOf(rec.month as typeof MONTHS[number])
     const approxDate = new Date(rec.year, monthIdx >= 0 ? monthIdx : 0, 1)
+    // Uploaded/synced Training Data only has a month, not an exact day, so a row for the current
+    // month could genuinely be later this month (not yet happened) — most often a TrainingRecord
+    // auto-mirrored the moment someone was ADDED as a schedule attendee (see
+    // TrainingScheduleAttendee.linkedTrainingRecordId), well before the training's real (later)
+    // dates. approxDate landing on the 1st of that month means "as of today" is the same cutoff
+    // schedule-sourced attendance already uses (endDate < now) — skip the whole row, not just its
+    // spend, so someone with only a not-yet-happened record isn't shown as already trained.
+    if (approxDate.getTime() > now) continue
     attended.push({
       recordId: rec.id,
       source: 'record',
@@ -215,11 +224,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
       vendor: rec.vendor,
     })
     attendedKeys.add(key)
-    // Uploaded/synced Training Data only has a month, not an exact day, so a row for the current
-    // month could genuinely be later this month (not yet happened) — approxDate lands on the 1st
-    // of that month, so this excludes it from spend the moment the month itself is still current
-    // or later, same "as of today" cutoff schedule-sourced spend already gets from endDate < now.
-    if (approxDate.getTime() <= now) totalSpend += rec.cost
+    totalSpend += rec.cost
   }
 
   const upcoming: TMUpcomingRecord[] = upcomingSchedules.map((s) => ({
@@ -230,6 +235,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     endDate: s.endDate,
     vendor: s.vendor,
     attendeeCount: s.attendees.length,
+    attendeeNames: s.attendees.map((a) => a.staffName),
   }))
 
   const upcomingStaffKeys = new Set<string>()
