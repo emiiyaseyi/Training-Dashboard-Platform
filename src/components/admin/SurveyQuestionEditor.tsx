@@ -17,14 +17,6 @@ interface Question {
   required: boolean
   autoFill: string | null
   fieldKey: string | null
-  driveFolderId: string | null
-}
-
-// Accepts either a bare folder ID or a full Drive URL (https://drive.google.com/drive/folders/<id>...).
-function extractDriveFolderId(input: string): string {
-  const trimmed = input.trim()
-  const match = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/)
-  return match ? match[1] : trimmed
 }
 
 const STAGE_TABS: { key: 'pre' | 'post1' | 'post2'; label: string }[] = [
@@ -45,7 +37,7 @@ const AUTOFILL_OPTIONS = [
 ]
 
 const emptyDraft = {
-  section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false, autoFill: '', fieldKey: '', driveFolderId: '',
+  section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false, autoFill: '', fieldKey: '',
 }
 
 function QuestionForm({
@@ -87,14 +79,6 @@ function QuestionForm({
           placeholder="Options, comma-separated (e.g. Yes, No, Maybe)"
           value={draft.optionsText}
           onChange={(e) => onChange({ ...draft, optionsText: e.target.value })}
-          className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
-        />
-      )}
-      {draft.type === 'file' && (
-        <input
-          placeholder="Google Drive folder — paste the folder link or just its ID"
-          value={draft.driveFolderId}
-          onChange={(e) => onChange({ ...draft, driveFolderId: extractDriveFolderId(e.target.value) })}
           className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
         />
       )}
@@ -180,7 +164,7 @@ export function SurveyQuestionEditor() {
     setEditDraft({
       section: q.section || '', label: q.label, type: q.type,
       optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required,
-      autoFill: q.autoFill || '', fieldKey: q.fieldKey || '', driveFolderId: q.driveFolderId || '',
+      autoFill: q.autoFill || '', fieldKey: q.fieldKey || '',
     })
   }
 
@@ -194,7 +178,7 @@ export function SurveyQuestionEditor() {
         body: JSON.stringify({
           section: editDraft.section, label: editDraft.label, type: editDraft.type,
           options: toOptionsArray(editDraft.optionsText), ratingMax: editDraft.ratingMax, required: editDraft.required,
-          autoFill: editDraft.autoFill, fieldKey: editDraft.fieldKey, driveFolderId: editDraft.driveFolderId,
+          autoFill: editDraft.autoFill, fieldKey: editDraft.fieldKey,
         }),
       })
       setEditingId(null)
@@ -213,7 +197,7 @@ export function SurveyQuestionEditor() {
         body: JSON.stringify({
           stage, section: addDraft.section, label: addDraft.label, type: addDraft.type,
           options: toOptionsArray(addDraft.optionsText), ratingMax: addDraft.ratingMax, required: addDraft.required,
-          autoFill: addDraft.autoFill, fieldKey: addDraft.fieldKey, driveFolderId: addDraft.driveFolderId,
+          autoFill: addDraft.autoFill, fieldKey: addDraft.fieldKey,
         }),
       })
       if (res.ok) {
@@ -308,8 +292,8 @@ export function SurveyQuestionEditor() {
                     {q.autoFill && <span className="text-[10px] bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">auto-filled: {q.autoFill}</span>}
                     {q.fieldKey && <span className="text-[10px] bg-emerald-50 text-emerald-700 rounded px-1.5 py-0.5">feeds: {q.fieldKey}</span>}
                     {q.type === 'file' && (
-                      <span className={`text-[10px] rounded px-1.5 py-0.5 ${q.driveFolderId ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
-                        {q.driveFolderId ? 'Drive folder set' : 'No Drive folder configured'}
+                      <span className="text-[10px] bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">
+                        uploads → Admin → Uploaded Files
                       </span>
                     )}
                     {q.options && q.options.length > 0 && (

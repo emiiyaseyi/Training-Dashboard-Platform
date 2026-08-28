@@ -363,8 +363,9 @@ model SurveyResponse {
 
 // Platform-wide SMTP config — admin-editable (not env vars), since email is used beyond just
 // surveys. Single-row settings, same pattern as GoogleSheetsConfig/BudgetSettings. The password
-// is stored as entered (no separate encryption layer beyond the DB's own security) and is never
-// returned by the GET endpoint — only a "configured" flag — so it can't leak back to the client.
+// is encrypted at rest (AES-256-GCM, key derived from AUTH_SECRET — see lib/secret-crypto.ts;
+// values saved before that layer existed are read back as plain text for compatibility) and is
+// never returned by the GET endpoint — only a "configured" flag — so it can't leak back to the client.
 model SmtpSettings {
   id          String   @id @default(cuid())
   host        String?
@@ -672,6 +673,31 @@ model CustomSurveyResponse {
   recipient CustomSurveyRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 
   @@index([recipientId])
+}
+
+// Stores the actual bytes for a "file"-type survey question answer (e.g. "Certification Issued"),
+// uploaded via /api/survey/[token]/[stage]/upload or /api/custom-survey/[token]/upload. Replaces
+// an earlier Google Drive integration — a service account can't own files outside a Shared Drive,
+// which requires Google Workspace and kept failing for folders on a personal account, so uploads
+// are stored directly here instead and served back only to an authenticated admin (see
+// /api/admin/survey-files). Deliberately flat/denormalized (no FK to the response/attendee row,
+// which may not exist yet — the upload happens before the survey is submitted) so an admin can
+// browse every uploaded file in one place without joining through either survey system.
+model UploadedFile {
+  id              String   @id @default(cuid())
+  source          String   // "survey" | "custom-survey"
+  surveyName      String   // TrainingSchedule.trainingName or CustomSurvey.title, denormalized
+  stage           String?  // "pre" | "post1" | "post2" for training surveys; null for custom surveys
+  questionLabel   String   // denormalized — readable even if the question is later edited/deleted
+  fileName        String
+  mimeType        String
+  fileSize        Int
+  data            Bytes
+  uploaderStaffId String?
+  uploaderName    String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // Monthly report snapshots — generated per BU per month
