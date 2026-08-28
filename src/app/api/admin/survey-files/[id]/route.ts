@@ -15,7 +15,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!file) return NextResponse.json({ error: 'File not found.' }, { status: 404 })
 
   const safeName = file.fileName.replace(/[\r\n"]/g, '_')
-  return new NextResponse(file.data, {
+  // Buffer's TS type doesn't structurally satisfy NextResponse's BodyInit here — a plain
+  // Uint8Array view over the same bytes does.
+  return new NextResponse(new Uint8Array(file.data), {
     headers: {
       'Content-Type': file.mimeType || 'application/octet-stream',
       'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
