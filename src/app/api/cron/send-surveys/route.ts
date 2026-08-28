@@ -19,12 +19,15 @@ const DAY_MS = 86400000
 // After the initial-send pass, a second pass nudges anyone already sent a stage who hasn't
 // responded yet (Admin → Survey Automation → Reminders), stopping once their survey expires.
 export async function GET(req: NextRequest) {
+  // Fail closed: this route sits outside middleware's session check (see middleware.ts), so an
+  // unset CRON_SECRET would otherwise leave it publicly invokable by anyone who knows the URL.
   const cronSecret = process.env.CRON_SECRET
-  if (cronSecret) {
-    const auth = req.headers.get('authorization')
-    if (auth !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
-    }
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET is not configured on the server.' }, { status: 500 })
+  }
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
 
   const now = Date.now()

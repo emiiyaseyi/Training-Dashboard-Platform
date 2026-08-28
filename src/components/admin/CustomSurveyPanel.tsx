@@ -17,7 +17,6 @@ interface Question {
   options: string[] | null
   ratingMax: number
   required: boolean
-  driveFolderId: string | null
 }
 
 interface Response {
@@ -76,7 +75,7 @@ const AUDIENCE_LABELS: Record<AudienceType, string> = {
   selected: 'Selected Staff',
 }
 
-const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false, driveFolderId: '' }
+const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false }
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString()
@@ -130,14 +129,6 @@ function QuestionForm({
           placeholder="Options, comma-separated (e.g. Yes, No, Maybe)"
           value={draft.optionsText}
           onChange={(e) => onChange({ ...draft, optionsText: e.target.value })}
-          className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
-        />
-      )}
-      {draft.type === 'file' && (
-        <input
-          placeholder="Google Drive folder — paste the folder link or just its ID"
-          value={draft.driveFolderId}
-          onChange={(e) => onChange({ ...draft, driveFolderId: e.target.value })}
           className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
         />
       )}
@@ -271,7 +262,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const startAddQuestion = () => { setAddingQuestion(true); setQuestionDraft(emptyQuestionDraft) }
   const startEditQuestion = (q: Question) => {
     setEditingQuestionId(q.id)
-    setQuestionDraft({ section: q.section || '', label: q.label, type: q.type, optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required, driveFolderId: q.driveFolderId || '' })
+    setQuestionDraft({ section: q.section || '', label: q.label, type: q.type, optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required })
   }
   const toOptionsArray = (text: string) => text.split(',').map((o) => o.trim()).filter(Boolean)
 
@@ -280,7 +271,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     try {
       const body = {
         section: questionDraft.section, label: questionDraft.label, type: questionDraft.type,
-        options: toOptionsArray(questionDraft.optionsText), ratingMax: questionDraft.ratingMax, required: questionDraft.required, driveFolderId: questionDraft.driveFolderId,
+        options: toOptionsArray(questionDraft.optionsText), ratingMax: questionDraft.ratingMax, required: questionDraft.required,
       }
       const res = editingQuestionId
         ? await fetch(`/api/admin/custom-surveys/${summary.id}/questions/${editingQuestionId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

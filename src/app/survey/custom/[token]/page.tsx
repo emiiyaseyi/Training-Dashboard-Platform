@@ -50,9 +50,9 @@ function FileQuestionInput({ questionId, value, onChange }: { questionId: string
       {files.map((f, i) => (
         <div key={i} className="flex items-center gap-2 border border-slate-300 rounded-lg px-4 py-2.5 text-[18px]">
           <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
-          <a href={f.webViewLink} target="_blank" rel="noreferrer" className="text-navy-600 hover:underline truncate flex-1">
-            {f.fileName}
-          </a>
+          {/* Not a link — webViewLink now points at an admin-only download route (see
+              UploadedFile in schema.prisma), which would 401 for the respondent viewing it. */}
+          <span className="text-slate-700 truncate flex-1">{f.fileName}</span>
           <button type="button" onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-600 shrink-0">
             <XIcon className="w-4 h-4" />
           </button>
@@ -61,8 +61,9 @@ function FileQuestionInput({ questionId, value, onChange }: { questionId: string
       <label className="flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-4 py-2.5 text-[18px] text-slate-500 cursor-pointer hover:bg-slate-50">
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
         {uploading ? 'Uploading…' : files.length > 0 ? 'Add another file' : 'Choose a file to upload'}
-        <input type="file" className="hidden" disabled={uploading} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
+        <input type="file" accept=".pdf,.png,.jpg,.jpeg,.ppt,.pptx,.docx,.xlsx" className="hidden" disabled={uploading} onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
       </label>
+      <p className="text-[13px] text-slate-400">Accepted: PDF, PNG, JPEG, PowerPoint, Word (.docx), or Excel (.xlsx). You can add more than one file.</p>
       {error && <p className="text-[14px] text-red-600 mt-1">{error}</p>}
     </div>
   )

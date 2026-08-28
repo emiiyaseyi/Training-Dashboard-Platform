@@ -12,6 +12,7 @@ import { TrainingDataMirrorPanel } from '@/components/admin/TrainingDataMirrorPa
 import { SurveySendLogPanel } from '@/components/admin/SurveySendLogPanel'
 import { SurveyInsightsPanel } from '@/components/admin/SurveyInsightsPanel'
 import { AlreadyAttendedTrainingsPanel } from '@/components/admin/AlreadyAttendedTrainingsPanel'
+import { UploadedFilesPanel } from '@/components/admin/UploadedFilesPanel'
 
 export default function AdminSurveysPage() {
   const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0)
@@ -36,6 +37,7 @@ export default function AdminSurveysPage() {
         <SurveyAutomationPanel key={scheduleRefreshKey} />
         <SurveyQuestionEditor />
         <CustomSurveyPanel />
+        <UploadedFilesPanel />
         <SurveySendLogPanel />
       </div>
     </div>
