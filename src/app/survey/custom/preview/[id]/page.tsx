@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { BookOpen, Loader2, AlertTriangle, Eye, Paperclip, ChevronLeft } from 'lucide-react'
-import { visibleQuestions } from '@/lib/custom-survey-branching'
+import { BookOpen, Loader2, AlertTriangle, Eye, Paperclip, ChevronLeft, ChevronUp, ChevronDown } from 'lucide-react'
+import { visibleQuestions, computeSkippedSections } from '@/lib/custom-survey-branching'
 
 interface Question {
   id: string
   section: string | null
   label: string
-  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
+  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
   options: string[] | null
   ratingMax: number
   required: boolean
@@ -29,9 +29,40 @@ interface PreviewContext {
 // nothing here is wired to a real token, submission, or file upload, so there's no risk of this
 // preview accidentally touching real data. Interactive (you can click through rating/select/etc
 // to see how they behave), but self-contained on purpose.
-function PreviewQuestionInput({ q, value, onChange }: { q: Question; value: string | string[]; onChange: (v: string | string[]) => void }) {
+function PreviewQuestionInput({ q, value, onChange, skippedSections }: { q: Question; value: string | string[]; onChange: (v: string | string[]) => void; skippedSections: Set<string> }) {
   const base = 'w-full px-4 py-2.5 border border-slate-300 rounded-lg text-[17px] focus:outline-none focus:ring-2 focus:ring-navy-600'
   switch (q.type) {
+    case 'ranking': {
+      const available = (q.options || []).filter((o) => !skippedSections.has(o))
+      const current = Array.isArray(value) ? value.filter((v) => available.includes(v)) : []
+      const ordered = [...current, ...available.filter((o) => !current.includes(o))]
+      const move = (i: number, dir: -1 | 1) => {
+        const j = i + dir
+        if (j < 0 || j >= ordered.length) return
+        const next = [...ordered]
+        ;[next[i], next[j]] = [next[j], next[i]]
+        onChange(next)
+      }
+      if (ordered.length === 0) {
+        return <p className="text-[16px] text-slate-400">Nothing to rank — you said you rarely or never use any of these.</p>
+      }
+      return (
+        <div className="space-y-2">
+          {ordered.map((o, i) => (
+            <div key={o} className="flex items-center gap-3 border border-slate-300 rounded-lg px-4 py-2.5">
+              <span className="text-[16px] font-semibold text-navy-600 w-5 text-center shrink-0">{i + 1}</span>
+              <span className="flex-1 text-[17px] text-slate-700">{o}</span>
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-slate-400 hover:text-navy-600 disabled:opacity-25 disabled:hover:text-slate-400">
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === ordered.length - 1} className="text-slate-400 hover:text-navy-600 disabled:opacity-25 disabled:hover:text-slate-400">
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )
+    }
     case 'textarea':
       return <textarea value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} rows={3} className={base} />
     case 'select':
@@ -128,6 +159,7 @@ export default function CustomSurveyPreviewPage() {
   }, [params.id])
 
   const visibleQs = useMemo(() => (context ? visibleQuestions(context.questions, answers) : []), [context, answers])
+  const skippedSections = useMemo(() => (context ? computeSkippedSections(context.questions, answers) : new Set<string>()), [context, answers])
 
   const sections = useMemo(() => {
     const seen: string[] = []
@@ -208,8 +240,9 @@ export default function CustomSurveyPreviewPage() {
                             </label>
                             <PreviewQuestionInput
                               q={q}
-                              value={answers[q.id] ?? (q.type === 'multiselect' ? [] : '')}
+                              value={answers[q.id] ?? (q.type === 'multiselect' || q.type === 'ranking' ? [] : '')}
                               onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                              skippedSections={skippedSections}
                             />
                           </div>
                         ))}
@@ -227,8 +260,9 @@ export default function CustomSurveyPreviewPage() {
                                 </label>
                                 <PreviewQuestionInput
                                   q={q}
-                                  value={answers[q.id] ?? (q.type === 'multiselect' ? [] : '')}
+                                  value={answers[q.id] ?? (q.type === 'multiselect' || q.type === 'ranking' ? [] : '')}
                                   onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                                  skippedSections={skippedSections}
                                 />
                               </div>
                             ))}
