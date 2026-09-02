@@ -517,6 +517,14 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
             <p className="text-xs text-slate-400">Loading…</p>
           ) : (
             <>
+              <a
+                href={`/survey/custom/preview/${summary.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 w-fit"
+              >
+                <Eye className="w-3.5 h-3.5" /> Preview Survey
+              </a>
               {detail.status === 'draft' ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
