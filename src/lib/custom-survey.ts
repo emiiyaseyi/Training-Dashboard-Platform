@@ -4,6 +4,7 @@ import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
 import { buildCustomSurveyEmail } from '@/lib/custom-survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 export interface ResolvedAudienceMember {
   staffId: string
@@ -121,6 +122,73 @@ export async function launchCustomSurvey(survey: CustomSurvey): Promise<LaunchRe
       result.sent++
     } catch (err) {
       result.skipped.push({ staffName: recipient.staffName, reason: err instanceof Error ? err.message : 'Send failed.' })
+    }
+  }
+
+  return result
+}
+
+export interface AddRecipientsResult {
+  added: string[]
+  alreadyAdded: string[]
+  notFound: string[]
+  inactive: string[]
+  noEmail: string[]
+}
+
+// Adds one or more people to a survey that's ALREADY launched — the original audience is only
+// ever resolved once, at launch (see resolveAudience above), so this is the one place someone can
+// be added afterward (e.g. a new hire, or someone missed the first time). Mirrors
+// launchCustomSurvey's create-then-send shape, just for an ad-hoc identifier list instead of the
+// survey's own audienceType/Value. Does not touch the survey's stored audienceType/audienceValue
+// (that stays as a record of the original targeting rule) — CustomSurveyRecipient rows are
+// already the real source of truth for "who's actually in this survey" post-launch.
+export async function addCustomSurveyRecipients(survey: CustomSurvey, identifiers: string[]): Promise<AddRecipientsResult> {
+  const directory = await loadRosterDirectory()
+  const existing = await prisma.customSurveyRecipient.findMany({ where: { surveyId: survey.id }, select: { staffId: true } })
+  const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.staffId)))
+
+  const result: AddRecipientsResult = { added: [], alreadyAdded: [], notFound: [], inactive: [], noEmail: [] }
+  const toCreate: ResolvedAudienceMember[] = []
+
+  for (const raw of identifiers) {
+    const identifier = raw.trim()
+    if (!identifier) continue
+    const staff = resolveStaffLoose(identifier, directory)
+    if (!staff) { result.notFound.push(identifier); continue }
+    if (!staff.active) { result.inactive.push(staff.name); continue }
+    const key = normalizeStaffIdKey(staff.staffId)
+    if (existingKeys.has(key)) { result.alreadyAdded.push(staff.name); continue }
+    existingKeys.add(key)
+    toCreate.push({ staffId: staff.staffId, staffName: staff.name, email: staff.email, businessUnit: staff.businessUnit || null })
+  }
+
+  if (toCreate.length === 0) return result
+
+  await prisma.customSurveyRecipient.createMany({
+    data: toCreate.map((a) => ({ surveyId: survey.id, staffId: a.staffId, staffName: a.staffName, email: a.email, businessUnit: a.businessUnit })),
+  })
+  result.added = toCreate.map((a) => a.staffName)
+
+  if (!(await hasSmtpCredentials())) return result
+
+  const created = await prisma.customSurveyRecipient.findMany({
+    where: { surveyId: survey.id, staffId: { in: toCreate.map((a) => a.staffId) } },
+  })
+  const baseUrl = getAppBaseUrl()
+  for (const recipient of created) {
+    if (!recipient.email) { result.noEmail.push(recipient.staffName); continue }
+    const { subject, html } = buildCustomSurveyEmail({
+      title: survey.title,
+      description: survey.description,
+      recipientName: recipient.staffName,
+      formUrl: `${baseUrl}/survey/custom/${recipient.surveyToken}`,
+    })
+    try {
+      await sendMail({ to: recipient.email, subject, html })
+      await prisma.customSurveyRecipient.update({ where: { id: recipient.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+    } catch (err) {
+      console.error('[custom-survey] addCustomSurveyRecipients send failed for', recipient.staffId, err)
     }
   }
 
