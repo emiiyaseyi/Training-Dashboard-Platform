@@ -137,7 +137,10 @@ export interface ReminderResult {
 // Same daily-calendar-day cadence and expiry semantics as sendSurveyReminders (survey-send.ts) —
 // nudges anyone sent this survey who hasn't responded yet, once per day, until they respond or
 // the survey's own expiryDays elapses since launch.
-export async function sendCustomSurveyReminders(survey: CustomSurvey & { recipients: CustomSurveyRecipient[] }): Promise<ReminderResult> {
+export async function sendCustomSurveyReminders(
+  survey: CustomSurvey & { recipients: CustomSurveyRecipient[] },
+  skipDefaultCc = false
+): Promise<ReminderResult> {
   const result: ReminderResult = { sent: 0, skipped: [] }
   if (survey.status !== 'launched') return result
   if (!(await hasSmtpCredentials())) return result
@@ -165,7 +168,7 @@ export async function sendCustomSurveyReminders(survey: CustomSurvey & { recipie
       isReminder: true,
     })
     try {
-      await sendMail({ to: recipient.email, subject, html })
+      await sendMail({ to: recipient.email, subject, html, skipDefaultCc })
       await prisma.customSurveyRecipient.update({ where: { id: recipient.id }, data: { reminderAt: new Date() } })
       result.sent++
     } catch (err) {

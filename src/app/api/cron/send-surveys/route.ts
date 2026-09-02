@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
   const customErrors: { surveyId: string; title: string; message: string }[] = []
   for (const survey of customSurveys) {
     try {
-      const result = await sendCustomSurveyReminders(survey)
+      const result = await sendCustomSurveyReminders(survey, reminderSettings.excludeDefaultCcOnReminders)
       if (result.sent > 0 || result.skipped.length > 0) {
         customResults.push({ surveyId: survey.id, title: survey.title, sent: result.sent, skipped: result.skipped.length })
       }
