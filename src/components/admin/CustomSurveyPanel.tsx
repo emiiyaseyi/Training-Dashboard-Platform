@@ -19,6 +19,8 @@ interface Question {
   options: string[] | null
   ratingMax: number
   required: boolean
+  gatesSection: string | null
+  skipSectionIfValues: string[] | null
 }
 
 interface Response {
@@ -56,6 +58,7 @@ interface SurveySummary {
 }
 
 interface SurveyDetail extends SurveySummary {
+  displayMode: 'single' | 'paginated'
   questions: Question[]
   recipients: Recipient[]
 }
@@ -547,6 +550,26 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                         className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Layout</label>
+                    <div className="flex items-center gap-2">
+                      {(['single', 'paginated'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => { setDetail({ ...detail, displayMode: mode }); patchSurvey({ displayMode: mode }) }}
+                          className={`text-xs font-medium rounded-lg px-3 py-1.5 border ${
+                            detail.displayMode === mode ? 'bg-navy-600 text-white border-navy-600' : 'text-slate-600 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {mode === 'single' ? 'One full page' : 'One section per page'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      &quot;One section per page&quot; is needed for section-skipping (Skip section if… below) to actually skip a page, not just hide questions on it.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Description (optional, shown to respondents)</label>

@@ -21,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     title: survey.title,
     description: survey.description,
     status: survey.status,
+    displayMode: survey.displayMode,
     questions: survey.questions.map((q) => ({
       id: q.id,
       section: q.section,
@@ -29,6 +30,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       options: q.options ? (JSON.parse(q.options) as string[]) : null,
       ratingMax: q.ratingMax,
       required: q.required,
+      gatesSection: q.gatesSection,
+      skipSectionIfValues: q.skipSectionIfValues ? (JSON.parse(q.skipSectionIfValues) as string[]) : null,
     })),
   })
 }

@@ -607,6 +607,7 @@ model CustomSurvey {
   audienceValue   String?   // department/role/BU name for those modes; JSON string[] of staff identifiers for "selected"; null for "all"
   expiryDays      Int       @default(14) // reminders sent once/day (same cadence as the training surveys) until filled or this many days after launch
   status          String    @default("draft") // "draft" (editable, not yet sent) | "launched" (recipients resolved + initial send done) | "closed" (reminders stopped)
+  displayMode     String    @default("single") // "single" (every question on one page) | "paginated" (one section per page, Next/Back, skipped sections omitted from the flow)
   launchedAt      DateTime?
   closedAt        DateTime?
   createdAt       DateTime  @default(now())
@@ -630,6 +631,14 @@ model CustomSurveyQuestion {
   ratingMax     Int      @default(5) // for type "rating" — respondent picks 1..ratingMax (e.g. 5 or 10)
   required      Boolean  @default(false)
   driveFolderId String?  // for type "file"
+  // Section-level branching — anchored on ONE gate question per gated section (typically a
+  // frequency/usage question at the top of that section), not repeated per question. When this
+  // question's own answer is one of skipSectionIfValues, the ENTIRE section named in gatesSection
+  // (every question whose `section` matches, including this one's own section if it gates itself)
+  // is omitted from the respondent's flow — skipped in paginated mode, hidden in single-page mode
+  // — and excluded from required-field validation and from Insights tallies for that respondent.
+  gatesSection        String?
+  skipSectionIfValues String?  // JSON array of strings
   createdAt     DateTime @default(now())
 
   survey CustomSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)

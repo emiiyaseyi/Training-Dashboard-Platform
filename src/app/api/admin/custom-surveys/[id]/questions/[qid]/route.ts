@@ -32,6 +32,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (body.ratingMax !== undefined && Number(body.ratingMax) >= 2 && Number(body.ratingMax) <= 10) data.ratingMax = Math.round(Number(body.ratingMax))
     if (body.required !== undefined) data.required = !!body.required
     if (body.driveFolderId !== undefined) data.driveFolderId = body.driveFolderId ? String(body.driveFolderId).trim() : null
+    if (body.gatesSection !== undefined) data.gatesSection = body.gatesSection ? String(body.gatesSection).trim() : null
+    if (body.skipSectionIfValues !== undefined) {
+      data.skipSectionIfValues = Array.isArray(body.skipSectionIfValues) && body.skipSectionIfValues.length > 0
+        ? JSON.stringify(body.skipSectionIfValues) : null
+    }
 
     const question = await prisma.customSurveyQuestion.update({ where: { id: qid }, data })
     return NextResponse.json(question)

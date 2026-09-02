@@ -49,6 +49,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         data.audienceType = body.audienceType
       }
       if (body.audienceValue !== undefined) data.audienceValue = body.audienceValue || null
+      if (body.displayMode !== undefined) {
+        if (!['single', 'paginated'].includes(body.displayMode)) {
+          return NextResponse.json({ error: 'Invalid display mode.' }, { status: 400 })
+        }
+        data.displayMode = body.displayMode
+      }
     }
 
     if (body.expiryDays !== undefined) data.expiryDays = Math.max(1, Number(body.expiryDays) || 14)
