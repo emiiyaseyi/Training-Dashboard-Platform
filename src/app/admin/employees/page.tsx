@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Search, Plus, Loader2, Pencil, UserX, UserCheck, Trash2, X } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Pagination, paginate } from '@/components/ui/Pagination'
@@ -29,19 +29,35 @@ interface BusinessUnitOption {
 type Draft = {
   staffId: string; firstName: string; middleName: string; lastName: string
   email: string; businessUnit: string; department: string; role: string; employmentType: string
+  lineManagerStaffId: string
 }
+
+interface StaffOption { staffId: string; label: string }
 
 const EMPLOYMENT_TYPES = ['Full-Time', 'Part-Time', 'Intern', 'Contract']
 const PAGE_SIZE = 20
 
 function emptyDraft(): Draft {
-  return { staffId: '', firstName: '', middleName: '', lastName: '', email: '', businessUnit: '', department: '', role: '', employmentType: '' }
+  return { staffId: '', firstName: '', middleName: '', lastName: '', email: '', businessUnit: '', department: '', role: '', employmentType: '', lineManagerStaffId: '' }
+}
+
+// Every field is a labeled <label> wrapping its input, not a bare placeholder — a placeholder
+// disappears the moment a field has a value, which is always true when editing an existing
+// employee, making it impossible to tell which field is which.
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block text-xs text-slate-500">
+      {label}
+      <span className="block mt-1">{children}</span>
+    </label>
+  )
 }
 
 function EmployeeForm({
   draft,
   setDraft,
   businessUnits,
+  staffOptions,
   onSave,
   onCancel,
   saving,
@@ -50,33 +66,72 @@ function EmployeeForm({
   draft: Draft
   setDraft: (d: Draft) => void
   businessUnits: BusinessUnitOption[]
+  staffOptions: StaffOption[]
   onSave: () => void
   onCancel: () => void
   saving: boolean
   error: string | null
 }) {
+  const inputClass = "w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+  const lineManagerLabel = staffOptions.find((o) => o.staffId === draft.lineManagerStaffId)?.label || draft.lineManagerStaffId
   return (
     <div className="border border-dashed border-slate-300 rounded-lg p-4 space-y-3 bg-slate-50">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <input placeholder="Staff ID" value={draft.staffId} onChange={(e) => setDraft({ ...draft, staffId: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <input placeholder="First name" value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <input placeholder="Middle name (optional)" value={draft.middleName} onChange={(e) => setDraft({ ...draft, middleName: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
+        <Field label="Staff ID">
+          <input value={draft.staffId} onChange={(e) => setDraft({ ...draft, staffId: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="First name">
+          <input value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Middle name (optional)">
+          <input value={draft.middleName} onChange={(e) => setDraft({ ...draft, middleName: e.target.value })} className={inputClass} />
+        </Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <input placeholder="Last name" value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <input placeholder="Email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <select value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm">
-          <option value="">Select Business Unit…</option>
-          {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
-        </select>
+        <Field label="Last name">
+          <input value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Email">
+          <input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Business Unit">
+          <select value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className={inputClass}>
+            <option value="">Select Business Unit…</option>
+            {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+          </select>
+        </Field>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <input placeholder="Department" value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <input placeholder="Job role (e.g. Internal Audit Officer)" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm" />
-        <select value={draft.employmentType} onChange={(e) => setDraft({ ...draft, employmentType: e.target.value })} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm">
-          <option value="">Employment type…</option>
-          {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <Field label="Department">
+          <input value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Job role">
+          <input placeholder="e.g. Internal Audit Officer" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Employment type">
+          <select value={draft.employmentType} onChange={(e) => setDraft({ ...draft, employmentType: e.target.value })} className={inputClass}>
+            <option value="">Employment type…</option>
+            {EMPLOYMENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Field label="Line Manager">
+          <input
+            list="line-manager-options"
+            value={lineManagerLabel}
+            onChange={(e) => {
+              const typed = e.target.value
+              const match = staffOptions.find((o) => o.label === typed)
+              setDraft({ ...draft, lineManagerStaffId: match ? match.staffId : typed })
+            }}
+            placeholder="Search by name or Staff ID…"
+            className={inputClass}
+          />
+          <datalist id="line-manager-options">
+            {staffOptions.map((o) => <option key={o.staffId} value={o.label} />)}
+          </datalist>
+        </Field>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="flex items-center gap-2">
@@ -143,6 +198,14 @@ export default function EmployeesPage() {
     if (!staffId) return null
     return staffById.get(staffId.trim().toUpperCase())?.name || staffId
   }
+  // Excludes whoever's currently being edited from their own line-manager options — picking
+  // yourself as your own manager is a real data-quality bug this has actually caused elsewhere.
+  const staffOptions: StaffOption[] = useMemo(
+    () => employees
+      .filter((e) => e.active && e.id !== editingId)
+      .map((e) => ({ staffId: e.staffId, label: `${e.name} (${e.staffId})` })),
+    [employees, editingId]
+  )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -188,7 +251,7 @@ export default function EmployeesPage() {
     setEditDraft({
       staffId: e.staffId, firstName: e.firstName, middleName: e.middleName || '', lastName: e.lastName,
       email: e.email || '', businessUnit: e.businessUnit, department: e.department || '', role: e.role || '',
-      employmentType: e.employmentType || '',
+      employmentType: e.employmentType || '', lineManagerStaffId: e.lineManagerStaffId || '',
     })
   }
 
@@ -261,6 +324,7 @@ export default function EmployeesPage() {
             draft={addDraft}
             setDraft={setAddDraft}
             businessUnits={businessUnits}
+            staffOptions={staffOptions}
             onSave={addEmployee}
             onCancel={() => setShowAddForm(false)}
             saving={saving}
@@ -380,6 +444,7 @@ export default function EmployeesPage() {
                               draft={editDraft}
                               setDraft={setEditDraft}
                               businessUnits={businessUnits}
+                              staffOptions={staffOptions}
                               onSave={saveEdit}
                               onCancel={() => setEditingId(null)}
                               saving={saving}
