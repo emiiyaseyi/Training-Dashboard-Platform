@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ClipboardList, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Search, X, PenLine, Rocket, Ban, Eye,
+  ClipboardList, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Search, X, PenLine, Rocket, Ban, Eye, BarChart3,
 } from 'lucide-react'
+import { BarChart } from '@/components/charts/BarChart'
+import { DataTable } from '@/components/ui/DataTable'
 
 type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
@@ -76,6 +78,7 @@ const AUDIENCE_LABELS: Record<AudienceType, string> = {
 }
 
 const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false }
+const emptyBulkDraft = { section: '', type: 'select' as QuestionType, optionsText: '', labelsText: '', required: true }
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString()
@@ -165,6 +168,74 @@ function QuestionForm({
   )
 }
 
+// One row of shared type/options/section — pasted labels (one per line) each become their own
+// question, all sharing that same shape. Built for exactly this: pasting a checklist of many
+// skill/task rows that all use the same rating scale (e.g. "Proficient / Needs Practice / Not
+// Yet Able / N/A"), instead of clicking "Add Question" dozens of times.
+function BulkQuestionForm({
+  draft, onChange, onSave, onCancel, saving,
+}: {
+  draft: typeof emptyBulkDraft
+  onChange: (d: typeof emptyBulkDraft) => void
+  onSave: () => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const needsOptions = draft.type === 'select' || draft.type === 'multiselect'
+  const lineCount = draft.labelsText.split('\n').map((l) => l.trim()).filter(Boolean).length
+  return (
+    <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <input
+          placeholder="Section applied to every row (e.g. Microsoft Excel)"
+          value={draft.section}
+          onChange={(e) => onChange({ ...draft, section: e.target.value })}
+          className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+        />
+        <select
+          value={draft.type}
+          onChange={(e) => onChange({ ...draft, type: e.target.value as QuestionType })}
+          className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+        >
+          {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+      {needsOptions && (
+        <input
+          placeholder="Options applied to every row, comma-separated (e.g. Proficient, Needs Practice, Not Yet Able, N/A)"
+          value={draft.optionsText}
+          onChange={(e) => onChange({ ...draft, optionsText: e.target.value })}
+          className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+        />
+      )}
+      <textarea
+        placeholder="One question per line — each line becomes its own question, all sharing the section/type/options above"
+        value={draft.labelsText}
+        onChange={(e) => onChange({ ...draft, labelsText: e.target.value })}
+        rows={8}
+        className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono"
+      />
+      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+        <input type="checkbox" checked={draft.required} onChange={(e) => onChange({ ...draft, required: e.target.checked })} />
+        Required
+      </label>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSave}
+          disabled={saving || lineCount === 0}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Add {lineCount || ''} Question{lineCount === 1 ? '' : 's'}
+        </button>
+        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1.5">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; roster: RosterStaff[]; onChanged: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [detail, setDetail] = useState<SurveyDetail | null>(null)
@@ -182,11 +253,60 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [questionDraft, setQuestionDraft] = useState(emptyQuestionDraft)
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [savingQuestion, setSavingQuestion] = useState(false)
+  const [bulkAdding, setBulkAdding] = useState(false)
+  const [bulkDraft, setBulkDraft] = useState(emptyBulkDraft)
 
   const [launching, setLaunching] = useState(false)
   const [closing, setClosing] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
+  const [showInsights, setShowInsights] = useState(false)
+
+  // Derived entirely from data loadDetail() already fetched (questions + every recipient's
+  // response) — no separate endpoint needed. Tallies answer VALUES generically (not hardcoded to
+  // any particular wording), so this works for any select/multiselect/yesno/rating question set,
+  // not just one specific survey: a per-question distribution (e.g. "18 said Proficient, 6 said
+  // Needs Practice" for one skill), and a per-respondent scorecard (how many of THEIR answers fell
+  // into each distinct value seen anywhere) — the second is what actually answers "who needs
+  // training vs who's fine" at a glance for a self-assessment-style survey.
+  const insights = useMemo(() => {
+    if (!detail) return null
+    const categorical = detail.questions.filter((q) => ['select', 'multiselect', 'yesno', 'rating'].includes(q.type))
+    if (categorical.length === 0) return null
+
+    const responded = detail.recipients
+      .map((r) => ({ recipient: r, resp: r.responses[0] }))
+      .filter((x): x is { recipient: Recipient; resp: Response } => !!x.resp)
+      .map(({ recipient, resp }) => ({ recipient, answers: JSON.parse(resp.answers) as Record<string, string | string[]> }))
+
+    const valuesOf = (v: string | string[] | undefined): string[] => (Array.isArray(v) ? v : v ? [v] : [])
+
+    const questionDistributions = categorical.map((q) => {
+      const counts = new Map<string, number>()
+      for (const { answers } of responded) {
+        for (const v of valuesOf(answers[q.id])) counts.set(v, (counts.get(v) || 0) + 1)
+      }
+      const order = q.options || []
+      const values = [...counts.keys()].sort((a, b) => {
+        const ai = order.indexOf(a), bi = order.indexOf(b)
+        return ai !== -1 && bi !== -1 ? ai - bi : a.localeCompare(b)
+      })
+      return { question: q, values, counts: values.map((v) => counts.get(v) || 0) }
+    })
+
+    // Every distinct value seen across every categorical question, in first-seen order — becomes
+    // the scorecard table's columns.
+    const allValues: string[] = []
+    for (const { values } of questionDistributions) for (const v of values) if (!allValues.includes(v)) allValues.push(v)
+
+    const respondentScores = responded.map(({ recipient, answers }) => {
+      const tally: Record<string, number> = {}
+      for (const q of categorical) for (const v of valuesOf(answers[q.id])) tally[v] = (tally[v] || 0) + 1
+      return { recipient, tally }
+    })
+
+    return { questionDistributions, allValues, respondentScores }
+  }, [detail])
 
   const loadDetail = async () => {
     setLoadingDetail(true)
@@ -284,6 +404,33 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       } else {
         const err = await res.json().catch(() => ({}))
         alert(err.error || 'Failed to save question.')
+      }
+    } finally {
+      setSavingQuestion(false)
+    }
+  }
+
+  const saveBulkQuestions = async () => {
+    setSavingQuestion(true)
+    try {
+      const labels = bulkDraft.labelsText.split('\n').map((l) => l.trim()).filter(Boolean)
+      const options = toOptionsArray(bulkDraft.optionsText)
+      const questions = labels.map((label) => ({
+        section: bulkDraft.section, label, type: bulkDraft.type, options, required: bulkDraft.required,
+      }))
+      const res = await fetch(`/api/admin/custom-surveys/${summary.id}/questions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ questions }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBulkAdding(false)
+        setBulkDraft(emptyBulkDraft)
+        await loadDetail()
+        onChanged()
+        if (data.errors?.length > 0) alert(`${data.questions.length} added. Some rows were skipped:\n${data.errors.join('\n')}`)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || 'Failed to add questions.')
       }
     } finally {
       setSavingQuestion(false)
@@ -517,10 +664,20 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       ))}
                       {addingQuestion ? (
                         <QuestionForm draft={questionDraft} onChange={setQuestionDraft} onSave={saveQuestion} onCancel={() => setAddingQuestion(false)} saving={savingQuestion} />
+                      ) : bulkAdding ? (
+                        <BulkQuestionForm draft={bulkDraft} onChange={setBulkDraft} onSave={saveBulkQuestions} onCancel={() => setBulkAdding(false)} saving={savingQuestion} />
                       ) : (
-                        <button onClick={startAddQuestion} className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-dashed border-navy-200 rounded-lg px-3 py-2 hover:bg-navy-50 w-full justify-center">
-                          <Plus className="w-3.5 h-3.5" /> Add Question
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={startAddQuestion} className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-dashed border-navy-200 rounded-lg px-3 py-2 hover:bg-navy-50 flex-1 justify-center">
+                            <Plus className="w-3.5 h-3.5" /> Add Question
+                          </button>
+                          <button
+                            onClick={() => { setBulkAdding(true); setBulkDraft(emptyBulkDraft) }}
+                            className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-dashed border-navy-200 rounded-lg px-3 py-2 hover:bg-navy-50 flex-1 justify-center"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Bulk Add (paste multiple)
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -547,13 +704,58 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       {detail.audienceType !== 'all' && detail.audienceType !== 'selected' && detail.audienceValue ? `: ${detail.audienceValue}` : ''}
                       {' · Expires '}{detail.expiryDays} day{detail.expiryDays === 1 ? '' : 's'} after launch
                     </p>
-                    {detail.status === 'launched' && (
-                      <button onClick={closeSurvey} disabled={closing} className="flex items-center gap-1.5 text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 hover:bg-amber-50 disabled:opacity-50 ml-auto">
-                        {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-                        Close (stop reminders)
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2 ml-auto">
+                      {insights && (
+                        <button onClick={() => setShowInsights((v) => !v)} className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50">
+                          <BarChart3 className="w-3.5 h-3.5" />
+                          {showInsights ? 'Hide Insights' : 'Insights'}
+                        </button>
+                      )}
+                      {detail.status === 'launched' && (
+                        <button onClick={closeSurvey} disabled={closing} className="flex items-center gap-1.5 text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 hover:bg-amber-50 disabled:opacity-50">
+                          {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+                          Close (stop reminders)
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {showInsights && insights && (
+                    <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50">
+                      <p className="text-xs font-semibold text-slate-700">
+                        Results Insights <span className="text-slate-400 font-normal">— {insights.respondentScores.length} response{insights.respondentScores.length === 1 ? '' : 's'} analyzed</span>
+                      </p>
+                      <div className="space-y-4">
+                        {insights.questionDistributions.map(({ question, values, counts }) => (
+                          <div key={question.id}>
+                            <p className="text-xs text-slate-600 mb-1">
+                              {question.section && <span className="text-slate-400">{question.section} — </span>}
+                              {question.label}
+                            </p>
+                            <BarChart labels={values} values={counts} horizontal showLabels height={Math.max(80, values.length * 32)} />
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-slate-700 mb-2">Per-Respondent Scorecard</p>
+                        <DataTable
+                          columns={[
+                            { key: 'staffName', header: 'Name', sortable: true },
+                            { key: 'businessUnit', header: 'Business Unit', sortable: true },
+                            ...insights.allValues.map((v) => ({
+                              key: v, header: v, align: 'right' as const, sortable: true,
+                              render: (r: Record<string, unknown>) => (r[v] as number) || 0,
+                            })),
+                          ]}
+                          data={insights.respondentScores.map((s) => ({
+                            staffName: s.recipient.staffName,
+                            businessUnit: s.recipient.businessUnit || '—',
+                            ...s.tally,
+                          }))}
+                          emptyMessage="No responses yet."
+                        />
+                      </div>
+                    </div>
+                  )}
                   {(() => {
                     const total = detail.recipients.length
                     const sent = detail.recipients.filter((r) => r.sentAt).length

@@ -17,29 +17,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const body = await req.json()
-    const label = String(body.label || '').trim()
-    const type = String(body.type || 'text')
-    if (!label) return NextResponse.json({ error: 'Question label is required.' }, { status: 400 })
-    if (!VALID_TYPES.includes(type)) return NextResponse.json({ error: 'Invalid question type.' }, { status: 400 })
+    // Accepts either a single question object or { questions: [...] } for bulk creation (e.g.
+    // pasting a whole checklist of skill/task rows that all share the same type/options/section) —
+    // same "single or array" convention as POST /api/admin/users.
+    const inputs: Record<string, unknown>[] = Array.isArray(body.questions) ? body.questions : [body]
 
     const maxOrder = await prisma.customSurveyQuestion.aggregate({ where: { surveyId: id }, _max: { order: true } })
+    let nextOrder = (maxOrder._max.order ?? -1) + 1
 
-    const question = await prisma.customSurveyQuestion.create({
-      data: {
-        surveyId: id,
-        order: (maxOrder._max.order ?? -1) + 1,
-        section: body.section ? String(body.section).trim() : null,
-        label,
-        type,
-        options: Array.isArray(body.options) && body.options.length > 0 ? JSON.stringify(body.options) : null,
-        ratingMax: Number(body.ratingMax) >= 2 && Number(body.ratingMax) <= 10 ? Math.round(Number(body.ratingMax)) : 5,
-        required: !!body.required,
-        driveFolderId: body.driveFolderId ? String(body.driveFolderId).trim() : null,
-      },
-    })
-    return NextResponse.json(question)
+    const created = []
+    const errors: string[] = []
+    for (const input of inputs) {
+      const label = String(input.label || '').trim()
+      const type = String(input.type || 'text')
+      if (!label) { errors.push('A question is missing a label.'); continue }
+      if (!VALID_TYPES.includes(type)) { errors.push(`"${label}": invalid question type.`); continue }
+
+      const question = await prisma.customSurveyQuestion.create({
+        data: {
+          surveyId: id,
+          order: nextOrder++,
+          section: input.section ? String(input.section).trim() : null,
+          label,
+          type,
+          options: Array.isArray(input.options) && input.options.length > 0 ? JSON.stringify(input.options) : null,
+          ratingMax: Number(input.ratingMax) >= 2 && Number(input.ratingMax) <= 10 ? Math.round(Number(input.ratingMax)) : 5,
+          required: !!input.required,
+          driveFolderId: input.driveFolderId ? String(input.driveFolderId).trim() : null,
+        },
+      })
+      created.push(question)
+    }
+    return NextResponse.json({ questions: created, errors })
   } catch (err) {
     console.error('[admin/custom-surveys/[id]/questions POST]', err)
-    return NextResponse.json({ error: 'Failed to add question.' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to add question(s).' }, { status: 500 })
   }
 }
