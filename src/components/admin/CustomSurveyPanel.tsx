@@ -262,6 +262,8 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [launching, setLaunching] = useState(false)
   const [closing, setClosing] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [addParticipantQuery, setAddParticipantQuery] = useState('')
+  const [addingParticipant, setAddingParticipant] = useState(false)
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
   const [showInsights, setShowInsights] = useState(false)
 
@@ -380,6 +382,37 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const saveSelectedAudience = async (next: RosterStaff[]) => {
     setSelectedPending(next)
     await patchSurvey({ audienceValue: JSON.stringify(next.map((p) => p.staffId)) })
+  }
+
+  // Same search-by-name/email/Staff ID pattern as the draft-mode "Selected Staff" audience picker
+  // above — the original audience is only ever resolved once at launch, so this is the one way to
+  // bring in someone who was missed the first time (a new hire, a typo'd identifier, etc.).
+  const addParticipantResults = useMemo(() => {
+    const q = addParticipantQuery.trim().toLowerCase()
+    if (!q || !detail) return []
+    const existingIds = new Set(detail.recipients.map((r) => r.staffId))
+    return roster.filter((r) => !existingIds.has(r.staffId))
+      .filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [addParticipantQuery, roster, detail])
+
+  const addParticipant = async (staff: RosterStaff) => {
+    setAddingParticipant(true)
+    try {
+      const res = await fetch(`/api/admin/custom-surveys/${summary.id}/recipients`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identifiers: [staff.staffId] }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.error || 'Failed to add participant.')
+        return
+      }
+      setAddParticipantQuery('')
+      await loadDetail()
+      onChanged()
+    } finally {
+      setAddingParticipant(false)
+    }
   }
 
   const startAddQuestion = () => { setAddingQuestion(true); setQuestionDraft(emptyQuestionDraft) }
@@ -750,6 +783,37 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       )}
                     </div>
                   </div>
+                  {detail.status === 'launched' && (
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Add Participant</label>
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          value={addParticipantQuery}
+                          onChange={(e) => setAddParticipantQuery(e.target.value)}
+                          placeholder="Search by name, email, or Staff ID…"
+                          disabled={addingParticipant}
+                          className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm disabled:opacity-50"
+                        />
+                        {addParticipantResults.length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {addParticipantResults.map((r) => (
+                              <button
+                                key={r.staffId}
+                                onClick={() => addParticipant(r)}
+                                disabled={addingParticipant}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2 disabled:opacity-50"
+                              >
+                                <span className="text-slate-700">{r.name}</span>
+                                <span className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">Sends the survey to them immediately — the original audience is only resolved once, at launch, so this is the way to bring in someone who was missed.</p>
+                    </div>
+                  )}
                   {showInsights && insights && (
                     <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50">
                       <p className="text-xs font-semibold text-slate-700">
