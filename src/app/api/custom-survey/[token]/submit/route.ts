@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import { isCustomSurveyExpired } from '@/lib/custom-survey'
 import { mirrorCustomSurveyResponse } from '@/lib/custom-survey-mirror'
+import { visibleQuestions } from '@/lib/custom-survey-branching'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'custom-survey-submit', 20, 60_000)
@@ -23,7 +24,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const { answers } = (await req.json()) as { answers: Record<string, string | string[]> }
     const questions = recipient.survey.questions
 
-    const missing = questions.filter((q) => q.required && !answers[q.id]?.toString().trim())
+    // A section the respondent branched past (e.g. "I never use Excel") never had its questions
+    // shown to them, so its required questions must not be validated as "missing" — re-evaluated
+    // here server-side (not trusted from the client) using the same rule the form itself used.
+    const applicable = visibleQuestions(
+      questions.map((q) => ({
+        id: q.id, section: q.section, gatesSection: q.gatesSection,
+        skipSectionIfValues: q.skipSectionIfValues ? (JSON.parse(q.skipSectionIfValues) as string[]) : null,
+      })),
+      answers
+    )
+    const applicableIds = new Set(applicable.map((q) => q.id))
+
+    const missing = questions.filter((q) => applicableIds.has(q.id) && q.required && !answers[q.id]?.toString().trim())
     if (missing.length > 0) {
       return NextResponse.json({ error: `Please answer: ${missing.map((q) => q.label).join(', ')}` }, { status: 400 })
     }

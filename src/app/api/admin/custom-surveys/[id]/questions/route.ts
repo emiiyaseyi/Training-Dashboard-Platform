@@ -44,6 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           ratingMax: Number(input.ratingMax) >= 2 && Number(input.ratingMax) <= 10 ? Math.round(Number(input.ratingMax)) : 5,
           required: !!input.required,
           driveFolderId: input.driveFolderId ? String(input.driveFolderId).trim() : null,
+          gatesSection: input.gatesSection ? String(input.gatesSection).trim() : null,
+          skipSectionIfValues: Array.isArray(input.skipSectionIfValues) && input.skipSectionIfValues.length > 0
+            ? JSON.stringify(input.skipSectionIfValues) : null,
         },
       })
       created.push(question)

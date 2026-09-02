@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock, Search, Pencil, ArrowLeft, Paperclip, Upload, X as XIcon } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2, AlertTriangle, Clock, Search, Pencil, ArrowLeft, Paperclip, Upload, X as XIcon, ChevronLeft } from 'lucide-react'
+import { visibleQuestions } from '@/lib/custom-survey-branching'
 
 interface Question {
   id: string
@@ -12,6 +13,8 @@ interface Question {
   options: string[] | null
   ratingMax: number
   required: boolean
+  gatesSection: string | null
+  skipSectionIfValues: string[] | null
 }
 
 interface UploadedFile { fileName: string; webViewLink: string }
@@ -234,6 +237,7 @@ interface SurveyContext {
   recipientName: string
   alreadyResponded: boolean
   expired: boolean
+  displayMode: 'single' | 'paginated'
   questions: Question[]
 }
 
@@ -246,6 +250,7 @@ export default function CustomSurveyPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     fetch(`/api/custom-survey/${params.token}`)
@@ -258,17 +263,34 @@ export default function CustomSurveyPage() {
       .finally(() => setLoading(false))
   }, [params.token])
 
+  // Recomputed on every answer change — a section whose gate question now points at a
+  // skip-triggering value drops out of both the section list and the flow immediately.
+  const visibleQs = useMemo(() => (context ? visibleQuestions(context.questions, answers) : []), [context, answers])
+
   const sections = useMemo(() => {
     const seen: string[] = []
-    for (const q of context?.questions || []) {
+    for (const q of visibleQs) {
       const s = q.section || ''
       if (!seen.includes(s)) seen.push(s)
     }
     return seen
-  }, [context])
+  }, [visibleQs])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const paginated = context?.displayMode === 'paginated' && sections.length > 1
+
+  // A section can disappear out from under the current page (going Back and changing an earlier
+  // gate answer) — clamp back onto the nearest still-visible page rather than showing a blank one.
+  useEffect(() => {
+    if (page >= sections.length) setPage(Math.max(0, sections.length - 1))
+  }, [sections.length, page])
+
+  const currentSection = paginated ? sections[page] : null
+  const questionsToShow = paginated ? visibleQs.filter((q) => (q.section || '') === currentSection) : visibleQs
+  const isLastPage = !paginated || page === sections.length - 1
+
+  const currentPageMissing = questionsToShow.filter((q) => q.required && !answers[q.id]?.toString().trim())
+
+  const submitAnswers = async () => {
     setSubmitError('')
     setSubmitting(true)
     try {
@@ -285,6 +307,27 @@ export default function CustomSurveyPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Single form onSubmit handles both single-page (always the "last page") and paginated modes —
+  // advances to the next section when there's one, submits for real only from the last page.
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (currentPageMissing.length > 0) {
+      setSubmitError(`Please answer: ${currentPageMissing.map((q) => q.label).join(', ')}`)
+      return
+    }
+    if (!isLastPage) {
+      setSubmitError('')
+      setPage((p) => p + 1)
+      return
+    }
+    await submitAnswers()
+  }
+
+  const goBack = () => {
+    setSubmitError('')
+    setPage((p) => Math.max(0, p - 1))
   }
 
   return (
@@ -330,41 +373,82 @@ export default function CustomSurveyPage() {
               <p className="text-[21px] font-semibold text-slate-800 mt-1">{context.title}</p>
               {context.description && <p className="text-[16px] text-slate-400 mt-0.5">{context.description}</p>}
 
-              <div className="mt-6 space-y-6">
-                {sections.map((section) => (
-                  <div key={section}>
-                    {section && <p className="text-[16px] font-semibold text-navy-600 uppercase tracking-wide mb-3">{section}</p>}
-                    <div className="space-y-4">
-                      {context.questions.filter((q) => (q.section || '') === section).map((q) => (
-                        <div key={q.id}>
-                          <label className="block text-[18px] text-slate-700 mb-1.5">
-                            {q.label}
-                            {q.required && <span className="text-red-500 ml-0.5">*</span>}
-                          </label>
-                          <QuestionInput
-                            q={q}
-                            value={answers[q.id] ?? (q.type === 'multiselect' ? [] : '')}
-                            onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
-                          />
-                        </div>
-                      ))}
-                    </div>
+              {paginated && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[13px] text-slate-400 mb-1">
+                    <span>Section {page + 1} of {sections.length}</span>
+                    <span>{currentSection || 'General'}</span>
                   </div>
-                ))}
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-navy-600 transition-all" style={{ width: `${((page + 1) / sections.length) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 space-y-6">
+                {paginated ? (
+                  <div className="space-y-4">
+                    {questionsToShow.map((q) => (
+                      <div key={q.id}>
+                        <label className="block text-[18px] text-slate-700 mb-1.5">
+                          {q.label}
+                          {q.required && <span className="text-red-500 ml-0.5">*</span>}
+                        </label>
+                        <QuestionInput
+                          q={q}
+                          value={answers[q.id] ?? (q.type === 'multiselect' ? [] : '')}
+                          onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  sections.map((section) => (
+                    <div key={section}>
+                      {section && <p className="text-[16px] font-semibold text-navy-600 uppercase tracking-wide mb-3">{section}</p>}
+                      <div className="space-y-4">
+                        {visibleQs.filter((q) => (q.section || '') === section).map((q) => (
+                          <div key={q.id}>
+                            <label className="block text-[18px] text-slate-700 mb-1.5">
+                              {q.label}
+                              {q.required && <span className="text-red-500 ml-0.5">*</span>}
+                            </label>
+                            <QuestionInput
+                              q={q}
+                              value={answers[q.id] ?? (q.type === 'multiselect' ? [] : '')}
+                              onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {submitError && (
                 <p className="mt-4 text-[16px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{submitError}</p>
               )}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="mt-6 w-full flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-[18px] font-medium rounded-lg py-3 transition-colors disabled:opacity-60"
-              >
-                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Submit
-              </button>
+              <div className="mt-6 flex items-center gap-2">
+                {paginated && page > 0 && (
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    className="flex items-center gap-1 px-4 py-3 text-[18px] font-medium text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Back
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-[18px] font-medium rounded-lg py-3 transition-colors disabled:opacity-60"
+                >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isLastPage ? 'Submit' : 'Next'}
+                </button>
+              </div>
             </form>
           ) : null}
         </div>

@@ -28,6 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       recipientName: recipient.staffName,
       alreadyResponded,
       expired,
+      displayMode: recipient.survey.displayMode,
       questions: questions.map((q) => ({
         id: q.id,
         section: q.section,
@@ -36,6 +37,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         options: q.options ? JSON.parse(q.options) : null,
         ratingMax: q.ratingMax,
         required: q.required,
+        gatesSection: q.gatesSection,
+        skipSectionIfValues: q.skipSectionIfValues ? JSON.parse(q.skipSectionIfValues) : null,
       })),
     })
   } catch (err) {
