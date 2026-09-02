@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
-const VALID_TYPES = ['text', 'textarea', 'select', 'multiselect', 'rating', 'date', 'yesno', 'file']
+const VALID_TYPES = ['text', 'textarea', 'select', 'multiselect', 'rating', 'date', 'yesno', 'file', 'ranking']
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')

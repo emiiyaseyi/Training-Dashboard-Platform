@@ -7,7 +7,7 @@ import {
 import { BarChart } from '@/components/charts/BarChart'
 import { DataTable } from '@/components/ui/DataTable'
 
-type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
+type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
 
 interface Question {
@@ -70,7 +70,7 @@ interface RosterStaff {
   businessUnit: string
 }
 
-const TYPE_OPTIONS: QuestionType[] = ['text', 'textarea', 'select', 'multiselect', 'rating', 'date', 'yesno', 'file']
+const TYPE_OPTIONS: QuestionType[] = ['text', 'textarea', 'select', 'multiselect', 'rating', 'date', 'yesno', 'file', 'ranking']
 
 const AUDIENCE_LABELS: Record<AudienceType, string> = {
   all: 'All Staff',
@@ -105,7 +105,7 @@ function QuestionForm({
   onCancel: () => void
   saving: boolean
 }) {
-  const needsOptions = draft.type === 'select' || draft.type === 'multiselect'
+  const needsOptions = draft.type === 'select' || draft.type === 'multiselect' || draft.type === 'ranking'
   return (
     <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -184,7 +184,7 @@ function BulkQuestionForm({
   onCancel: () => void
   saving: boolean
 }) {
-  const needsOptions = draft.type === 'select' || draft.type === 'multiselect'
+  const needsOptions = draft.type === 'select' || draft.type === 'multiselect' || draft.type === 'ranking'
   const lineCount = draft.labelsText.split('\n').map((l) => l.trim()).filter(Boolean).length
   return (
     <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
