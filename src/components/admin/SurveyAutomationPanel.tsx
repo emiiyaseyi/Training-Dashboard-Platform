@@ -367,6 +367,16 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       )
       if (res.ok) {
         const saved = await res.json()
+        // Registers a newly-typed vendor into the shared Vendor list too (upsert by name — a
+        // no-op if it already exists), same as the Talent Members "TM Attended" vendor editor.
+        const vendorName = newSchedule.vendor.trim()
+        if (vendorName && !vendors.some((v) => v.name.toLowerCase() === vendorName.toLowerCase())) {
+          fetch('/api/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: vendorName }),
+          }).then(() => loadTaxonomies())
+        }
         if (!editingScheduleId && newSchedulePending.length > 0) {
           await fetch(`/api/admin/training-schedule/${saved.id}/attendees`, {
             method: 'POST',
@@ -941,14 +951,18 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               </label>
               <label className="text-xs text-slate-500">
                 Vendor
-                <select
+                <input
+                  list="schedule-vendor-options"
                   value={newSchedule.vendor}
                   onChange={(e) => setNewSchedule({ ...newSchedule, vendor: e.target.value })}
+                  placeholder="Pick or type a new vendor"
                   className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
-                >
-                  <option value="">Select…</option>
-                  {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
-                </select>
+                />
+                {/* Native autocomplete over the shared Vendor list, while still allowing free
+                    text for a new one — saveSchedule() registers it into the Vendor table too. */}
+                <datalist id="schedule-vendor-options">
+                  {vendors.map((v) => <option key={v.id} value={v.name} />)}
+                </datalist>
               </label>
             </div>
             <p className="text-[11px] text-slate-400">
