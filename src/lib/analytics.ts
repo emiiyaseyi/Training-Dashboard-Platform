@@ -150,12 +150,15 @@ export interface GroupAnalytics {
 }
 
 export interface TalentMemberReport {
+  year: number
   totalHeadcount: number
   staffTrained: number
   staffNotTrained: number
   staffExempted: number
   totalSpend: number
   coveragePct: number
+  staffWithUpcomingTraining: number
+  distinctTrainingsDelivered: number
 }
 
 export interface StaffAttendanceRow {
@@ -935,12 +938,15 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   // ── Talent Member (TM) — a Training Type that still counts as formal training, but is also
   // tracked separately against the real, named TM roster (see talent-member.ts) ──
   const talentMember: TalentMemberReport = {
+    year: talentMemberReport.year,
     totalHeadcount: talentMemberReport.totalTalentMembers,
     staffTrained: talentMemberReport.staffTrained,
     staffNotTrained: talentMemberReport.staffNotTrained,
     staffExempted: talentMemberReport.staffExempted,
     totalSpend: talentMemberReport.totalSpend,
     coveragePct: talentMemberReport.coveragePct,
+    staffWithUpcomingTraining: talentMemberReport.staffWithUpcomingTraining,
+    distinctTrainingsDelivered: talentMemberReport.distinctTrainingsDelivered,
   }
 
   return {
