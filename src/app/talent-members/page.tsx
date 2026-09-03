@@ -212,7 +212,7 @@ export default function TalentMembersPage() {
               sheets={[
                 { name: 'Attended', rows: attendedRows },
                 { name: 'Upcoming', rows: upcomingRows },
-                { name: 'Exempted', rows: exemptedRows },
+                { name: 'Ineligible', rows: exemptedRows },
                 { name: 'Yet to Attend', rows: yetToAttendRows },
               ]}
               filename={`talent_members_${year}`}
@@ -230,10 +230,10 @@ export default function TalentMembersPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard title="Total Talent Members" value={data.totalTalentMembers.toLocaleString()} subtitle="Current TM roster" icon={Users} color="blue" />
           <KPICard title="Staff Trained" value={data.staffTrained.toLocaleString()} subtitle={`${filterLabel(filter)} TM training attendance`} icon={UserCheck} color="green" />
-          <KPICard title="Yet to be Trained" value={data.staffNotTrained.toLocaleString()} subtitle="Not yet attended, not exempted" icon={UserX} color="red" alert={data.staffNotTrained > 0} />
-          <KPICard title="Staff Exempted" value={data.staffExempted.toLocaleString()} subtitle={`Excused for ${year}`} icon={UserMinus} color="purple" />
+          <KPICard title="Yet to be Trained" value={data.staffNotTrained.toLocaleString()} subtitle="Not yet attended, not ineligible" icon={UserX} color="red" alert={data.staffNotTrained > 0} />
+          <KPICard title="Staff Ineligible" value={data.staffExempted.toLocaleString()} subtitle={`Excused for ${year}`} icon={UserMinus} color="purple" />
           <KPICard title="Total Spend" value={`₦${data.totalSpend.toLocaleString()}`} subtitle={`${filterLabel(filter)}, as of today — excludes not-yet-held trainings`} icon={NairaSign} color="amber" />
-          <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Exempted)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
+          <KPICard title="TM Coverage" value={`${data.coveragePct.toFixed(1)}%`} subtitle="Trained ÷ (Total − Ineligible)" icon={Gauge} color={data.coveragePct >= 70 ? 'green' : data.coveragePct >= 40 ? 'amber' : 'red'} />
           <KPICard title="Training Coming Soon" value={data.staffWithUpcomingTraining.toLocaleString()} subtitle="TMs on a scheduled, not-yet-happened training" icon={CalendarClock} color="blue" />
           <KPICard title="Trainings Delivered" value={data.distinctTrainingsDelivered.toLocaleString()} subtitle={`Distinct TM programmes run, ${filterLabel(filter)}`} icon={GraduationCap} color="purple" />
         </div>
@@ -389,7 +389,7 @@ export default function TalentMembersPage() {
 
         <SectionCard
           icon={UserMinus}
-          title={`TMs Exempted in ${year} (${data.exempted.length})`}
+          title={`TMs Ineligible in ${year} (${data.exempted.length})`}
           description="Managed under Admin → Talent Member (TM) Exemptions."
           headerActions={<SectionExport rows={exemptedRows} filename={`tm_exempted_${year}`} format="xlsx" label="Excel" />}
         >
@@ -409,14 +409,14 @@ export default function TalentMembersPage() {
               },
             ]}
             data={data.exempted as unknown as Record<string, unknown>[]}
-            emptyMessage={`No exemptions recorded for ${year}.`}
+            emptyMessage={`No ineligible staff recorded for ${year}.`}
           />
         </SectionCard>
 
         <SectionCard
           icon={UserX}
           title={`Staff Yet to Attend (${data.yetToAttend.length})`}
-          description="Talent Members with no TM training attendance recorded and no exemption on file."
+          description="Talent Members with no TM training attendance recorded and not marked ineligible."
           headerActions={<SectionExport rows={yetToAttendRows} filename={`tm_yet_to_attend_${year}`} format="xlsx" label="Excel" />}
         >
           <DataTable
@@ -427,7 +427,7 @@ export default function TalentMembersPage() {
               { key: 'email', header: 'Email', render: (r) => (r.email as string) || '—' },
             ]}
             data={data.yetToAttend as unknown as Record<string, unknown>[]}
-            emptyMessage="Everyone on the TM roster has either attended or been exempted."
+            emptyMessage="Everyone on the TM roster has either attended or been marked ineligible."
           />
         </SectionCard>
       </div>
