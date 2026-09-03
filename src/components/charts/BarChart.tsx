@@ -13,6 +13,8 @@ interface BarChartProps {
   showLabels?: boolean
   labelSuffix?: string
   labelFormatter?: (v: number) => string
+  /** Shows a Plotly legend naming this series (e.g. "Priority Score"). Omit for no legend. */
+  legendLabel?: string
 }
 
 export function BarChart({
@@ -24,6 +26,7 @@ export function BarChart({
   showLabels = false,
   labelSuffix = '',
   labelFormatter,
+  legendLabel,
 }: BarChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -48,6 +51,7 @@ export function BarChart({
         y: horizontal ? labels : values,
         orientation: horizontal ? 'h' : 'v',
         marker: { color },
+        ...(legendLabel && { name: legendLabel }),
         hovertemplate: horizontal
           ? '%{x:,.0f}<extra></extra>'
           : '%{y:,.0f}<extra></extra>',
@@ -69,10 +73,12 @@ export function BarChart({
 
     const layout: Partial<Layout> = {
       height,
-      margin: { t: 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
+      margin: { t: legendLabel ? 28 : 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
+      showlegend: !!legendLabel,
+      legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10 } },
       xaxis: {
         tickfont: { size: 10 },
         showgrid: !horizontal,
@@ -104,7 +110,7 @@ export function BarChart({
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(labels), JSON.stringify(values), color, height, horizontal])
+  }, [JSON.stringify(labels), JSON.stringify(values), color, height, horizontal, legendLabel])
 
   return (
     <div ref={ref} style={{ width: '100%', minHeight: height }} className="plotly-chart" />
