@@ -37,6 +37,7 @@ interface Recipient {
   staffName: string
   email: string | null
   businessUnit: string | null
+  department: string | null
   sentAt: string | null
   respondedAt: string | null
   reminderAt: string | null
@@ -415,15 +416,30 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     }
 
     type Level = 'advanced' | 'intermediate' | 'basic' | 'novice'
-    const tierOf = (skill: string, ordered: string[]): number => {
-      const idx = ordered.indexOf(skill)
-      if (idx === -1) return 0
-      return Math.min(2, Math.floor((idx / ordered.length) * 3))
-    }
+    // Coverage-based, not "highest single skill touched" — a person who can only do one advanced
+    // item but nothing else in the tool isn't "Advanced" in any useful sense (they couldn't mentor
+    // anyone on the other 80% of it). Advanced/Intermediate/Basic are instead how much of the
+    // FULL listed skill checklist for that tool they say they can already do:
+    //   Advanced ≥ 70% of skills · Intermediate 40–69% · Basic 1–39% · Novice = uses the tool but
+    // ticked none of the skills. Threshold constants live here so the KPI cards' captions
+    // (CLASSIFY_CRITERIA below) can't drift out of sync with the actual logic.
+    const ADVANCED_MIN = 0.7
+    const INTERMEDIATE_MIN = 0.4
     const classify = (canDo: string[], ordered: string[]): Level => {
       if (canDo.length === 0) return 'novice'
-      const maxTier = Math.max(...canDo.map((s) => tierOf(s, ordered)))
-      return maxTier === 2 ? 'advanced' : maxTier === 1 ? 'intermediate' : 'basic'
+      if (ordered.length === 0) return 'basic'
+      const coverage = canDo.length / ordered.length
+      if (coverage >= ADVANCED_MIN) return 'advanced'
+      if (coverage >= INTERMEDIATE_MIN) return 'intermediate'
+      return 'basic'
+    }
+    const countBy = (items: { key: string | null }[]): { name: string; count: number }[] => {
+      const counts = new Map<string, number>()
+      for (const { key } of items) {
+        const k = key || 'Unassigned'
+        counts.set(k, (counts.get(k) || 0) + 1)
+      }
+      return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
     }
 
     const toolInsights = [...bySection.entries()]
@@ -435,8 +451,8 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
         if (!canDoQ || !needQ) return null
 
         const ordered = canDoQ.options || []
-        const levelPeople: Record<Level, { name: string; businessUnit: string | null }[]> = { advanced: [], intermediate: [], basic: [], novice: [] }
-        const needsHelp: { name: string; businessUnit: string | null; missing: string[] }[] = []
+        const levelPeople: Record<Level, { name: string; businessUnit: string | null; department: string | null; canDo: string[] }[]> = { advanced: [], intermediate: [], basic: [], novice: [] }
+        const needsHelp: { name: string; businessUnit: string | null; department: string | null; missing: string[] }[] = []
         const skillGapCounts = new Map<string, number>()
         let applicable = 0
         let skipped = 0
@@ -452,10 +468,10 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
           const canDo = valuesOf(answers[canDoQ.id])
           const need = valuesOf(answers[needQ.id])
           const level = classify(canDo, ordered)
-          levelPeople[level].push({ name: recipient.staffName, businessUnit: recipient.businessUnit })
+          levelPeople[level].push({ name: recipient.staffName, businessUnit: recipient.businessUnit, department: recipient.department, canDo })
           const missing = need.filter((s) => !canDo.includes(s))
           if (missing.length > 0) {
-            needsHelp.push({ name: recipient.staffName, businessUnit: recipient.businessUnit, missing })
+            needsHelp.push({ name: recipient.staffName, businessUnit: recipient.businessUnit, department: recipient.department, missing })
             for (const skill of missing) skillGapCounts.set(skill, (skillGapCounts.get(skill) || 0) + 1)
           }
         }
@@ -465,6 +481,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
           section,
           applicable,
           skipped,
+          totalSkills: ordered.length,
           levelCounts: {
             advanced: levelPeople.advanced.length,
             intermediate: levelPeople.intermediate.length,
@@ -473,6 +490,8 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
           },
           levelPeople,
           needsHelp,
+          needsHelpByBU: countBy(needsHelp.map((p) => ({ key: p.businessUnit }))),
+          needsHelpByDepartment: countBy(needsHelp.map((p) => ({ key: p.department }))),
           skillGaps: [...skillGapCounts.entries()].map(([skill, count]) => ({ skill, count })).sort((a, b) => b.count - a.count),
           priorityScore: priority !== undefined ? Math.round(priority) : null,
           priorityVotes: priorityVotesByItem.get(section) || 0,
@@ -732,6 +751,101 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       await loadDetail()
     } finally {
       setResendingId(null)
+    }
+  }
+
+  // Read-only rendering of one answer, styled to look like the actual control the respondent
+  // filled (checkbox grid, radio-style option list, rating dots, yes/no pills) rather than a flat
+  // "label: value" line — same visual vocabulary as the live form's QuestionInput
+  // (src/app/survey/custom/[token]/page.tsx), just non-interactive and showing what was picked.
+  function renderAnswer(q: Question, v: string | string[] | undefined) {
+    const answered = Array.isArray(v) ? v.length > 0 : !!v
+    if (!answered) return <p className="text-xs text-slate-400 italic mt-1">No answer</p>
+
+    switch (q.type) {
+      case 'ranking': {
+        const list = v as string[]
+        return (
+          <ol className="mt-1.5 space-y-1">
+            {list.map((item, i) => (
+              <li key={item} className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
+                <span className="text-xs font-semibold text-navy-600 w-4 text-center shrink-0">{i + 1}</span>
+                <span className="text-xs text-slate-700">{item}</span>
+              </li>
+            ))}
+          </ol>
+        )
+      }
+      case 'multiselect': {
+        const selected = new Set(v as string[])
+        // Include any selected value not in the question's own option list (e.g. a since-edited
+        // question, or a free-text "Other" entry) so an answer is never silently hidden.
+        const options = [...new Set([...(q.options || []), ...(v as string[])])]
+        return (
+          <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {options.map((o) => (
+              <div key={o} className={`flex items-center gap-2 text-xs ${selected.has(o) ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>
+                <span className={`w-3.5 h-3.5 rounded-[3px] border shrink-0 flex items-center justify-center ${selected.has(o) ? 'bg-navy-600 border-navy-600 text-white' : 'border-slate-300'}`}>
+                  {selected.has(o) && '✓'}
+                </span>
+                {o}
+              </div>
+            ))}
+          </div>
+        )
+      }
+      case 'select': {
+        const options = [...new Set([...(q.options || []), v as string])]
+        return (
+          <div className="mt-1.5 space-y-1">
+            {options.map((o) => (
+              <div key={o} className={`flex items-center gap-2 text-xs ${o === v ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>
+                <span className={`w-3.5 h-3.5 rounded-full border shrink-0 flex items-center justify-center ${o === v ? 'border-navy-600' : 'border-slate-300'}`}>
+                  {o === v && <span className="w-1.5 h-1.5 rounded-full bg-navy-600" />}
+                </span>
+                {o}
+              </div>
+            ))}
+          </div>
+        )
+      }
+      case 'rating': {
+        const max = q.ratingMax || 5
+        const n = Number(v)
+        return (
+          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+            {Array.from({ length: max }, (_, i) => i + 1).map((i) => (
+              <span
+                key={i}
+                className={`w-6 h-6 rounded-full border text-[11px] font-medium flex items-center justify-center ${
+                  i === n ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-200 text-slate-300'
+                }`}
+              >
+                {i}
+              </span>
+            ))}
+          </div>
+        )
+      }
+      case 'yesno':
+        return (
+          <div className="mt-1.5 flex items-center gap-2">
+            {['Yes', 'No'].map((o) => (
+              <span
+                key={o}
+                className={`px-3 py-1 rounded-lg border text-xs font-medium ${
+                  v === o ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-200 text-slate-400'
+                }`}
+              >
+                {o}
+              </span>
+            ))}
+          </div>
+        )
+      case 'date':
+        return <p className="text-xs text-slate-700 mt-1 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 w-fit">{fmtDate(v as string)}</p>
+      default:
+        return <p className="text-xs text-slate-700 mt-1 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50 whitespace-pre-wrap">{v as string}</p>
     }
   }
 
@@ -1111,7 +1225,10 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
 
                           {/* Per-tool competency + need table — click a row for the named breakdown. */}
                           <div>
-                            <p className="text-xs font-semibold text-slate-700 mb-2">Per-Tool Competency &amp; Need</p>
+                            <p className="text-xs font-semibold text-slate-700 mb-1">Per-Tool Competency &amp; Need</p>
+                            <p className="text-[11px] text-slate-400 mb-2">
+                              Level is based on how much of that tool&apos;s full skill checklist someone says they can already do — not just their single strongest skill, so &quot;Advanced&quot; means broad coverage, not one lucky tick. <span className="font-medium text-emerald-700">Advanced</span>: 70%+ of skills. <span className="font-medium text-blue-700">Intermediate</span>: 40–69%. <span className="font-medium text-amber-700">Basic</span>: under 40%. <span className="font-medium text-slate-500">Novice</span>: uses the tool but selected none. Someone can still be Advanced overall and appear in Needs Help — those track different things (breadth of what they can do vs. a specific gap against what they said would help them).
+                            </p>
                             <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
                               <table className="w-full text-xs">
                                 <thead>
@@ -1187,18 +1304,82 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                                     )}
                                   </div>
                                   <div>
-                                    <p className="text-[11px] font-medium text-emerald-600 uppercase tracking-wide mb-1.5">Advanced ({t.levelPeople.advanced.length}) — could mentor/peer-coach others</p>
+                                    <p className="text-[11px] font-medium text-emerald-600 uppercase tracking-wide mb-1.5">Advanced ({t.levelPeople.advanced.length}, ≥70% of skills) — could mentor/peer-coach others</p>
                                     {t.levelPeople.advanced.length === 0 ? <p className="text-xs text-slate-400">Nobody at this level yet.</p> : (
                                       <ul className="space-y-1 max-h-56 overflow-y-auto">
                                         {t.levelPeople.advanced.map((p) => (
                                           <li key={p.name} className="text-xs text-slate-600 border-b border-slate-50 pb-1">
                                             <span className="font-medium text-slate-800">{p.name}</span>{p.businessUnit ? <span className="text-slate-400"> · {p.businessUnit}</span> : null}
+                                            <br /><span className="text-slate-400">{p.canDo.length}/{t.totalSkills} skills: {p.canDo.join(', ')}</span>
                                           </li>
                                         ))}
                                       </ul>
                                     )}
                                   </div>
+                                  <div>
+                                    <p className="text-[11px] font-medium text-blue-600 uppercase tracking-wide mb-1.5">Intermediate ({t.levelPeople.intermediate.length}, 40–69% of skills)</p>
+                                    {t.levelPeople.intermediate.length === 0 ? <p className="text-xs text-slate-400">Nobody at this level.</p> : (
+                                      <ul className="space-y-1 max-h-56 overflow-y-auto">
+                                        {t.levelPeople.intermediate.map((p) => (
+                                          <li key={p.name} className="text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span className="font-medium text-slate-800">{p.name}</span>{p.businessUnit ? <span className="text-slate-400"> · {p.businessUnit}</span> : null}
+                                            <br /><span className="text-slate-400">{p.canDo.length}/{t.totalSkills} skills</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-medium text-amber-600 uppercase tracking-wide mb-1.5">Basic ({t.levelPeople.basic.length}, under 40% of skills)</p>
+                                    {t.levelPeople.basic.length === 0 ? <p className="text-xs text-slate-400">Nobody at this level.</p> : (
+                                      <ul className="space-y-1 max-h-56 overflow-y-auto">
+                                        {t.levelPeople.basic.map((p) => (
+                                          <li key={p.name} className="text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span className="font-medium text-slate-800">{p.name}</span>{p.businessUnit ? <span className="text-slate-400"> · {p.businessUnit}</span> : null}
+                                            <br /><span className="text-slate-400">{p.canDo.length}/{t.totalSkills} skills</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  {t.levelPeople.novice.length > 0 && (
+                                    <div className="sm:col-span-2">
+                                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Novice ({t.levelPeople.novice.length}) — uses this tool but selected no skills they can already do</p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {t.levelPeople.novice.map((p) => (
+                                          <span key={p.name} className="text-xs bg-slate-100 text-slate-600 rounded-full px-2.5 py-1">{p.name}{p.businessUnit ? ` · ${p.businessUnit}` : ''}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
+
+                                {(t.needsHelpByBU.length > 0 || t.needsHelpByDepartment.length > 0) && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                                    <div>
+                                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Needs Help — by Business Unit</p>
+                                      <ul className="space-y-1">
+                                        {t.needsHelpByBU.map((b) => (
+                                          <li key={b.name} className="flex items-center justify-between text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span>{b.name}</span>
+                                            <span className="font-semibold text-red-700 tabular-nums">{b.count}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Needs Help — by Department</p>
+                                      <ul className="space-y-1">
+                                        {t.needsHelpByDepartment.map((d) => (
+                                          <li key={d.name} className="flex items-center justify-between text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span>{d.name}</span>
+                                            <span className="font-semibold text-red-700 tabular-nums">{d.count}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )
                           })()}
@@ -1351,45 +1532,34 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       }
 
                       return (
-                        <div className="mt-2 border border-slate-200 rounded-lg bg-white overflow-hidden">
-                          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-800">{r.staffName}&rsquo;s response</p>
-                              <p className="text-[11px] text-slate-400">{r.businessUnit ? `${r.businessUnit} · ` : ''}Submitted {fmtDate(resp.submittedAt)}</p>
-                            </div>
-                            <button onClick={() => setViewingResponse(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
-                          </div>
-                          <div className="px-4 py-3 space-y-4 max-h-[28rem] overflow-y-auto">
-                            {sections.map((sec, i) => (
-                              <div key={i}>
-                                {sec.name && <p className="text-[10px] uppercase tracking-wide text-navy-600 font-semibold mb-2">{sec.name}</p>}
-                                <div className="space-y-2.5">
-                                  {sec.questions.map((q) => {
-                                    const v = answers[q.id]
-                                    const answered = Array.isArray(v) ? v.length > 0 : !!v
-                                    return (
-                                      <div key={q.id}>
-                                        <p className="text-xs font-medium text-slate-700">{q.label}</p>
-                                        {q.description && <p className="text-[11px] text-slate-400 mb-1">{q.description}</p>}
-                                        {!answered ? (
-                                          <p className="text-xs text-slate-400 italic mt-0.5">No answer</p>
-                                        ) : q.type === 'ranking' && Array.isArray(v) ? (
-                                          <ol className="mt-1 space-y-0.5 list-decimal list-inside">
-                                            {v.map((item) => <li key={item} className="text-xs text-slate-600">{item}</li>)}
-                                          </ol>
-                                        ) : Array.isArray(v) ? (
-                                          <div className="flex flex-wrap gap-1 mt-1">
-                                            {v.map((item) => <span key={item} className="text-[11px] bg-navy-50 text-navy-700 rounded-full px-2 py-0.5">{item}</span>)}
-                                          </div>
-                                        ) : (
-                                          <p className="text-xs text-slate-600 mt-0.5 whitespace-pre-wrap">{v}</p>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+                          <div className="absolute inset-0 bg-black/50" onClick={() => setViewingResponse(null)} />
+                          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+                            <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">{r.staffName}&rsquo;s response</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                  {r.businessUnit ? `${r.businessUnit}` : ''}{r.department ? ` · ${r.department}` : ''}{' · Submitted '}{fmtDate(resp.submittedAt)}
+                                </p>
                               </div>
-                            ))}
+                              <button onClick={() => setViewingResponse(null)} className="text-slate-400 hover:text-slate-700 shrink-0"><X className="w-4 h-4" /></button>
+                            </div>
+                            <div className="px-5 py-4 space-y-5 overflow-y-auto">
+                              {sections.map((sec, i) => (
+                                <div key={i} className="border border-slate-100 rounded-lg p-3.5">
+                                  {sec.name && <p className="text-[10px] uppercase tracking-wide text-navy-600 font-semibold mb-2.5">{sec.name}</p>}
+                                  <div className="space-y-3.5">
+                                    {sec.questions.map((q) => (
+                                      <div key={q.id}>
+                                        <p className="text-xs font-medium text-slate-700">{q.label}{q.required && <span className="text-red-500"> *</span>}</p>
+                                        {q.description && <p className="text-[11px] text-slate-400">{q.description}</p>}
+                                        {renderAnswer(q, answers[q.id])}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )

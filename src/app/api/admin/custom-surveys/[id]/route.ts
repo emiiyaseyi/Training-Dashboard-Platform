@@ -15,12 +15,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     },
   })
   if (!survey) return NextResponse.json({ error: 'Survey not found.' }, { status: 404 })
+
+  // Department isn't captured on CustomSurveyRecipient itself (only businessUnit is, at launch
+  // time) — joined live here from the roster instead, same "latest record per staffId" convention
+  // as resolveAudience() (custom-survey.ts), so a Department breakdown doesn't need a schema change.
+  const rosterRecords = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
+  const latestByStaffId = new Map<string, (typeof rosterRecords)[number]>()
+  for (const r of rosterRecords) latestByStaffId.set(r.staffId, r)
+
   return NextResponse.json({
     ...survey,
     questions: survey.questions.map((q) => ({
       ...q,
       options: q.options ? (JSON.parse(q.options) as string[]) : null,
       skipSectionIfValues: q.skipSectionIfValues ? (JSON.parse(q.skipSectionIfValues) as string[]) : null,
+    })),
+    recipients: survey.recipients.map((r) => ({
+      ...r,
+      department: latestByStaffId.get(r.staffId)?.department || null,
     })),
   })
 }
