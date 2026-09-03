@@ -15,7 +15,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     },
   })
   if (!survey) return NextResponse.json({ error: 'Survey not found.' }, { status: 404 })
-  return NextResponse.json(survey)
+  return NextResponse.json({
+    ...survey,
+    questions: survey.questions.map((q) => ({
+      ...q,
+      options: q.options ? (JSON.parse(q.options) as string[]) : null,
+      skipSectionIfValues: q.skipSectionIfValues ? (JSON.parse(q.skipSectionIfValues) as string[]) : null,
+    })),
+  })
 }
 
 // Only editable while still a draft — once launched, its audience has already been resolved and
