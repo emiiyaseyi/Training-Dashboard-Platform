@@ -7,6 +7,7 @@ import {
 import { BarChart } from '@/components/charts/BarChart'
 import { DataTable } from '@/components/ui/DataTable'
 import { SectionExport } from '@/components/ui/SectionExport'
+import { exportSurveyInsightsExcel } from '@/lib/custom-survey-insights-export'
 
 type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
@@ -331,6 +332,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [activeTab, setActiveTab] = useState<'responses' | 'insights' | 'questions'>('responses')
   const [insightsTool, setInsightsTool] = useState<string | null>(null)
   const [showRawBreakdown, setShowRawBreakdown] = useState(false)
+  const [exportingInsights, setExportingInsights] = useState(false)
 
   // Derived entirely from data loadDetail() already fetched (questions + every recipient's
   // response) — no separate endpoint needed.
@@ -763,6 +765,16 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       await loadDetail()
     } finally {
       setSendingReminders(false)
+    }
+  }
+
+  const downloadInsightsExcel = async () => {
+    if (!insights) return
+    setExportingInsights(true)
+    try {
+      await exportSurveyInsightsExcel(summary.title, insights)
+    } finally {
+      setExportingInsights(false)
     }
   }
 
@@ -1215,7 +1227,20 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                         <p className="text-xs font-semibold text-slate-700">
                           Results Insights <span className="text-slate-400 font-normal">— {insights.summary.totalRespondents} response{insights.summary.totalRespondents === 1 ? '' : 's'} analyzed</span>
                         </p>
-                        <SectionExport rows={rawResponseRows} filename={`${summary.title.replace(/\s+/g, '_')}_responses`} label="Download CSV" />
+                        <div className="flex items-center gap-1.5">
+                          {insights.toolInsights.length > 0 && (
+                            <button
+                              onClick={downloadInsightsExcel}
+                              disabled={exportingInsights}
+                              title="Full analysis as Excel — a Summary sheet plus one sheet per tool"
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-40 transition-colors"
+                            >
+                              {exportingInsights ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}
+                              Download Insights (Excel)
+                            </button>
+                          )}
+                          <SectionExport rows={rawResponseRows} filename={`${summary.title.replace(/\s+/g, '_')}_responses`} label="Download CSV" />
+                        </div>
                       </div>
 
                       {insights.toolInsights.length > 0 ? (
