@@ -73,12 +73,14 @@ export function BarChart({
 
     const layout: Partial<Layout> = {
       height,
-      margin: { t: legendLabel ? 28 : 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
+      margin: { t: legendLabel ? 36 : 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
       showlegend: !!legendLabel,
-      legend: { orientation: 'h', x: 0, y: 1.15, font: { size: 10 } },
+      // yanchor: 'bottom' anchors the legend's BOTTOM edge at y=1 (top of the plot area), so the
+      // whole legend sits in the margin above the plot instead of drifting down into the first bar.
+      legend: { orientation: 'h', x: 0, y: 1, yanchor: 'bottom', font: { size: 10 } },
       xaxis: {
         tickfont: { size: 10 },
         showgrid: !horizontal,
