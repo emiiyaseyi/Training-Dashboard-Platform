@@ -26,6 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       id: q.id,
       section: q.section,
       label: q.label,
+      description: q.description,
       type: q.type,
       options: q.options ? (JSON.parse(q.options) as string[]) : null,
       ratingMax: q.ratingMax,

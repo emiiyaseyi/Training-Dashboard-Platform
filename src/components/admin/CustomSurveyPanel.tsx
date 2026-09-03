@@ -14,6 +14,7 @@ interface Question {
   order: number
   section: string | null
   label: string
+  description: string | null
   type: QuestionType
   options: string[] | null
   ratingMax: number
@@ -79,7 +80,7 @@ const AUDIENCE_LABELS: Record<AudienceType, string> = {
   selected: 'Selected Staff',
 }
 
-const emptyQuestionDraft = { section: '', label: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false }
+const emptyQuestionDraft = { section: '', label: '', description: '', type: 'text' as QuestionType, optionsText: '', ratingMax: 5, required: false }
 const emptyBulkDraft = { section: '', type: 'select' as QuestionType, optionsText: '', labelsText: '', required: true }
 
 function fmtDate(d: string) {
@@ -129,6 +130,12 @@ function QuestionForm({
         rows={2}
         className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
       />
+      <input
+        placeholder="Description (optional, shown as smaller helper text under the label)"
+        value={draft.description}
+        onChange={(e) => onChange({ ...draft, description: e.target.value })}
+        className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+      />
       {needsOptions && (
         <input
           placeholder="Options, comma-separated (e.g. Yes, No, Maybe)"
@@ -153,6 +160,59 @@ function QuestionForm({
         <input type="checkbox" checked={draft.required} onChange={(e) => onChange({ ...draft, required: e.target.checked })} />
         Required
       </label>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onSave}
+          disabled={saving || !draft.label.trim()}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Save
+        </button>
+        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1.5">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Once a survey is launched, editing goes through this instead of the full QuestionForm above —
+// only label/description/required are shown, since those are the only fields the API will
+// actually apply once "live" (see PUT .../questions/[qid]). type/options/ratingMax/section/
+// branching all stay locked: people may have already answered against the CURRENT ones, and
+// changing any of those after the fact would silently invalidate or misinterpret what's already
+// been collected. Reuses the same questionDraft state and saveQuestion() as the draft-mode form —
+// the server-side restriction is what actually enforces the lock, this is just the UI for it.
+function RestrictedQuestionForm({
+  draft, onChange, onSave, onCancel, saving,
+}: {
+  draft: typeof emptyQuestionDraft
+  onChange: (d: typeof emptyQuestionDraft) => void
+  onSave: () => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  return (
+    <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2.5 bg-slate-50">
+      <textarea
+        placeholder="Question label"
+        value={draft.label}
+        onChange={(e) => onChange({ ...draft, label: e.target.value })}
+        rows={2}
+        className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+      />
+      <input
+        placeholder="Description (optional, shown as smaller helper text under the label)"
+        value={draft.description}
+        onChange={(e) => onChange({ ...draft, description: e.target.value })}
+        className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-xs"
+      />
+      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+        <input type="checkbox" checked={draft.required} onChange={(e) => onChange({ ...draft, required: e.target.checked })} />
+        Required <span className="text-slate-400">(only affects people who haven&apos;t answered yet)</span>
+      </label>
+      <p className="text-[11px] text-slate-400">Type, options, and section are locked once launched — people may have already answered against them.</p>
       <div className="flex items-center gap-2">
         <button
           onClick={onSave}
@@ -264,7 +324,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [addParticipantQuery, setAddParticipantQuery] = useState('')
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'responses' | 'insights'>('responses')
+  const [activeTab, setActiveTab] = useState<'responses' | 'insights' | 'questions'>('responses')
   const [insightsTool, setInsightsTool] = useState<string | null>(null)
 
   // Derived entirely from data loadDetail() already fetched (questions + every recipient's
@@ -538,7 +598,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const startAddQuestion = () => { setAddingQuestion(true); setQuestionDraft(emptyQuestionDraft) }
   const startEditQuestion = (q: Question) => {
     setEditingQuestionId(q.id)
-    setQuestionDraft({ section: q.section || '', label: q.label, type: q.type, optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required })
+    setQuestionDraft({ section: q.section || '', label: q.label, description: q.description || '', type: q.type, optionsText: (q.options || []).join(', '), ratingMax: q.ratingMax || 5, required: q.required })
   }
   const toOptionsArray = (text: string) => text.split(',').map((o) => o.trim()).filter(Boolean)
 
@@ -546,7 +606,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     setSavingQuestion(true)
     try {
       const body = {
-        section: questionDraft.section, label: questionDraft.label, type: questionDraft.type,
+        section: questionDraft.section, label: questionDraft.label, description: questionDraft.description, type: questionDraft.type,
         options: toOptionsArray(questionDraft.optionsText), ratingMax: questionDraft.ratingMax, required: questionDraft.required,
       }
       const res = editingQuestionId
@@ -944,7 +1004,39 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                         <BarChart3 className="w-3.5 h-3.5" /> Insights
                       </button>
                     )}
+                    <button
+                      onClick={() => setActiveTab('questions')}
+                      className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${activeTab === 'questions' ? 'bg-navy-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      <PenLine className="w-3.5 h-3.5" /> Questions
+                    </button>
                   </div>
+
+                  {activeTab === 'questions' && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-slate-400">
+                        Wording, an added description, and whether a question is required can still be changed while the survey is live — type, options, and section are locked, since responses have already been collected against them.
+                      </p>
+                      {detail.questions.map((q) => (
+                        editingQuestionId === q.id ? (
+                          <RestrictedQuestionForm key={q.id} draft={questionDraft} onChange={setQuestionDraft} onSave={saveQuestion} onCancel={() => setEditingQuestionId(null)} saving={savingQuestion} />
+                        ) : (
+                          <div key={q.id} className="flex items-start gap-2 border border-slate-200 rounded-lg px-3 py-2.5">
+                            <div className="min-w-0 flex-1">
+                              {q.section && <p className="text-[10px] uppercase tracking-wide text-navy-600 font-semibold">{q.section}</p>}
+                              <p className="text-xs text-slate-800">{q.label}</p>
+                              {q.description && <p className="text-[11px] text-slate-400 mt-0.5">{q.description}</p>}
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{q.type}</span>
+                                {q.required && <span className="text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5">required</span>}
+                              </div>
+                            </div>
+                            <button onClick={() => startEditQuestion(q)} className="text-slate-300 hover:text-navy-600 p-1 shrink-0"><PenLine className="w-3.5 h-3.5" /></button>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  )}
 
                   {activeTab === 'insights' && insights && (
                     <div className="border border-slate-200 rounded-lg p-4 space-y-5 bg-slate-50">
