@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ClipboardList, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Search, X, PenLine, Rocket, Ban, Eye, BarChart3,
+  ClipboardList, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Search, X, PenLine, Rocket, Ban, Eye, BarChart3, Table2,
 } from 'lucide-react'
 import { BarChart } from '@/components/charts/BarChart'
+import { DataTable } from '@/components/ui/DataTable'
+import { SectionExport } from '@/components/ui/SectionExport'
 
 type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
@@ -326,6 +328,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'responses' | 'insights' | 'questions'>('responses')
   const [insightsTool, setInsightsTool] = useState<string | null>(null)
+  const [showRawBreakdown, setShowRawBreakdown] = useState(false)
 
   // Derived entirely from data loadDetail() already fetched (questions + every recipient's
   // response) — no separate endpoint needed.
@@ -491,6 +494,28 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       toolInsights, priorityRanking, rankingQuestion,
       summary: { totalRespondents: responded.length, totalNeedingHelp, topGapTool, topSkillGap, topPriorityTool },
     }
+  }, [detail])
+
+  // One row per recipient, one column per question — the raw export an L&D team can pivot/filter
+  // in Excel themselves, independent of however this panel's own charts slice the same data.
+  const rawResponseRows = useMemo(() => {
+    if (!detail) return []
+    return detail.recipients.map((r) => {
+      const resp = r.responses[0]
+      const answers: Record<string, string | string[]> = resp ? JSON.parse(resp.answers) : {}
+      const row: Record<string, unknown> = {
+        Name: r.staffName,
+        Email: r.email || '',
+        'Business Unit': r.businessUnit || '',
+        Status: r.respondedAt ? 'Filled' : r.sentAt ? 'Sent' : 'Not sent',
+        'Submitted At': r.respondedAt ? fmtDate(r.respondedAt) : '',
+      }
+      for (const q of detail.questions) {
+        const v = answers[q.id]
+        row[q.label] = Array.isArray(v) ? v.join('; ') : v || ''
+      }
+      return row
+    })
   }, [detail])
 
   const loadDetail = async () => {
@@ -1040,9 +1065,12 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
 
                   {activeTab === 'insights' && insights && (
                     <div className="border border-slate-200 rounded-lg p-4 space-y-5 bg-slate-50">
-                      <p className="text-xs font-semibold text-slate-700">
-                        Results Insights <span className="text-slate-400 font-normal">— {insights.summary.totalRespondents} response{insights.summary.totalRespondents === 1 ? '' : 's'} analyzed</span>
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-700">
+                          Results Insights <span className="text-slate-400 font-normal">— {insights.summary.totalRespondents} response{insights.summary.totalRespondents === 1 ? '' : 's'} analyzed</span>
+                        </p>
+                        <SectionExport rows={rawResponseRows} filename={`${summary.title.replace(/\s+/g, '_')}_responses`} label="Download CSV" />
+                      </div>
 
                       {insights.toolInsights.length > 0 ? (
                         <>
@@ -1070,11 +1098,12 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                           {insights.priorityRanking.length > 0 && (
                             <div>
                               <p className="text-xs font-semibold text-slate-700 mb-1">Training Priority — by order respondents ranked them</p>
-                              <p className="text-[11px] text-slate-400 mb-2">Score out of 100 — a #1 pick contributes 100, a last-place pick close to 0, averaged across everyone who included that tool at all (so a shorter list doesn&apos;t unfairly out-rank a longer one).</p>
+                              <p className="text-[11px] text-slate-400 mb-2">Score out of 100 — a #1 pick contributes 100, a last-place pick close to 0, averaged across everyone who included that tool at all (so a shorter list doesn&apos;t unfairly out-rank a longer one). Number in parentheses is how many respondents ranked that tool at all. Sorted highest priority first.</p>
                               <BarChart
-                                labels={insights.priorityRanking.map((r) => `${r.item} (${r.votes})`)}
-                                values={insights.priorityRanking.map((r) => Math.round(r.score))}
+                                labels={[...insights.priorityRanking].reverse().map((r) => `${r.item} (${r.votes})`)}
+                                values={[...insights.priorityRanking].reverse().map((r) => Math.round(r.score))}
                                 horizontal showLabels labelSuffix=""
+                                legendLabel="Priority score (0-100)"
                                 height={Math.max(80, insights.priorityRanking.length * 32)}
                               />
                             </div>
@@ -1134,9 +1163,11 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                                   <div>
                                     <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Specific skills most people are missing — what to actually build training for</p>
                                     <BarChart
-                                      labels={t.skillGaps.map((g) => g.skill)}
-                                      values={t.skillGaps.map((g) => g.count)}
-                                      horizontal showLabels height={Math.max(60, t.skillGaps.length * 28)}
+                                      labels={[...t.skillGaps].reverse().map((g) => g.skill)}
+                                      values={[...t.skillGaps].reverse().map((g) => g.count)}
+                                      horizontal showLabels
+                                      legendLabel="People missing this skill"
+                                      height={Math.max(60, t.skillGaps.length * 28)}
                                     />
                                   </div>
                                 )}
@@ -1186,6 +1217,50 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                           ))}
                         </div>
                       )}
+
+                      {insights.toolInsights.length > 0 && (
+                        <div className="pt-1 border-t border-slate-100">
+                          <button
+                            onClick={() => setShowRawBreakdown((v) => !v)}
+                            className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 mt-3"
+                          >
+                            <Table2 className="w-3.5 h-3.5" />
+                            {showRawBreakdown ? 'Hide Raw Per-Question Breakdown' : 'Show Raw Per-Question Breakdown'}
+                          </button>
+                          {showRawBreakdown && (
+                            <div className="space-y-4 mt-3">
+                              {insights.questionDistributions.map(({ question, values, counts }) => (
+                                <div key={question.id}>
+                                  <p className="text-xs text-slate-600 mb-1">
+                                    {question.section && <span className="text-slate-400">{question.section} — </span>}
+                                    {question.label}
+                                  </p>
+                                  <BarChart labels={values} values={counts} horizontal showLabels height={Math.max(80, values.length * 32)} />
+                                </div>
+                              ))}
+                              <div>
+                                <p className="text-xs font-semibold text-slate-700 mb-2">Per-Respondent Scorecard</p>
+                                <DataTable
+                                  columns={[
+                                    { key: 'staffName', header: 'Name', sortable: true },
+                                    { key: 'businessUnit', header: 'Business Unit', sortable: true },
+                                    ...insights.allValues.map((v) => ({
+                                      key: v, header: v, align: 'right' as const, sortable: true,
+                                      render: (r: Record<string, unknown>) => (r[v] as number) || 0,
+                                    })),
+                                  ]}
+                                  data={insights.respondentScores.map((s) => ({
+                                    staffName: s.recipient.staffName,
+                                    businessUnit: s.recipient.businessUnit || '—',
+                                    ...s.tally,
+                                  }))}
+                                  emptyMessage="No responses yet."
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {activeTab === 'responses' && (() => {
@@ -1227,7 +1302,16 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       <tbody>
                         {detail.recipients.map((r) => (
                           <tr key={r.id} className="border-b border-slate-50">
-                            <td className="py-1.5 pr-3 text-slate-700">{r.staffName}</td>
+                            <td className="py-1.5 pr-3 text-slate-700">
+                              {r.responses.length > 0 ? (
+                                <button
+                                  onClick={() => setViewingResponse(viewingResponse === r.id ? null : r.id)}
+                                  className="text-navy-600 hover:underline font-medium text-left"
+                                >
+                                  {r.staffName}
+                                </button>
+                              ) : r.staffName}
+                            </td>
                             <td className="py-1.5 pr-3 text-slate-500">{r.email || '—'}</td>
                             <td className="py-1.5 pr-3">
                               {r.respondedAt ? <span className="text-blue-600">Filled {fmtDate(r.respondedAt)}</span>
@@ -1253,16 +1337,60 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                     {viewingResponse && (() => {
                       const r = detail.recipients.find((x) => x.id === viewingResponse)
                       const resp = r?.responses[0]
-                      if (!resp) return null
+                      if (!r || !resp) return null
                       const answers = JSON.parse(resp.answers) as Record<string, string | string[]>
+
+                      // Grouped by section (in question order) so this reads like the actual form
+                      // the respondent filled — same shape as check how Google/Microsoft Forms
+                      // show one person's individual response.
+                      const sections: { name: string | null; questions: Question[] }[] = []
+                      for (const q of detail.questions) {
+                        const last = sections[sections.length - 1]
+                        if (last && last.name === (q.section || null)) last.questions.push(q)
+                        else sections.push({ name: q.section || null, questions: [q] })
+                      }
+
                       return (
-                        <div className="mt-2 border border-slate-200 rounded-lg p-3 space-y-1.5 bg-slate-50">
-                          <p className="text-xs font-medium text-slate-700">{r?.staffName}&rsquo;s response</p>
-                          {detail.questions.map((q) => (
-                            <p key={q.id} className="text-xs text-slate-600">
-                              <span className="text-slate-400">{q.label}:</span> {Array.isArray(answers[q.id]) ? (answers[q.id] as string[]).join(', ') : (answers[q.id] as string) || '—'}
-                            </p>
-                          ))}
+                        <div className="mt-2 border border-slate-200 rounded-lg bg-white overflow-hidden">
+                          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{r.staffName}&rsquo;s response</p>
+                              <p className="text-[11px] text-slate-400">{r.businessUnit ? `${r.businessUnit} · ` : ''}Submitted {fmtDate(resp.submittedAt)}</p>
+                            </div>
+                            <button onClick={() => setViewingResponse(null)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+                          </div>
+                          <div className="px-4 py-3 space-y-4 max-h-[28rem] overflow-y-auto">
+                            {sections.map((sec, i) => (
+                              <div key={i}>
+                                {sec.name && <p className="text-[10px] uppercase tracking-wide text-navy-600 font-semibold mb-2">{sec.name}</p>}
+                                <div className="space-y-2.5">
+                                  {sec.questions.map((q) => {
+                                    const v = answers[q.id]
+                                    const answered = Array.isArray(v) ? v.length > 0 : !!v
+                                    return (
+                                      <div key={q.id}>
+                                        <p className="text-xs font-medium text-slate-700">{q.label}</p>
+                                        {q.description && <p className="text-[11px] text-slate-400 mb-1">{q.description}</p>}
+                                        {!answered ? (
+                                          <p className="text-xs text-slate-400 italic mt-0.5">No answer</p>
+                                        ) : q.type === 'ranking' && Array.isArray(v) ? (
+                                          <ol className="mt-1 space-y-0.5 list-decimal list-inside">
+                                            {v.map((item) => <li key={item} className="text-xs text-slate-600">{item}</li>)}
+                                          </ol>
+                                        ) : Array.isArray(v) ? (
+                                          <div className="flex flex-wrap gap-1 mt-1">
+                                            {v.map((item) => <span key={item} className="text-[11px] bg-navy-50 text-navy-700 rounded-full px-2 py-0.5">{item}</span>)}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-slate-600 mt-0.5 whitespace-pre-wrap">{v}</p>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )
                     })()}
