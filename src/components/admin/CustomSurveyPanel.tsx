@@ -323,6 +323,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
 
   const [launching, setLaunching] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [sendingReminders, setSendingReminders] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [addParticipantQuery, setAddParticipantQuery] = useState('')
   const [addingParticipant, setAddingParticipant] = useState(false)
@@ -740,6 +741,31 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     }
   }
 
+  // Manual trigger for the same daily nudge the cron sends automatically — for when someone
+  // reports they haven't gotten a reminder yet and there isn't time to go debug why the cron
+  // didn't run. Still respects the once-per-day/expiry gating server-side, so this is safe to
+  // click even if the cron already ran fine today (nobody gets double-nudged).
+  const sendReminders = async () => {
+    setSendingReminders(true)
+    try {
+      const res = await fetch(`/api/admin/custom-surveys/${summary.id}/send-reminders`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Failed to send reminders.')
+        return
+      }
+      alert(
+        data.sent > 0
+          ? `Sent ${data.sent} reminder${data.sent === 1 ? '' : 's'}.`
+          : 'No reminders sent — everyone who hasn’t responded was already nudged today, or the survey has expired.'
+        + (data.skipped.length > 0 ? `\n${data.skipped.length} failed:\n${data.skipped.map((s: { staffName: string; reason: string }) => `${s.staffName}: ${s.reason}`).join('\n')}` : '')
+      )
+      await loadDetail()
+    } finally {
+      setSendingReminders(false)
+    }
+  }
+
   const resend = async (recipientId: string) => {
     setResendingId(recipientId)
     try {
@@ -1088,6 +1114,12 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       {' · Expires '}{detail.expiryDays} day{detail.expiryDays === 1 ? '' : 's'} after launch
                     </p>
                     <div className="flex items-center gap-2 ml-auto">
+                      {detail.status === 'launched' && (
+                        <button onClick={sendReminders} disabled={sendingReminders} className="flex items-center gap-1.5 text-xs text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-50">
+                          {sendingReminders ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          Send Reminders Now
+                        </button>
+                      )}
                       {detail.status === 'launched' && (
                         <button onClick={closeSurvey} disabled={closing} className="flex items-center gap-1.5 text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 hover:bg-amber-50 disabled:opacity-50">
                           {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
