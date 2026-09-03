@@ -5,7 +5,6 @@ import {
   ClipboardList, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Search, X, PenLine, Rocket, Ban, Eye, BarChart3,
 } from 'lucide-react'
 import { BarChart } from '@/components/charts/BarChart'
-import { DataTable } from '@/components/ui/DataTable'
 
 type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
@@ -265,19 +264,30 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [addParticipantQuery, setAddParticipantQuery] = useState('')
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
-  const [showInsights, setShowInsights] = useState(false)
+  const [activeTab, setActiveTab] = useState<'responses' | 'insights'>('responses')
+  const [insightsTool, setInsightsTool] = useState<string | null>(null)
 
   // Derived entirely from data loadDetail() already fetched (questions + every recipient's
-  // response) — no separate endpoint needed. Tallies answer VALUES generically (not hardcoded to
-  // any particular wording), so this works for any select/multiselect/yesno/rating question set,
-  // not just one specific survey: a per-question distribution (e.g. "18 said Proficient, 6 said
-  // Needs Practice" for one skill), and a per-respondent scorecard (how many of THEIR answers fell
-  // into each distinct value seen anywhere) — the second is what actually answers "who needs
-  // training vs who's fine" at a glance for a self-assessment-style survey.
+  // response) — no separate endpoint needed.
+  //
+  // Two layers:
+  //  - Generic (questionDistributions/allValues/respondentScores): a per-question answer
+  //    distribution and a per-respondent raw tally, works for ANY select/multiselect/yesno/rating
+  //    question set regardless of wording — the fallback view for a survey that isn't shaped like
+  //    a skills audit.
+  //  - Tool-shaped (toolInsights/priorityRanking): recognizes the specific 3-question pattern this
+  //    skills-audit survey uses per section — a gate question (gatesSection set), a "can you
+  //    already do" multiselect, and a "would help your role" multiselect (matched by label
+  //    wording, since nothing in the schema marks a question as either of those two roles) — and
+  //    turns them into the things an L&D team actually needs: who's Advanced/Novice per tool, a
+  //    named "needs help" roster per tool (can-do vs would-help gap), which SPECIFIC skills are
+  //    most commonly missing, and a weighted priority order from the closing ranking question.
+  //    A section that doesn't match this pattern (no gate, or missing one of the two checklists)
+  //    is silently skipped here — it still shows up in the generic layer above.
   const insights = useMemo(() => {
     if (!detail) return null
     const categorical = detail.questions.filter((q) => ['select', 'multiselect', 'yesno', 'rating'].includes(q.type))
-    if (categorical.length === 0) return null
+    if (categorical.length === 0 && detail.questions.every((q) => q.type !== 'ranking')) return null
 
     const responded = detail.recipients
       .map((r) => ({ recipient: r, resp: r.responses[0] }))
@@ -299,8 +309,6 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       return { question: q, values, counts: values.map((v) => counts.get(v) || 0) }
     })
 
-    // Every distinct value seen across every categorical question, in first-seen order — becomes
-    // the scorecard table's columns.
     const allValues: string[] = []
     for (const { values } of questionDistributions) for (const v of values) if (!allValues.includes(v)) allValues.push(v)
 
@@ -310,7 +318,119 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
       return { recipient, tally }
     })
 
-    return { questionDistributions, allValues, respondentScores }
+    // ── Priority ranking (from the "ranking" closing question, if present) ──
+    // Normalized Borda-style score per item: a #1 pick contributes 100, a last-place pick
+    // contributes close to 0, regardless of how many items that particular respondent ranked (so
+    // someone who only had 2 relevant tools left to rank doesn't unfairly out-weight someone who
+    // ranked 8) — averaged across everyone who included that item at all.
+    const rankingQuestion = detail.questions.find((q) => q.type === 'ranking') || null
+    const priorityScoreByItem = new Map<string, number>()
+    const priorityVotesByItem = new Map<string, number>()
+    if (rankingQuestion) {
+      const sums = new Map<string, number>()
+      for (const { answers } of responded) {
+        const list = answers[rankingQuestion.id]
+        if (!Array.isArray(list) || list.length === 0) continue
+        list.forEach((item, i) => {
+          const contribution = ((list.length - i) / list.length) * 100
+          sums.set(item, (sums.get(item) || 0) + contribution)
+          priorityVotesByItem.set(item, (priorityVotesByItem.get(item) || 0) + 1)
+        })
+      }
+      for (const [item, sum] of sums) priorityScoreByItem.set(item, sum / (priorityVotesByItem.get(item) || 1))
+    }
+    const priorityRanking = [...priorityScoreByItem.entries()]
+      .map(([item, score]) => ({ item, score, votes: priorityVotesByItem.get(item) || 0 }))
+      .sort((a, b) => b.score - a.score)
+
+    // ── Per-tool competency + gap analysis ──
+    const bySection = new Map<string, Question[]>()
+    for (const q of detail.questions) {
+      const s = q.section || ''
+      if (!bySection.has(s)) bySection.set(s, [])
+      bySection.get(s)!.push(q)
+    }
+
+    type Level = 'advanced' | 'intermediate' | 'basic' | 'novice'
+    const tierOf = (skill: string, ordered: string[]): number => {
+      const idx = ordered.indexOf(skill)
+      if (idx === -1) return 0
+      return Math.min(2, Math.floor((idx / ordered.length) * 3))
+    }
+    const classify = (canDo: string[], ordered: string[]): Level => {
+      if (canDo.length === 0) return 'novice'
+      const maxTier = Math.max(...canDo.map((s) => tierOf(s, ordered)))
+      return maxTier === 2 ? 'advanced' : maxTier === 1 ? 'intermediate' : 'basic'
+    }
+
+    const toolInsights = [...bySection.entries()]
+      .filter(([section]) => section && section !== 'Wrap-Up')
+      .map(([section, qs]) => {
+        const gate = qs.find((q) => q.gatesSection === section) || null
+        const canDoQ = qs.find((q) => q.type === 'multiselect' && /can you already do/i.test(q.label)) || null
+        const needQ = qs.find((q) => q.type === 'multiselect' && /would help you most/i.test(q.label)) || null
+        if (!canDoQ || !needQ) return null
+
+        const ordered = canDoQ.options || []
+        const levelPeople: Record<Level, { name: string; businessUnit: string | null }[]> = { advanced: [], intermediate: [], basic: [], novice: [] }
+        const needsHelp: { name: string; businessUnit: string | null; missing: string[] }[] = []
+        const skillGapCounts = new Map<string, number>()
+        let applicable = 0
+        let skipped = 0
+
+        for (const { recipient, answers } of responded) {
+          if (gate) {
+            const gateAnswer = answers[gate.id]
+            const gateVals = valuesOf(gateAnswer)
+            const isSkipped = gate.skipSectionIfValues?.some((v) => gateVals.includes(v)) ?? false
+            if (isSkipped) { skipped++; continue }
+          }
+          applicable++
+          const canDo = valuesOf(answers[canDoQ.id])
+          const need = valuesOf(answers[needQ.id])
+          const level = classify(canDo, ordered)
+          levelPeople[level].push({ name: recipient.staffName, businessUnit: recipient.businessUnit })
+          const missing = need.filter((s) => !canDo.includes(s))
+          if (missing.length > 0) {
+            needsHelp.push({ name: recipient.staffName, businessUnit: recipient.businessUnit, missing })
+            for (const skill of missing) skillGapCounts.set(skill, (skillGapCounts.get(skill) || 0) + 1)
+          }
+        }
+
+        const priority = priorityScoreByItem.get(section)
+        return {
+          section,
+          applicable,
+          skipped,
+          levelCounts: {
+            advanced: levelPeople.advanced.length,
+            intermediate: levelPeople.intermediate.length,
+            basic: levelPeople.basic.length,
+            novice: levelPeople.novice.length,
+          },
+          levelPeople,
+          needsHelp,
+          skillGaps: [...skillGapCounts.entries()].map(([skill, count]) => ({ skill, count })).sort((a, b) => b.count - a.count),
+          priorityScore: priority !== undefined ? Math.round(priority) : null,
+          priorityVotes: priorityVotesByItem.get(section) || 0,
+        }
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null)
+      .sort((a, b) => (b.priorityScore ?? -1) - (a.priorityScore ?? -1) || b.needsHelp.length - a.needsHelp.length)
+
+    // ── Headline KPIs for the summary cards ──
+    const totalNeedingHelp = new Set(toolInsights.flatMap((t) => t.needsHelp.map((p) => p.name))).size
+    const topGapTool = [...toolInsights].sort((a, b) => b.needsHelp.length - a.needsHelp.length)[0] || null
+    const topSkillGap = toolInsights
+      .flatMap((t) => t.skillGaps.map((g) => ({ ...g, tool: t.section })))
+      .sort((a, b) => b.count - a.count)[0] || null
+    const topPriorityTool = priorityRanking[0] || null
+
+    return {
+      questionDistributions, allValues, respondentScores,
+      toolInsights, priorityRanking, rankingQuestion,
+      summary: { totalRespondents: responded.length, totalNeedingHelp, topGapTool, topSkillGap, topPriorityTool },
+    }
   }, [detail])
 
   const loadDetail = async () => {
@@ -769,12 +889,6 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       {' · Expires '}{detail.expiryDays} day{detail.expiryDays === 1 ? '' : 's'} after launch
                     </p>
                     <div className="flex items-center gap-2 ml-auto">
-                      {insights && (
-                        <button onClick={() => setShowInsights((v) => !v)} className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50">
-                          <BarChart3 className="w-3.5 h-3.5" />
-                          {showInsights ? 'Hide Insights' : 'Insights'}
-                        </button>
-                      )}
                       {detail.status === 'launched' && (
                         <button onClick={closeSurvey} disabled={closing} className="flex items-center gap-1.5 text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 hover:bg-amber-50 disabled:opacity-50">
                           {closing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
@@ -814,44 +928,175 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       <p className="text-[11px] text-slate-400 mt-1">Sends the survey to them immediately — the original audience is only resolved once, at launch, so this is the way to bring in someone who was missed.</p>
                     </div>
                   )}
-                  {showInsights && insights && (
-                    <div className="border border-slate-200 rounded-lg p-4 space-y-4 bg-slate-50">
+
+                  <div className="flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                    <button
+                      onClick={() => setActiveTab('responses')}
+                      className={`text-xs font-medium rounded-lg px-3 py-1.5 ${activeTab === 'responses' ? 'bg-navy-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      Responses
+                    </button>
+                    {insights && (
+                      <button
+                        onClick={() => setActiveTab('insights')}
+                        className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 ${activeTab === 'insights' ? 'bg-navy-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        <BarChart3 className="w-3.5 h-3.5" /> Insights
+                      </button>
+                    )}
+                  </div>
+
+                  {activeTab === 'insights' && insights && (
+                    <div className="border border-slate-200 rounded-lg p-4 space-y-5 bg-slate-50">
                       <p className="text-xs font-semibold text-slate-700">
-                        Results Insights <span className="text-slate-400 font-normal">— {insights.respondentScores.length} response{insights.respondentScores.length === 1 ? '' : 's'} analyzed</span>
+                        Results Insights <span className="text-slate-400 font-normal">— {insights.summary.totalRespondents} response{insights.summary.totalRespondents === 1 ? '' : 's'} analyzed</span>
                       </p>
-                      <div className="space-y-4">
-                        {insights.questionDistributions.map(({ question, values, counts }) => (
-                          <div key={question.id}>
-                            <p className="text-xs text-slate-600 mb-1">
-                              {question.section && <span className="text-slate-400">{question.section} — </span>}
-                              {question.label}
-                            </p>
-                            <BarChart labels={values} values={counts} horizontal showLabels height={Math.max(80, values.length * 32)} />
+
+                      {insights.toolInsights.length > 0 ? (
+                        <>
+                          {/* Headline KPIs — the four things an L&D team asks first. */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div className="border border-slate-200 bg-white rounded-lg px-3 py-2.5">
+                              <p className="text-xl font-semibold text-amber-700 tabular-nums">{insights.summary.totalNeedingHelp}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide">People needing help in ≥1 tool</p>
+                            </div>
+                            <div className="border border-slate-200 bg-white rounded-lg px-3 py-2.5">
+                              <p className="text-sm font-semibold text-slate-800 truncate" title={insights.summary.topGapTool?.section}>{insights.summary.topGapTool?.section || '—'}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Biggest skills gap ({insights.summary.topGapTool?.needsHelp.length || 0} people)</p>
+                            </div>
+                            <div className="border border-slate-200 bg-white rounded-lg px-3 py-2.5">
+                              <p className="text-sm font-semibold text-slate-800 truncate" title={insights.summary.topSkillGap?.skill}>{insights.summary.topSkillGap?.skill || '—'}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide">Most-wanted single skill ({insights.summary.topSkillGap?.count || 0} people, {insights.summary.topSkillGap?.tool})</p>
+                            </div>
+                            <div className="border border-slate-200 bg-white rounded-lg px-3 py-2.5">
+                              <p className="text-sm font-semibold text-slate-800 truncate" title={insights.summary.topPriorityTool?.item}>{insights.summary.topPriorityTool?.item || '—'}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide">#1 staff-ranked training priority</p>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-700 mb-2">Per-Respondent Scorecard</p>
-                        <DataTable
-                          columns={[
-                            { key: 'staffName', header: 'Name', sortable: true },
-                            { key: 'businessUnit', header: 'Business Unit', sortable: true },
-                            ...insights.allValues.map((v) => ({
-                              key: v, header: v, align: 'right' as const, sortable: true,
-                              render: (r: Record<string, unknown>) => (r[v] as number) || 0,
-                            })),
-                          ]}
-                          data={insights.respondentScores.map((s) => ({
-                            staffName: s.recipient.staffName,
-                            businessUnit: s.recipient.businessUnit || '—',
-                            ...s.tally,
-                          }))}
-                          emptyMessage="No responses yet."
-                        />
-                      </div>
+
+                          {/* Priority ranking — from the closing ranking question, weighted by position. */}
+                          {insights.priorityRanking.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700 mb-1">Training Priority — by order respondents ranked them</p>
+                              <p className="text-[11px] text-slate-400 mb-2">Score out of 100 — a #1 pick contributes 100, a last-place pick close to 0, averaged across everyone who included that tool at all (so a shorter list doesn&apos;t unfairly out-rank a longer one).</p>
+                              <BarChart
+                                labels={insights.priorityRanking.map((r) => `${r.item} (${r.votes})`)}
+                                values={insights.priorityRanking.map((r) => Math.round(r.score))}
+                                horizontal showLabels labelSuffix=""
+                                height={Math.max(80, insights.priorityRanking.length * 32)}
+                              />
+                            </div>
+                          )}
+
+                          {/* Per-tool competency + need table — click a row for the named breakdown. */}
+                          <div>
+                            <p className="text-xs font-semibold text-slate-700 mb-2">Per-Tool Competency &amp; Need</p>
+                            <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-slate-400 border-b border-slate-100 bg-slate-50">
+                                    <th className="text-left font-medium py-2 px-3">Tool</th>
+                                    <th className="text-right font-medium py-2 px-2">Users</th>
+                                    <th className="text-right font-medium py-2 px-2 text-emerald-600">Advanced</th>
+                                    <th className="text-right font-medium py-2 px-2 text-blue-600">Intermediate</th>
+                                    <th className="text-right font-medium py-2 px-2 text-amber-600">Basic</th>
+                                    <th className="text-right font-medium py-2 px-2 text-slate-500">Novice</th>
+                                    <th className="text-right font-medium py-2 px-3 text-red-600">Needs Help</th>
+                                    <th className="text-right font-medium py-2 px-3">Priority</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {insights.toolInsights.map((t) => (
+                                    <tr
+                                      key={t.section}
+                                      onClick={() => setInsightsTool(insightsTool === t.section ? null : t.section)}
+                                      className={`border-b border-slate-50 last:border-0 cursor-pointer hover:bg-slate-50 ${insightsTool === t.section ? 'bg-navy-50' : ''}`}
+                                    >
+                                      <td className="py-2 px-3 text-slate-700 font-medium">{t.section}</td>
+                                      <td className="py-2 px-2 text-right tabular-nums text-slate-600">{t.applicable}</td>
+                                      <td className="py-2 px-2 text-right tabular-nums text-emerald-700">{t.levelCounts.advanced}</td>
+                                      <td className="py-2 px-2 text-right tabular-nums text-blue-700">{t.levelCounts.intermediate}</td>
+                                      <td className="py-2 px-2 text-right tabular-nums text-amber-700">{t.levelCounts.basic}</td>
+                                      <td className="py-2 px-2 text-right tabular-nums text-slate-500">{t.levelCounts.novice}</td>
+                                      <td className="py-2 px-3 text-right tabular-nums font-semibold text-red-700">{t.needsHelp.length}</td>
+                                      <td className="py-2 px-3 text-right tabular-nums text-slate-600">{t.priorityScore !== null ? t.priorityScore : '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Deep dive for whichever tool row was clicked. */}
+                          {insightsTool && (() => {
+                            const t = insights.toolInsights.find((x) => x.section === insightsTool)
+                            if (!t) return null
+                            return (
+                              <div className="border border-navy-200 rounded-lg p-3 bg-white space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-navy-700">{t.section} — detail</p>
+                                  <button onClick={() => setInsightsTool(null)} className="text-slate-400 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
+                                </div>
+
+                                {t.skillGaps.length > 0 && (
+                                  <div>
+                                    <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5">Specific skills most people are missing — what to actually build training for</p>
+                                    <BarChart
+                                      labels={t.skillGaps.map((g) => g.skill)}
+                                      values={t.skillGaps.map((g) => g.count)}
+                                      horizontal showLabels height={Math.max(60, t.skillGaps.length * 28)}
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-[11px] font-medium text-red-600 uppercase tracking-wide mb-1.5">Needs Help ({t.needsHelp.length}) — has a gap between what they can do and what they say would help</p>
+                                    {t.needsHelp.length === 0 ? <p className="text-xs text-slate-400">Nobody — everyone who uses this tool already has the skills they said would help.</p> : (
+                                      <ul className="space-y-1 max-h-56 overflow-y-auto">
+                                        {t.needsHelp.map((p) => (
+                                          <li key={p.name} className="text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span className="font-medium text-slate-800">{p.name}</span>{p.businessUnit ? <span className="text-slate-400"> · {p.businessUnit}</span> : null}
+                                            <br /><span className="text-slate-400">Missing: {p.missing.join(', ')}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] font-medium text-emerald-600 uppercase tracking-wide mb-1.5">Advanced ({t.levelPeople.advanced.length}) — could mentor/peer-coach others</p>
+                                    {t.levelPeople.advanced.length === 0 ? <p className="text-xs text-slate-400">Nobody at this level yet.</p> : (
+                                      <ul className="space-y-1 max-h-56 overflow-y-auto">
+                                        {t.levelPeople.advanced.map((p) => (
+                                          <li key={p.name} className="text-xs text-slate-600 border-b border-slate-50 pb-1">
+                                            <span className="font-medium text-slate-800">{p.name}</span>{p.businessUnit ? <span className="text-slate-400"> · {p.businessUnit}</span> : null}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </>
+                      ) : (
+                        <div className="space-y-4">
+                          <p className="text-xs text-slate-400">This survey isn&apos;t shaped like a skills audit (no gate + can-do/would-help pair per section), so showing the raw answer distribution instead.</p>
+                          {insights.questionDistributions.map(({ question, values, counts }) => (
+                            <div key={question.id}>
+                              <p className="text-xs text-slate-600 mb-1">
+                                {question.section && <span className="text-slate-400">{question.section} — </span>}
+                                {question.label}
+                              </p>
+                              <BarChart labels={values} values={counts} horizontal showLabels height={Math.max(80, values.length * 32)} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {(() => {
+                  {activeTab === 'responses' && (() => {
                     const total = detail.recipients.length
                     const sent = detail.recipients.filter((r) => r.sentAt).length
                     const filled = detail.recipients.filter((r) => r.respondedAt).length
@@ -876,6 +1121,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                     )
                   })()}
 
+                  {activeTab === 'responses' && (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
@@ -929,6 +1175,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                       )
                     })()}
                   </div>
+                  )}
                 </>
               )}
             </>
