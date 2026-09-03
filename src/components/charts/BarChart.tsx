@@ -13,7 +13,10 @@ interface BarChartProps {
   showLabels?: boolean
   labelSuffix?: string
   labelFormatter?: (v: number) => string
-  /** Shows a Plotly legend naming this series (e.g. "Priority Score"). Omit for no legend. */
+  /** Plain-text caption rendered above the chart naming this series (e.g. "Priority Score").
+   *  Deliberately not a Plotly legend — legend.y is a fraction of the WHOLE canvas (paper),
+   *  not the plot area, so on these short single-trace charts it either overlapped the first
+   *  bar or got clipped depending on chart height. A normal DOM element above the plot can't. */
   legendLabel?: string
 }
 
@@ -51,7 +54,6 @@ export function BarChart({
         y: horizontal ? labels : values,
         orientation: horizontal ? 'h' : 'v',
         marker: { color },
-        ...(legendLabel && { name: legendLabel }),
         hovertemplate: horizontal
           ? '%{x:,.0f}<extra></extra>'
           : '%{y:,.0f}<extra></extra>',
@@ -73,14 +75,11 @@ export function BarChart({
 
     const layout: Partial<Layout> = {
       height,
-      margin: { t: legendLabel ? 36 : 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
+      margin: { t: 12, r: horizontal && showLabels ? 56 : 20, b: horizontal ? 40 : 56, l: leftMargin },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
-      showlegend: !!legendLabel,
-      // yanchor: 'bottom' anchors the legend's BOTTOM edge at y=1 (top of the plot area), so the
-      // whole legend sits in the margin above the plot instead of drifting down into the first bar.
-      legend: { orientation: 'h', x: 0, y: 1, yanchor: 'bottom', font: { size: 10 } },
+      showlegend: false,
       xaxis: {
         tickfont: { size: 10 },
         showgrid: !horizontal,
@@ -112,9 +111,12 @@ export function BarChart({
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(labels), JSON.stringify(values), color, height, horizontal, legendLabel])
+  }, [JSON.stringify(labels), JSON.stringify(values), color, height, horizontal])
 
   return (
-    <div ref={ref} style={{ width: '100%', minHeight: height }} className="plotly-chart" />
+    <div>
+      {legendLabel && <p className="text-[10px] text-slate-400 mb-1">{legendLabel}</p>}
+      <div ref={ref} style={{ width: '100%', minHeight: height }} className="plotly-chart" />
+    </div>
   )
 }
