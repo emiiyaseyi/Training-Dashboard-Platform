@@ -35,12 +35,15 @@ vi.mock('@/lib/prisma', () => ({
 
 vi.mock('@/lib/talent-member', () => ({
   computeTalentMemberReport: vi.fn().mockResolvedValue({
+    year: 2026,
     totalTalentMembers: 0,
     staffTrained: 0,
     staffNotTrained: 0,
     staffExempted: 0,
     totalSpend: 0,
     coveragePct: 0,
+    staffWithUpcomingTraining: 0,
+    distinctTrainingsDelivered: 0,
   }),
 }))
 

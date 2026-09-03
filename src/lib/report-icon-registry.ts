@@ -1,7 +1,7 @@
 import {
   Users, Target, BarChart2, BadgeCheck, UserCheck, UserX, GraduationCap,
   CreditCard, CheckCircle, Star, Award, ShieldCheck, Clock, Timer, Building2,
-  UserMinus, Gauge,
+  UserMinus, Gauge, CalendarClock,
 } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import type { IconSpec } from './icon-rasterizer'
@@ -27,4 +27,5 @@ export const REPORT_ICON_SPECS: IconSpec[] = [
   { key: 'building2', icon: Building2, variant: 'square' },
   { key: 'userMinus', icon: UserMinus, variant: 'circle' },
   { key: 'gauge', icon: Gauge, variant: 'circle' },
+  { key: 'calendarClock', icon: CalendarClock, variant: 'circle' },
 ]

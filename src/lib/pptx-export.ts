@@ -342,22 +342,25 @@ function buildSlide7(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   return slide
 }
 
+// Tile set and wording deliberately mirror the interactive Talent Members page (src/app/talent-
+// members/page.tsx) — same underlying TalentMemberReport, same labels, so a reader comparing the
+// live dashboard against this exported deck sees the same numbers described the same way.
 function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, icons: IconImages) {
   const slide = pptx.addSlide()
   addHeader(slide, 'Talent Member (TM) Trainings', 'Coverage and investment for the Talent Member population')
   const tm = data.talentMember
-  const trainedPct = tm.totalHeadcount > 0 ? (tm.staffTrained / tm.totalHeadcount) * 100 : 0
-  const notTrainedPct = tm.totalHeadcount > 0 ? (tm.staffNotTrained / tm.totalHeadcount) * 100 : 0
 
   const tiles: Tile[] = [
     { iconKey: 'users', title: 'Total Talent Members', value: tm.totalHeadcount.toLocaleString(), subtitle: 'Current TM roster' },
-    { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No Talent Members on roster', valueColor: C.green },
-    { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No Talent Members on roster', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
-    { iconKey: 'userMinus', title: 'Staff Ineligible', value: tm.staffExempted.toLocaleString(), subtitle: "Excused from this year's requirement" },
-    { iconKey: 'nairaSign', title: 'Total Spend', value: fmt(tm.totalSpend), subtitle: 'Counts toward Formal Training Spend', valueColor: C.gold },
+    { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: `${periodLabel} TM training attendance`, valueColor: C.green },
+    { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: 'Not yet attended, not ineligible', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
+    { iconKey: 'userMinus', title: 'Staff Ineligible', value: tm.staffExempted.toLocaleString(), subtitle: `Excused for ${tm.year}` },
+    { iconKey: 'nairaSign', title: 'Total Spend', value: fmt(tm.totalSpend), subtitle: `${periodLabel}, as of today — excludes not-yet-held trainings`, valueColor: C.gold },
     { iconKey: 'gauge', title: 'TM Coverage', value: pct(tm.coveragePct), subtitle: 'Trained ÷ (Total − Ineligible)', valueColor: tm.coveragePct >= 70 ? C.green : tm.coveragePct >= 40 ? C.gold : C.red },
+    { iconKey: 'calendarClock', title: 'Training Coming Soon', value: tm.staffWithUpcomingTraining.toLocaleString(), subtitle: 'TMs on a scheduled, not-yet-happened training' },
+    { iconKey: 'graduationCap', title: 'Trainings Delivered', value: tm.distinctTrainingsDelivered.toLocaleString(), subtitle: `Distinct TM programmes run, ${periodLabel}` },
   ]
-  addTileGrid(slide, tiles, icons, 3)
+  addTileGrid(slide, tiles, icons, 4)
 
   addFooter(slide, 8, periodLabel)
   return slide

@@ -1,10 +1,13 @@
-import { Users, UserCheck, UserX, UserMinus, Gauge } from 'lucide-react'
+import { Users, UserCheck, UserX, UserMinus, Gauge, CalendarClock, GraduationCap } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { ReportTile } from './ReportTile'
 import { SlideShell } from './SlideShell'
 import { fmt, pct } from '@/lib/slide-format'
 import type { GroupAnalytics } from '@/lib/analytics'
 
+// Tile set and wording deliberately mirror the interactive Talent Members page (src/app/talent-
+// members/page.tsx) — same underlying TalentMemberReport, same labels, so a reader comparing the
+// live dashboard against this exported report sees the same numbers described the same way.
 export function Slide8TalentMember({ data, pageNumber, periodLabel }: { data: GroupAnalytics; pageNumber: number; periodLabel: string }) {
   const tm = data.talentMember
   const trainedPct = tm.totalHeadcount > 0 ? (tm.staffTrained / tm.totalHeadcount) * 100 : 0
@@ -12,13 +15,15 @@ export function Slide8TalentMember({ data, pageNumber, periodLabel }: { data: Gr
 
   return (
     <SlideShell title="Talent Member (TM) Trainings" subtitle="Coverage and investment for the Talent Member population" pageNumber={pageNumber} periodLabel={periodLabel}>
-      <div className="grid grid-cols-3 grid-rows-2 gap-3 mb-4">
+      <div className="grid grid-cols-4 grid-rows-2 gap-3 mb-4">
         <ReportTile icon={Users} title="Total Talent Members" value={tm.totalHeadcount.toLocaleString()} subtitle="Current TM roster" />
-        <ReportTile icon={UserCheck} title="Staff Trained" value={tm.staffTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No Talent Members on roster'} valueColor="text-report-green" />
-        <ReportTile icon={UserX} title="Yet to be Trained" value={tm.staffNotTrained.toLocaleString()} subtitle={tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No Talent Members on roster'} valueColor={tm.staffNotTrained > 0 ? 'text-report-red' : 'text-report-green'} />
-        <ReportTile icon={UserMinus} title="Staff Ineligible" value={tm.staffExempted.toLocaleString()} subtitle="Excused from this year's requirement" />
-        <ReportTile icon={NairaSign} title="Total Spend" value={fmt(tm.totalSpend)} subtitle="Counts toward Formal Training Spend" valueColor="text-gold-400" />
+        <ReportTile icon={UserCheck} title="Staff Trained" value={tm.staffTrained.toLocaleString()} subtitle={`${periodLabel} TM training attendance`} valueColor="text-report-green" />
+        <ReportTile icon={UserX} title="Yet to be Trained" value={tm.staffNotTrained.toLocaleString()} subtitle="Not yet attended, not ineligible" valueColor={tm.staffNotTrained > 0 ? 'text-report-red' : 'text-report-green'} />
+        <ReportTile icon={UserMinus} title="Staff Ineligible" value={tm.staffExempted.toLocaleString()} subtitle={`Excused for ${tm.year}`} />
+        <ReportTile icon={NairaSign} title="Total Spend" value={fmt(tm.totalSpend)} subtitle={`${periodLabel}, as of today — excludes not-yet-held trainings`} valueColor="text-gold-400" />
         <ReportTile icon={Gauge} title="TM Coverage" value={pct(tm.coveragePct)} subtitle="Trained ÷ (Total − Ineligible)" valueColor={tm.coveragePct >= 70 ? 'text-report-green' : tm.coveragePct >= 40 ? 'text-gold-400' : 'text-report-red'} />
+        <ReportTile icon={CalendarClock} title="Training Coming Soon" value={tm.staffWithUpcomingTraining.toLocaleString()} subtitle="TMs on a scheduled, not-yet-happened training" />
+        <ReportTile icon={GraduationCap} title="Trainings Delivered" value={tm.distinctTrainingsDelivered.toLocaleString()} subtitle={`Distinct TM programmes run, ${periodLabel}`} />
       </div>
 
       <div className="rounded-xl border border-navy-200 bg-navy-100 p-5">
