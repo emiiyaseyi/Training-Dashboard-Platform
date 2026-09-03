@@ -353,9 +353,9 @@ function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     { iconKey: 'users', title: 'Total Talent Members', value: tm.totalHeadcount.toLocaleString(), subtitle: 'Current TM roster' },
     { iconKey: 'userCheck', title: 'Staff Trained', value: tm.staffTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(trainedPct)} of TM population` : 'No Talent Members on roster', valueColor: C.green },
     { iconKey: 'userX', title: 'Yet to be Trained', value: tm.staffNotTrained.toLocaleString(), subtitle: tm.totalHeadcount > 0 ? `${pct(notTrainedPct)} of TM population` : 'No Talent Members on roster', valueColor: tm.staffNotTrained > 0 ? C.red : C.green },
-    { iconKey: 'userMinus', title: 'Staff Exempted', value: tm.staffExempted.toLocaleString(), subtitle: "Excused from this year's requirement" },
+    { iconKey: 'userMinus', title: 'Staff Ineligible', value: tm.staffExempted.toLocaleString(), subtitle: "Excused from this year's requirement" },
     { iconKey: 'nairaSign', title: 'Total Spend', value: fmt(tm.totalSpend), subtitle: 'Counts toward Formal Training Spend', valueColor: C.gold },
-    { iconKey: 'gauge', title: 'TM Coverage', value: pct(tm.coveragePct), subtitle: 'Trained ÷ (Total − Exempted)', valueColor: tm.coveragePct >= 70 ? C.green : tm.coveragePct >= 40 ? C.gold : C.red },
+    { iconKey: 'gauge', title: 'TM Coverage', value: pct(tm.coveragePct), subtitle: 'Trained ÷ (Total − Ineligible)', valueColor: tm.coveragePct >= 70 ? C.green : tm.coveragePct >= 40 ? C.gold : C.red },
   ]
   addTileGrid(slide, tiles, icons, 3)
 
