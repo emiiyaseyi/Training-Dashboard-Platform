@@ -54,12 +54,9 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
     bu.coverageRatio >= 70 ? 'text-green-700' :
     bu.coverageRatio >= 40 ? 'text-amber-700' : 'text-red-600'
 
-  // Formal Training's OWN share of budget — distinct from bu.budgetUtilisation/isOverBudget,
-  // which intentionally count all learning spend (Formal + Strategic + Subscriptions) against
-  // budget for the card-level "Over budget" badge. This one specifically answers "how much of
-  // the budget did Formal Training alone use", shown directly under the Formal Training figure.
-  const formalBudgetPct = bu.budget > 0 ? (bu.trainingCost / bu.budget) * 100 : 0
-  const formalOverBudget = bu.budget > 0 && bu.trainingCost > bu.budget
+  // Budget is compared against Formal Training spend only — Strategic Learnings and
+  // Subscriptions are separate spend categories, not drawn from the training budget — so
+  // bu.budgetUtilisation/isOverBudget already reflect Formal Training alone.
 
   return (
     <div
@@ -91,8 +88,8 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
           <p className="text-xs text-slate-400 mb-0.5">Formal Training</p>
           <p className="text-sm font-semibold text-slate-700 tabular-nums">{fmt(bu.trainingCost)}</p>
           {bu.budget > 0 && (
-            <p className={`text-xs mt-0.5 ${formalOverBudget ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
-              {formalOverBudget ? '⚠ Over budget' : `${pct(formalBudgetPct)} of budget`}
+            <p className={`text-xs mt-0.5 ${bu.isOverBudget ? 'text-red-600 font-medium' : 'text-slate-400'}`}>
+              {bu.isOverBudget ? '⚠ Over budget' : `${pct(bu.budgetUtilisation)} of budget`}
             </p>
           )}
         </div>

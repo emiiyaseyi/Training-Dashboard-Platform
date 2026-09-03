@@ -608,7 +608,6 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     trainingTypes,
     capabilities,
     talentMemberReport,
-    budgetSettings,
     rawManagerReviews,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
@@ -619,7 +618,6 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.trainingType.findMany(),
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
     computeTalentMemberReport({ mode: 'year', year: filter.year ?? new Date().getFullYear() }),
-    prisma.budgetSettings.findFirst(),
     prisma.managerReviewRecord.findMany(),
   ])
 
@@ -635,9 +633,6 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const allKSS = scopeSet ? rawKSS.filter((r) => scopeSet.has(r.businessUnit)) : rawKSS
   const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
 
-  // Subscription spend counts against budget only if explicitly enabled in Admin — off by
-  // default, since subscriptions (professional memberships) are a separate cost category.
-  const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
   const typeMap = buildTypeClassMap(trainingTypes)
 
   // Collect all available years for the filter UI
@@ -802,9 +797,9 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   })
   const applicationRates = Object.entries(appMap).map(([category, count]) => ({ category, count }))
 
-  // ── Forecasting (projects the budget-comparable total — training + strategic initiatives,
-  // plus subscriptions only if that's enabled in Admin) ──
-  const budgetComparableTotal = totalTrainingCost + totalOtherTrainingCost + (countSubsInBudget ? totalSubscriptionCost : 0)
+  // ── Forecasting (projects the budget-comparable total — Formal Training only; Strategic
+  // Learnings and Subscriptions are separate spend categories not drawn from the training budget) ──
+  const budgetComparableTotal = totalTrainingCost
   const completedMonths = monthlySpend.length > 0 ? monthlySpend.length : 1
   const avgMonthlySpend = budgetComparableTotal / completedMonths
   const remainingMonths = Math.max(0, 12 - completedMonths)
@@ -849,7 +844,9 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
         ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
         : 0
     const subscriptionRatio = totalInvestment > 0 ? (subscriptionCost / totalInvestment) * 100 : 0
-    const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
+    // Budget is compared against Formal Training spend only — Strategic Learnings and
+    // Subscriptions are separate spend categories, not drawn from the training budget.
+    const buBudgetComparable = trainingCost
     const budgetUtilisation = budget > 0 ? (buBudgetComparable / budget) * 100 : 0
     const avgPostTrainingImpact = mrRecs.length > 0 ? mrRecs.reduce((s, r) => s + r.impactScore, 0) / mrRecs.length : 0
 
@@ -994,7 +991,7 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, budgetSettings, buManagerReviews] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, buManagerReviews] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -1004,11 +1001,9 @@ export async function computeBUAnalytics(
     prisma.businessUnit.findMany(),
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.trainingType.findMany(),
-    prisma.budgetSettings.findFirst(),
     prisma.managerReviewRecord.findMany({ where: { businessUnit: { equals: buName } } }),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
-  const countSubsInBudget = budgetSettings?.countSubscriptionsInBudget ?? false
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -1074,7 +1069,9 @@ export async function computeBUAnalytics(
   const avgPostTrainingImpact = managerReviews.length > 0
     ? managerReviews.reduce((s, r) => s + r.impactScore, 0) / managerReviews.length
     : 0
-  const buBudgetComparable = trainingCost + otherInvestmentCost + (countSubsInBudget ? subscriptionCost : 0)
+  // Budget is compared against Formal Training spend only — Strategic Learnings and
+  // Subscriptions are separate spend categories, not drawn from the training budget.
+  const buBudgetComparable = trainingCost
 
   const bu: BUSummary = {
     name: buName,

@@ -105,10 +105,9 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
     await exportBUToExcel(buName, detail)
   }
 
-  // Formal Training's own share of budget — the "Training Spend" MiniKPI this feeds shows
-  // bu.trainingCost (Formal only), so its Utilisation subtitle must match that, not the
-  // combined-spend bu.budgetUtilisation used for the card-level Over Budget badge elsewhere.
-  const budgetUsed = bu.budget > 0 ? pct((bu.trainingCost / bu.budget) * 100) : null
+  // Budget is compared against Formal Training spend only, so bu.budgetUtilisation already
+  // matches the "Training Spend" MiniKPI's bu.trainingCost figure this subtitle describes.
+  const budgetUsed = bu.budget > 0 ? pct(bu.budgetUtilisation) : null
   const trainingPct = bu.trainingCost > 0 && bu.totalInvestment > 0
     ? (bu.trainingCost / bu.totalInvestment) * 100 : 0
 

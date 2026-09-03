@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 //
 // vi.mock factories are hoisted above regular `const` declarations, so anything referenced inside
 // one must itself come from vi.hoisted(). See https://vitest.dev/api/vi.html#vi-hoisted
-const { findMany, budgetSettingsFindFirst } = vi.hoisted(() => ({
+const { findMany } = vi.hoisted(() => ({
   findMany: {
     trainingRecord: vi.fn(),
     feedbackRecord: vi.fn(),
@@ -18,7 +18,6 @@ const { findMany, budgetSettingsFindFirst } = vi.hoisted(() => ({
     differentiatingCapability: vi.fn(),
     managerReviewRecord: vi.fn(),
   },
-  budgetSettingsFindFirst: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -31,7 +30,6 @@ vi.mock('@/lib/prisma', () => ({
     trainingType: { findMany: (...a: unknown[]) => findMany.trainingType(...a) },
     differentiatingCapability: { findMany: (...a: unknown[]) => findMany.differentiatingCapability(...a) },
     managerReviewRecord: { findMany: (...a: unknown[]) => findMany.managerReviewRecord(...a) },
-    budgetSettings: { findFirst: (...a: unknown[]) => budgetSettingsFindFirst(...a) },
   },
 }))
 
@@ -69,7 +67,6 @@ beforeEach(() => {
   findMany.trainingType.mockResolvedValue([])
   findMany.differentiatingCapability.mockResolvedValue([])
   findMany.managerReviewRecord.mockResolvedValue([])
-  budgetSettingsFindFirst.mockReset().mockResolvedValue({ countSubscriptionsInBudget: false })
 })
 
 describe('computeGroupAnalytics — cost & budget aggregation', () => {
@@ -132,24 +129,25 @@ describe('computeGroupAnalytics — cost & budget aggregation', () => {
     expect(result.totalOtherTrainingCost).toBe(0)
   })
 
-  it('excludes subscription cost from budget utilisation unless countSubscriptionsInBudget is enabled', async () => {
+  it('excludes Strategic Learnings and Subscription cost from budget utilisation — budget is Formal Training only', async () => {
     findMany.businessUnit.mockResolvedValue([{ name: 'Finance', budget: 1000, staffCount: 1 }])
-    findMany.trainingRecord.mockResolvedValue([trainingRecord({ businessUnit: 'Finance', cost: 400 })])
+    findMany.trainingType.mockResolvedValue([
+      { name: 'Internal Training', classification: 'formal' },
+      { name: 'Summit', classification: 'other' },
+    ])
+    findMany.trainingRecord.mockResolvedValue([
+      trainingRecord({ businessUnit: 'Finance', cost: 400, trainingType: 'Internal Training' }),
+      trainingRecord({ businessUnit: 'Finance', cost: 900, trainingType: 'Summit' }),
+    ])
     findMany.subscriptionRecord.mockResolvedValue([
       { staffId: 'S1', staffName: 'Jane', businessUnit: 'Finance', membershipOrg: 'CFA', amount: 900, category: 'membership' },
     ])
 
-    const withoutSubs = await computeGroupAnalytics({ mode: 'all' })
-    const finance1 = withoutSubs.businessUnits.find((b) => b.name === 'Finance')!
-    expect(finance1.totalInvestment).toBe(1300) // still counted in overall investment
-    expect(finance1.budgetUtilisation).toBe(40) // but not against budget
-    expect(finance1.isOverBudget).toBe(false)
-
-    budgetSettingsFindFirst.mockResolvedValue({ countSubscriptionsInBudget: true })
-    const withSubs = await computeGroupAnalytics({ mode: 'all' })
-    const finance2 = withSubs.businessUnits.find((b) => b.name === 'Finance')!
-    expect(finance2.budgetUtilisation).toBe(130)
-    expect(finance2.isOverBudget).toBe(true)
+    const result = await computeGroupAnalytics({ mode: 'all' })
+    const finance = result.businessUnits.find((b) => b.name === 'Finance')!
+    expect(finance.totalInvestment).toBe(2200) // still counted in overall investment
+    expect(finance.budgetUtilisation).toBe(40) // only Formal Training (400) counts against budget
+    expect(finance.isOverBudget).toBe(false)
   })
 
   it('counts unique staff trained once even with multiple training records for the same staffId', async () => {

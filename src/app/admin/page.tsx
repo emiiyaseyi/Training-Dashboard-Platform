@@ -11,7 +11,6 @@ import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
 import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
-import { BudgetSettingsPanel } from '@/components/admin/BudgetSettingsPanel'
 import { GoogleSheetsPanel } from '@/components/admin/GoogleSheetsPanel'
 import { TrainingRecordChangesPanel } from '@/components/admin/TrainingRecordChangesPanel'
 import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
@@ -51,7 +50,6 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'bu-budget', label: 'Annual Budget & Headcount by Year', tab: 'business-units' },
   { id: 'bu-csv-import', label: 'Bulk Import via CSV / Excel', tab: 'business-units' },
   { id: 'bu-export', label: 'Export Business Unit Data', tab: 'business-units' },
-  { id: 'budget-settings', label: 'Budget Settings', tab: 'business-units' },
   { id: 'group-cost-distribution', label: 'Strategic Learnings / Group Cost Distribution', tab: 'business-units' },
   { id: 'training-types', label: 'Training Types', tab: 'taxonomies' },
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
@@ -664,10 +662,6 @@ export default function AdminPage() {
               >
                 <p className="text-xs text-slate-400">{units.length === 0 ? 'No business units configured yet.' : `${units.length} business unit${units.length === 1 ? '' : 's'} ready to export.`}</p>
               </SectionCard>
-            </div>
-
-            <div id="budget-settings" className={sectionWrapClass('budget-settings')}>
-              <BudgetSettingsPanel />
             </div>
 
             <div id="group-cost-distribution" className={sectionWrapClass('group-cost-distribution')}>
