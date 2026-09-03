@@ -626,6 +626,8 @@ model CustomSurveyQuestion {
   order         Int
   section       String?
   label         String
+  description   String?  // optional helper text shown under the label — the one thing (besides
+                          // required/driveFolderId) editable after launch; see [id]/route.ts
   type          String   // "text" | "textarea" | "select" | "multiselect" | "rating" | "date" | "yesno" | "file"
   options       String?  // JSON array of strings — for select/multiselect
   ratingMax     Int      @default(5) // for type "rating" — respondent picks 1..ratingMax (e.g. 5 or 10)

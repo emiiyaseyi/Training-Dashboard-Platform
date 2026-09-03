@@ -9,6 +9,7 @@ interface Question {
   id: string
   section: string | null
   label: string
+  description: string | null
   type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
   options: string[] | null
   ratingMax: number
@@ -430,6 +431,7 @@ export default function CustomSurveyPage() {
                           {q.label}
                           {q.required && <span className="text-red-500 ml-0.5">*</span>}
                         </label>
+                        {q.description && <p className="text-[14px] text-slate-400 -mt-1 mb-1.5">{q.description}</p>}
                         <QuestionInput
                           q={q}
                           value={answers[q.id] ?? (q.type === 'multiselect' || q.type === 'ranking' ? [] : '')}
@@ -450,6 +452,7 @@ export default function CustomSurveyPage() {
                               {q.label}
                               {q.required && <span className="text-red-500 ml-0.5">*</span>}
                             </label>
+                            {q.description && <p className="text-[14px] text-slate-400 -mt-1 mb-1.5">{q.description}</p>}
                             <QuestionInput
                               q={q}
                               value={answers[q.id] ?? (q.type === 'multiselect' || q.type === 'ranking' ? [] : '')}

@@ -33,6 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         id: q.id,
         section: q.section,
         label: q.label,
+        description: q.description,
         type: q.type,
         options: q.options ? JSON.parse(q.options) : null,
         ratingMax: q.ratingMax,
