@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
+import { MONTHS } from '@/lib/filter-types'
 
 interface TrainingRecordRow {
   id: string
@@ -15,6 +16,9 @@ interface TrainingRecordRow {
   trainingType: string | null
   capability: string | null
   vendor: string | null
+  // Set when this record is the auto-linked mirror of a scheduled attendee — editing month/year
+  // here also moves that schedule's real dates (see PUT .../training/[id]).
+  scheduleId: string | null
 }
 
 interface TrainingGroup {
@@ -30,6 +34,7 @@ interface TrainingGroup {
 
 interface EditDraft {
   staffName: string; staffId: string; businessUnit: string; cost: string; hours: string; trainingType: string; capability: string; vendor: string; training: string
+  month: string; year: string
 }
 
 interface RosterStaff {
@@ -402,12 +407,22 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       staffName: r.staffName, staffId: r.staffId, businessUnit: r.businessUnit,
       cost: String(r.cost), hours: r.hours != null ? String(r.hours) : '',
       trainingType: r.trainingType || '', capability: r.capability || '', vendor: r.vendor || '',
-      training: g.training,
+      training: g.training, month: g.month, year: String(g.year),
     })
   }
 
   const saveEdit = async (r: TrainingRecordRow, g: TrainingGroup) => {
     if (!draft) return
+
+    const monthOrYearChanged = draft.month !== g.month || draft.year !== String(g.year)
+    if (monthOrYearChanged && r.scheduleId) {
+      const ok = confirm(
+        `This record is linked to a scheduled training — changing the month/year here also moves that schedule's dates ` +
+        `(everyone on it, and Pre/Post survey timing). Continue?`
+      )
+      if (!ok) return
+    }
+
     setSaving(true)
     try {
       const newCost = parseFloat(draft.cost) || 0
@@ -424,7 +439,8 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staffName: draft.staffName, staffId: draft.staffId, businessUnit: draft.businessUnit,
-          training: draft.training, cost: newCost, hours: draft.hours ? parseFloat(draft.hours) : null,
+          training: draft.training, month: draft.month, year: parseInt(draft.year) || g.year,
+          cost: newCost, hours: draft.hours ? parseFloat(draft.hours) : null,
           trainingType: draft.trainingType || null, capability: draft.capability || null, vendor: draft.vendor || null,
         }),
       })
@@ -851,6 +867,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                             <th className="px-2.5 py-2">Staff ID</th>
                             <th className="px-2.5 py-2">Business Unit</th>
                             <th className="px-2.5 py-2">Training</th>
+                            <th className="px-2.5 py-2">Month/Year</th>
                             <th className="px-2.5 py-2">Cost</th>
                             <th className="px-2.5 py-2">Hours</th>
                             <th className="px-2.5 py-2">Type</th>
@@ -870,6 +887,17 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                                     <td className="px-2.5 py-1.5"><input value={draft.staffId} onChange={(e) => setDraft({ ...draft, staffId: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="w-32 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input value={draft.training} onChange={(e) => setDraft({ ...draft, training: e.target.value })} className="w-36 border border-slate-200 rounded px-1.5 py-1" /></td>
+                                    <td className="px-2.5 py-1.5">
+                                      <div className="flex items-center gap-1">
+                                        <select value={draft.month} onChange={(e) => setDraft({ ...draft, month: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1">
+                                          {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                                        </select>
+                                        <input type="number" value={draft.year} onChange={(e) => setDraft({ ...draft, year: e.target.value })} className="w-16 border border-slate-200 rounded px-1.5 py-1" />
+                                      </div>
+                                      {r.scheduleId && (
+                                        <p className="text-[10px] text-amber-600 mt-1 max-w-[9rem]">Linked to a schedule — this moves its dates too.</p>
+                                      )}
+                                    </td>
                                     <td className="px-2.5 py-1.5"><input type="number" value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className="w-20 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5"><input type="number" value={draft.hours} onChange={(e) => setDraft({ ...draft, hours: e.target.value })} className="w-16 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5">
@@ -936,6 +964,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                                     <td className="px-2.5 py-2 text-slate-500">{r.staffId}</td>
                                     <td className="px-2.5 py-2 text-slate-600">{r.businessUnit}</td>
                                     <td className="px-2.5 py-2 text-slate-600">{g.training}</td>
+                                    <td className="px-2.5 py-2 text-slate-600">{g.month} {g.year}</td>
                                     <td className="px-2.5 py-2 text-slate-600 tabular-nums"><NairaSign className="w-3 h-3 inline mr-0.5" />{r.cost.toLocaleString()}</td>
                                     <td className="px-2.5 py-2 text-slate-600">{r.hours ?? '—'}</td>
                                     <td className="px-2.5 py-2 text-slate-600">{r.trainingType || '—'}</td>

@@ -63,7 +63,23 @@ export async function GET(req: NextRequest) {
     const total = result.length
     const paged = result.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-    return NextResponse.json({ groups: paged, total, pageSize: PAGE_SIZE })
+    // Only looked up for the page actually being returned — tells the client which records are
+    // the auto-linked mirror of a TrainingSchedule attendee, so the date editor can warn that
+    // changing the month here also moves that schedule's real date (and Pre/Post survey timing).
+    const pagedRecordIds = paged.flatMap((g) => g.records.map((r) => r.id))
+    const linkedAttendees = pagedRecordIds.length > 0
+      ? await prisma.trainingScheduleAttendee.findMany({
+          where: { linkedTrainingRecordId: { in: pagedRecordIds } },
+          select: { linkedTrainingRecordId: true, scheduleId: true },
+        })
+      : []
+    const scheduleIdByRecordId = new Map(linkedAttendees.map((a) => [a.linkedTrainingRecordId as string, a.scheduleId]))
+    const pagedWithScheduleLink = paged.map((g) => ({
+      ...g,
+      records: g.records.map((r) => ({ ...r, scheduleId: scheduleIdByRecordId.get(r.id) || null })),
+    }))
+
+    return NextResponse.json({ groups: pagedWithScheduleLink, total, pageSize: PAGE_SIZE })
   } catch (err) {
     console.error('[admin/records/training GET]', err)
     return NextResponse.json({ error: 'Failed to fetch training records.' }, { status: 500 })
