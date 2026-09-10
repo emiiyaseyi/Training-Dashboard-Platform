@@ -42,7 +42,7 @@ interface RosterStaff {
 interface NamedOption { id: string; name: string }
 interface VendorOption extends NamedOption { order: number }
 
-export function TrainingRecordsTab() {
+export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: { initialEditRecordId?: string; initialSearchQuery?: string } = {}) {
   const [groups, setGroups] = useState<TrainingGroup[]>([])
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState(20)
@@ -51,6 +51,11 @@ export function TrainingRecordsTab() {
   const [loading, setLoading] = useState(true)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Consumed once groups matching the deep-link search have loaded (see the effect below) —
+  // cleared after use so a later manual search doesn't re-trigger auto-expand/edit. The parent
+  // page resolves these props from the URL asynchronously (after its own mount effect), so this
+  // can't just be the initial useState value — it needs its own effect reacting to the prop arriving.
+  const [pendingEditRecordId, setPendingEditRecordId] = useState<string | undefined>(undefined)
   const [draft, setDraft] = useState<EditDraft | null>(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -110,6 +115,26 @@ export function TrainingRecordsTab() {
     const t = setTimeout(() => load(), 300)
     return () => clearTimeout(t)
   }, [page, query]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (initialSearchQuery) setQuery(initialSearchQuery)
+    if (initialEditRecordId) setPendingEditRecordId(initialEditRecordId)
+  }, [initialSearchQuery, initialEditRecordId])
+
+  // Once the deep-link search above has loaded matching groups, find the specific record, expand
+  // its group, and open it for editing — same effect as clicking the row directly.
+  useEffect(() => {
+    if (!pendingEditRecordId || groups.length === 0) return
+    for (const g of groups) {
+      const record = g.records.find((r) => r.id === pendingEditRecordId)
+      if (record) {
+        setExpandedKey(groupKey(g))
+        startEdit(record, g)
+        setPendingEditRecordId(undefined)
+        return
+      }
+    }
+  }, [groups, pendingEditRecordId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setDirectory(Array.isArray(d) ? d : [])).catch(() => {})

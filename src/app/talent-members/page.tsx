@@ -15,7 +15,7 @@ import { usePagePermission } from '@/lib/use-page-permission'
 import { type PeriodFilter, filterToQuery, filterLabel } from '@/lib/filter-types'
 
 interface TMAttendedRecord {
-  recordId: string | null; source: 'schedule' | 'record'
+  recordId: string | null; scheduleId: string | null; source: 'schedule' | 'record'
   staffId: string; staffName: string; businessUnit: string; trainingName: string
   startDate: string; endDate: string; vendor: string | null
 }
@@ -23,6 +23,7 @@ interface TMUpcomingRecord {
   scheduleId: string; trainingName: string; businessUnit: string
   startDate: string; endDate: string; vendor: string | null; attendeeCount: number
   attendeeNames: string[]
+  attendees: { staffId: string; staffName: string; recordId: string | null }[]
 }
 interface TMExemptedRecord {
   id: string; staffId: string | null; name: string | null; email: string | null; reason: string | null; resolved: boolean
@@ -68,6 +69,34 @@ export default function TalentMembersPage() {
   const [vendors, setVendors] = useState<{ id: string; name: string }[]>([])
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null)
   const [rechecking, setRechecking] = useState(false)
+
+  // "Edit" on an Attended/Coming Up row can mean two different things that live in two different
+  // places — the per-person record (cost, business unit, training name — in Manage Records) or the
+  // schedule itself (dates, vendor, attendee list — in Survey Automation) — so it asks rather than
+  // picking one on the admin's behalf.
+  const [editChoice, setEditChoice] = useState<{ title: string; manageRecordsUrl: string | null; scheduleUrl: string | null } | null>(null)
+
+  const openAttendedEditChoice = (a: TMAttendedRecord) => {
+    setEditChoice({
+      title: `${a.staffName} — ${a.trainingName}`,
+      manageRecordsUrl: a.recordId ? `/admin/records?tab=training&editRecord=${a.recordId}&q=${encodeURIComponent(a.staffId)}` : null,
+      scheduleUrl: a.scheduleId ? `/admin/surveys?editSchedule=${a.scheduleId}` : null,
+    })
+  }
+
+  const openUpcomingEditChoice = (u: TMUpcomingRecord) => {
+    // A schedule can have many attendees, each with their own record — only deep-link straight to
+    // one when there's exactly one to pick; otherwise land on Manage Records pre-searched by
+    // training name so the admin can pick the right attendee themselves.
+    const single = u.attendees.length === 1 ? u.attendees[0] : null
+    setEditChoice({
+      title: u.trainingName,
+      manageRecordsUrl: single?.recordId
+        ? `/admin/records?tab=training&editRecord=${single.recordId}&q=${encodeURIComponent(single.staffId)}`
+        : `/admin/records?tab=training&q=${encodeURIComponent(u.trainingName)}`,
+      scheduleUrl: `/admin/surveys?editSchedule=${u.scheduleId}`,
+    })
+  }
 
   const load = useCallback(async (f: PeriodFilter) => {
     setLoading(true)
@@ -343,6 +372,18 @@ export default function TalentMembersPage() {
                   )
                 },
               },
+              ...(isPlatformAdmin ? [{
+                key: 'recordId', header: '', align: 'center' as const,
+                render: (r: Record<string, unknown>) => (
+                  <button
+                    onClick={() => openAttendedEditChoice(r as unknown as TMAttendedRecord)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
+                    title="Edit this training"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit
+                  </button>
+                ),
+              }] : []),
             ]}
             data={data.attended as unknown as Record<string, unknown>[]}
             emptyMessage="No TM training attendance recorded yet."
@@ -372,13 +413,13 @@ export default function TalentMembersPage() {
               ...(isPlatformAdmin ? [{
                 key: 'scheduleId', header: '', align: 'center' as const,
                 render: (r: Record<string, unknown>) => (
-                  <Link
-                    href={`/admin/surveys?editSchedule=${r.scheduleId as string}`}
+                  <button
+                    onClick={() => openUpcomingEditChoice(r as unknown as TMUpcomingRecord)}
                     className="inline-flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
-                    title="Edit this training schedule"
+                    title="Edit this training"
                   >
                     <Pencil className="w-3.5 h-3.5" /> Edit
-                  </Link>
+                  </button>
                 ),
               }] : []),
             ]}
@@ -431,6 +472,40 @@ export default function TalentMembersPage() {
           />
         </SectionCard>
       </div>
+
+      {editChoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setEditChoice(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <p className="text-sm font-semibold text-slate-800 mb-1">How would you like to edit this?</p>
+            <p className="text-xs text-slate-500 mb-4">{editChoice.title}</p>
+            <div className="space-y-2">
+              {editChoice.manageRecordsUrl && (
+                <Link
+                  href={editChoice.manageRecordsUrl}
+                  className="block w-full text-center text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
+                >
+                  Edit in Manage Records
+                </Link>
+              )}
+              {editChoice.scheduleUrl && (
+                <Link
+                  href={editChoice.scheduleUrl}
+                  className="block w-full text-center text-sm font-medium text-navy-600 border border-navy-200 rounded-lg px-4 py-2 hover:bg-navy-50"
+                >
+                  Edit Schedule (dates, vendor, attendees)
+                </Link>
+              )}
+              {!editChoice.manageRecordsUrl && !editChoice.scheduleUrl && (
+                <p className="text-xs text-slate-400">Nothing editable found for this row.</p>
+              )}
+            </div>
+            <button onClick={() => setEditChoice(null)} className="mt-3 text-xs text-slate-400 hover:text-slate-700 w-full text-center">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
