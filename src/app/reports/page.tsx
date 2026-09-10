@@ -5,6 +5,7 @@ import { FileText, RefreshCw, Trash2, Loader2, Download, Printer, CheckCircle } 
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { InvestmentReportExport } from '@/components/reports/InvestmentReportExport'
+import { CustomRecordsExportPanel } from '@/components/reports/CustomRecordsExportPanel'
 import { BUReportRecipientsPanel } from '@/components/admin/BUReportRecipientsPanel'
 import { ReportAutomationPanel } from '@/components/admin/ReportAutomationPanel'
 import { BUReportSendLogPanel } from '@/components/admin/BUReportSendLogPanel'
@@ -144,6 +145,8 @@ export default function ReportsPage() {
 
       <div className="p-4 sm:p-8 space-y-6">
         <InvestmentReportExport />
+
+        <CustomRecordsExportPanel />
 
         <BUReportRecipientsPanel />
 
