@@ -137,7 +137,15 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // manual data entry in the Training Type column still matches.
   const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
-  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month))
+  // Every TrainingSchedule attendee gets a TrainingRecord auto-written and linked back via
+  // linkedTrainingRecordId the moment they're added (see attendees/route.ts) — purely so Manage
+  // Records shows them immediately, not a second, independent attendance event. Excluded here so
+  // that person is represented exactly once, via the schedule (accurate dates, and correctly
+  // deferred to "upcoming" until it actually happens) rather than also via this month-only
+  // approximation, which would otherwise either double-count them once the schedule ends or mark
+  // them "attended" before it does (see the approxDate comment below).
+  const linkedRecordIds = new Set(tmSchedules.flatMap((s) => s.attendees.map((a) => a.linkedTrainingRecordId).filter((id): id is string => !!id)))
+  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month) && !linkedRecordIds.has(r.id))
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
@@ -204,13 +212,12 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     }
     const monthIdx = MONTHS.indexOf(rec.month as typeof MONTHS[number])
     const approxDate = new Date(rec.year, monthIdx >= 0 ? monthIdx : 0, 1)
-    // Uploaded/synced Training Data only has a month, not an exact day, so a row for the current
-    // month could genuinely be later this month (not yet happened) — most often a TrainingRecord
-    // auto-mirrored the moment someone was ADDED as a schedule attendee (see
-    // TrainingScheduleAttendee.linkedTrainingRecordId), well before the training's real (later)
-    // dates. approxDate landing on the 1st of that month means "as of today" is the same cutoff
-    // schedule-sourced attendance already uses (endDate < now) — skip the whole row, not just its
-    // spend, so someone with only a not-yet-happened record isn't shown as already trained.
+    // Schedule-linked records (the common case for the current month) are already excluded above
+    // — this only guards a record with no originating schedule at all (a genuinely bulk-uploaded/
+    // synced Training Data row) whose month hasn't arrived yet, which is possible if someone
+    // enters next month's data early. Uploaded/synced Training Data only has a month, not an exact
+    // day, so approxDate is the 1st of that month — skip the whole row, not just its spend, so it
+    // isn't shown as already trained before its month even starts.
     if (approxDate.getTime() > now) continue
     attended.push({
       recordId: rec.id,
@@ -252,7 +259,9 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   const yetToAttend: TMYetToAttendRecord[] = roster
     .filter((s) => {
       const key = normalizeStaffIdKey(s.staffId)
-      return !attendedKeys.has(key) && !exemptedKeys.has(key)
+      // Someone already on a scheduled-but-not-yet-happened training isn't "yet to attend" in the
+      // sense this list means (nothing lined up for them) — they show up under "Coming Up" instead.
+      return !attendedKeys.has(key) && !exemptedKeys.has(key) && !upcomingStaffKeys.has(key)
     })
     .map((s) => ({ staffId: s.staffId, staffName: s.name, businessUnit: s.businessUnit, email: s.email }))
 

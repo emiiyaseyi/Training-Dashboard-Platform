@@ -37,6 +37,7 @@ export interface BUAttendanceBreakdown {
   businessUnit: string
   totalConfirmed: number
   attended: number
+  upcoming: number
   yetToAttend: number
   coverageRatio: number
 }
@@ -44,6 +45,7 @@ export interface BUAttendanceBreakdown {
 export interface YetToAttendReport {
   totalConfirmedStaff: number
   totalAttended: number
+  totalUpcoming: number
   totalYetToAttend: number
   overallCoverageRatio: number
   byBU: BUAttendanceBreakdown[]
@@ -59,19 +61,33 @@ export interface YetToAttendReport {
 export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[] | null): Promise<YetToAttendReport> {
   const [allRoster, allTraining, allSchedules] = await Promise.all([
     prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } }),
-    prisma.trainingRecord.findMany({ select: { staffId: true, year: true, month: true } }),
+    prisma.trainingRecord.findMany({ select: { id: true, staffId: true, year: true, month: true } }),
     // Schedule-sourced attendance is unioned in alongside TrainingRecord for the same reason
     // computeTalentMemberReport does: a schedule's attendees are dual-written into TrainingRecord
     // the moment they're added (see training-schedule/[id]/attendees/route.ts), but older
     // schedules created before that existed, or any row where that write failed, would otherwise
     // silently look like "never attended" here even though the schedule clearly happened.
+    // Fetched unfiltered (not just past) so upcoming attendees can be identified separately below —
+    // people with something scheduled shouldn't show as "yet to attend" either.
     prisma.trainingSchedule.findMany({
-      where: { endDate: { lt: new Date() } }, // only training/summits/conferences that have actually happened
-      select: { startDate: true, attendees: { select: { staffId: true } } },
+      select: { startDate: true, endDate: true, attendees: { select: { staffId: true, linkedTrainingRecordId: true } } },
     }),
   ])
 
   const availableYears = [...new Set(allTraining.map((r) => r.year))].sort((a, b) => b - a)
+
+  const now = Date.now()
+  const pastSchedules = allSchedules.filter((s) => s.endDate.getTime() < now)
+  const upcomingSchedules = allSchedules.filter((s) => s.endDate.getTime() >= now)
+
+  // Every schedule attendee gets a TrainingRecord auto-written and linked back via
+  // linkedTrainingRecordId the moment they're added (see attendees/route.ts) — purely so Manage
+  // Records shows them immediately, not a second, independent attendance event. Excluded from the
+  // record-path here so that person is represented exactly once: via the schedule (accurate dates,
+  // correctly deferred to "upcoming" until it actually happens) rather than also via this
+  // month-only TrainingRecord, which would otherwise mark them "attended" before the training
+  // even happens (a schedule-linked record has no day precision, only the schedule's start month).
+  const linkedRecordIds = new Set(allSchedules.flatMap((s) => s.attendees.map((a) => a.linkedTrainingRecordId).filter((id): id is string => !!id)))
 
   // Roster is a snapshot, not a cumulative log — dedupe by staffId, most recent upload wins.
   const latestByStaffId = new Map<string, (typeof allRoster)[number]>()
@@ -93,7 +109,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     return true
   }
 
-  let training = allTraining
+  let training = allTraining.filter((r) => !linkedRecordIds.has(r.id))
   if (filter.mode !== 'all' && filter.year) {
     training = training.filter((r) => r.year === filter.year)
   }
@@ -103,25 +119,40 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   }
   const attendedStaffIds = new Set(training.map((r) => normalizeStaffIdKey(r.staffId)))
 
-  for (const sched of allSchedules) {
+  for (const sched of pastSchedules) {
     if (!inPeriod(sched.startDate.getFullYear(), MONTHS[sched.startDate.getMonth()])) continue
     for (const att of sched.attendees) attendedStaffIds.add(normalizeStaffIdKey(att.staffId))
   }
 
+  // Not period-filtered — forward-looking by definition, same convention as
+  // computeTalentMemberReport's "upcoming" (a Year-to-Date filter shouldn't hide something
+  // scheduled later in the year).
+  const upcomingStaffIds = new Set<string>()
+  for (const sched of upcomingSchedules) {
+    for (const att of sched.attendees) upcomingStaffIds.add(normalizeStaffIdKey(att.staffId))
+  }
+
   const list: YetToAttendStaff[] = []
   let totalAttended = 0
-  const buMap = new Map<string, { totalConfirmed: number; attended: number }>()
+  let totalUpcoming = 0
+  const buMap = new Map<string, { totalConfirmed: number; attended: number; upcoming: number }>()
 
   for (const staff of roster) {
-    const attended = attendedStaffIds.has(normalizeStaffIdKey(staff.staffId))
+    const key = normalizeStaffIdKey(staff.staffId)
+    const attended = attendedStaffIds.has(key)
+    const upcoming = !attended && upcomingStaffIds.has(key)
     if (attended) totalAttended++
+    if (upcoming) totalUpcoming++
 
-    const bu = buMap.get(staff.businessUnit) || { totalConfirmed: 0, attended: 0 }
+    const bu = buMap.get(staff.businessUnit) || { totalConfirmed: 0, attended: 0, upcoming: 0 }
     bu.totalConfirmed++
     if (attended) bu.attended++
+    if (upcoming) bu.upcoming++
     buMap.set(staff.businessUnit, bu)
 
-    if (!attended) {
+    // Someone with a not-yet-happened training already scheduled isn't "yet to attend" in the
+    // sense this list means (nothing lined up for them) — they're just not showing here yet.
+    if (!attended && !upcoming) {
       list.push({
         staffId: staff.staffId,
         staffName: fullName(staff),
@@ -138,7 +169,8 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
       businessUnit,
       totalConfirmed: v.totalConfirmed,
       attended: v.attended,
-      yetToAttend: v.totalConfirmed - v.attended,
+      upcoming: v.upcoming,
+      yetToAttend: v.totalConfirmed - v.attended - v.upcoming,
       coverageRatio: v.totalConfirmed > 0 ? (v.attended / v.totalConfirmed) * 100 : 0,
     }))
     .sort((a, b) => b.yetToAttend - a.yetToAttend)
@@ -146,7 +178,8 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   return {
     totalConfirmedStaff: roster.length,
     totalAttended,
-    totalYetToAttend: roster.length - totalAttended,
+    totalUpcoming,
+    totalYetToAttend: list.length,
     overallCoverageRatio: roster.length > 0 ? (totalAttended / roster.length) * 100 : 0,
     byBU,
     list: list.sort((a, b) => a.businessUnit.localeCompare(b.businessUnit) || a.staffName.localeCompare(b.staffName)),
