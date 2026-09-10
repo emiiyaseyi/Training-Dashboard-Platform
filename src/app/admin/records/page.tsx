@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TrainingRecordsTab } from '@/components/admin/records/TrainingRecordsTab'
 import { KSSRecordsTab } from '@/components/admin/records/KSSRecordsTab'
@@ -16,6 +16,19 @@ const TABS: { key: Tab; label: string }[] = [
 
 export default function ManageRecordsPage() {
   const [tab, setTab] = useState<Tab>('training')
+  // Deep-link support (e.g. from Talent Members' "Edit" action) — ?tab=training&editRecord=<id>&q=<search>.
+  // Read directly off window.location rather than next/navigation's useSearchParams, which
+  // requires a Suspense boundary around any page that uses it — this page is fully client-
+  // rendered already, so a plain query-string read on mount is simpler and needs none of that.
+  const [editRecordId, setEditRecordId] = useState<string | undefined>(undefined)
+  const [initialQuery, setInitialQuery] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab')
+    if (tabParam === 'training' || tabParam === 'kss' || tabParam === 'subscriptions') setTab(tabParam)
+    setEditRecordId(params.get('editRecord') || undefined)
+    setInitialQuery(params.get('q') || undefined)
+  }, [])
 
   return (
     <div className="flex flex-col">
@@ -39,7 +52,7 @@ export default function ManageRecordsPage() {
           ))}
         </div>
 
-        {tab === 'training' && <TrainingRecordsTab />}
+        {tab === 'training' && <TrainingRecordsTab initialEditRecordId={editRecordId} initialSearchQuery={initialQuery} />}
         {tab === 'kss' && <KSSRecordsTab />}
         {tab === 'subscriptions' && <SubscriptionRecordsTab />}
       </div>

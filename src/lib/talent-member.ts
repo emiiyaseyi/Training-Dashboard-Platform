@@ -19,7 +19,11 @@ import { MONTHS, activeMonthIndices, type PeriodFilter } from '@/lib/filter-type
 // from TrainingSchedule only, since a TrainingRecord row by definition already happened.
 
 export interface TMAttendedRecord {
-  recordId: string | null // TrainingRecord id — set only for source: 'record', so its vendor can be edited after the fact (no vendor column at upload time)
+  // TrainingRecord id — always set: for source: 'record' it IS the record; for source: 'schedule'
+  // it's the auto-written record linked via TrainingScheduleAttendee.linkedTrainingRecordId (see
+  // training-schedule/[id]/attendees/route.ts), so either source can deep-link into Manage Records.
+  recordId: string | null
+  scheduleId: string | null // set only for source: 'schedule' — lets "Edit" also offer the schedule (date/vendor/attendee) editor
   source: 'schedule' | 'record'
   staffId: string
   staffName: string
@@ -39,6 +43,10 @@ export interface TMUpcomingRecord {
   vendor: string | null
   attendeeCount: number
   attendeeNames: string[] // same set as attendeeCount (every attendee on the schedule) — lengths always match
+  // Per-attendee detail (recordId lets "Edit" deep-link a specific person into Manage Records,
+  // same linked-record mechanism as TMAttendedRecord above) — attendeeNames/attendeeCount stay for
+  // existing display code that only needs the plain list.
+  attendees: { staffId: string; staffName: string; recordId: string | null }[]
 }
 
 export interface TMExemptedRecord {
@@ -185,7 +193,8 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
       const key = normalizeStaffIdKey(att.staffId)
       if (!rosterKeys.has(key)) continue // only Talent Members count toward TM completion
       attended.push({
-        recordId: null,
+        recordId: att.linkedTrainingRecordId,
+        scheduleId: sched.id,
         source: 'schedule',
         staffId: att.staffId,
         staffName: att.staffName,
@@ -221,6 +230,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     if (approxDate.getTime() > now) continue
     attended.push({
       recordId: rec.id,
+      scheduleId: null,
       source: 'record',
       staffId: rec.staffId,
       staffName: rec.staffName,
@@ -243,6 +253,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     vendor: s.vendor,
     attendeeCount: s.attendees.length,
     attendeeNames: s.attendees.map((a) => a.staffName),
+    attendees: s.attendees.map((a) => ({ staffId: a.staffId, staffName: a.staffName, recordId: a.linkedTrainingRecordId })),
   }))
 
   const upcomingStaffKeys = new Set<string>()
