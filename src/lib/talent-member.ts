@@ -145,15 +145,22 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // manual data entry in the Training Type column still matches.
   const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
-  // Every TrainingSchedule attendee gets a TrainingRecord auto-written and linked back via
-  // linkedTrainingRecordId the moment they're added (see attendees/route.ts) — purely so Manage
-  // Records shows them immediately, not a second, independent attendance event. Excluded here so
-  // that person is represented exactly once, via the schedule (accurate dates, and correctly
-  // deferred to "upcoming" until it actually happens) rather than also via this month-only
-  // approximation, which would otherwise either double-count them once the schedule ends or mark
-  // them "attended" before it does (see the approxDate comment below).
-  const linkedRecordIds = new Set(tmSchedules.flatMap((s) => s.attendees.map((a) => a.linkedTrainingRecordId).filter((id): id is string => !!id)))
-  const tmTrainingRecords = yearTrainingRecords.filter((r) => normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month) && !linkedRecordIds.has(r.id))
+  // Whenever a schedule already exists for a person+training, the schedule is the source of
+  // truth for its dates — the TrainingRecord side is either an auto-written mirror (linked via
+  // linkedTrainingRecordId, see attendees/route.ts) with only month precision, or — for a
+  // schedule created FROM an already-existing historical record (Already Attended Trainings,
+  // sourcedFromHistoricalData) — a genuinely separate, never-linked row describing the same
+  // training. Matching by staffId+training name (not just the link field) catches both cases, so
+  // this person is represented exactly once, via the schedule's real dates and correctly deferred
+  // to "upcoming" until it actually happens, instead of also via this month-only approximation —
+  // which would otherwise show the wrong date, or mark them "attended" before it happens.
+  const scheduleAttendeeKey = (staffId: string, trainingName: string) => `${normalizeStaffIdKey(staffId)}|${trainingName.trim().toLowerCase()}`
+  const scheduledPersonTrainingKeys = new Set(
+    tmSchedules.flatMap((s) => s.attendees.map((a) => scheduleAttendeeKey(a.staffId, s.trainingName)))
+  )
+  const tmTrainingRecords = yearTrainingRecords.filter((r) =>
+    normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month) && !scheduledPersonTrainingKeys.has(scheduleAttendeeKey(r.staffId, r.training))
+  )
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
