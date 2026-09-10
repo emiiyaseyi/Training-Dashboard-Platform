@@ -251,17 +251,27 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     totalSpend += rec.cost
   }
 
-  const upcoming: TMUpcomingRecord[] = upcomingSchedules.map((s) => ({
-    scheduleId: s.id,
-    trainingName: s.trainingName,
-    businessUnit: s.businessUnit,
-    startDate: s.startDate,
-    endDate: s.endDate,
-    vendor: s.vendor,
-    attendeeCount: s.attendees.length,
-    attendeeNames: s.attendees.map((a) => a.staffName),
-    attendees: s.attendees.map((a) => ({ staffId: a.staffId, staffName: a.staffName, recordId: a.linkedTrainingRecordId })),
-  }))
+  // A TM-tagged schedule can still carry an attendee who isn't actually a Talent Member (the
+  // schedule's trainingType is one value for the whole training, not per-attendee) — filtered to
+  // roster members only here, same as the "attended" loops above ("only Talent Members count
+  // toward TM completion"), so this list matches staffWithUpcomingTraining below instead of
+  // showing someone the TM report shouldn't be counting at all.
+  const upcoming: TMUpcomingRecord[] = upcomingSchedules
+    .map((s) => {
+      const rosterAttendees = s.attendees.filter((a) => rosterKeys.has(normalizeStaffIdKey(a.staffId)))
+      return {
+        scheduleId: s.id,
+        trainingName: s.trainingName,
+        businessUnit: s.businessUnit,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        vendor: s.vendor,
+        attendeeCount: rosterAttendees.length,
+        attendeeNames: rosterAttendees.map((a) => a.staffName),
+        attendees: rosterAttendees.map((a) => ({ staffId: a.staffId, staffName: a.staffName, recordId: a.linkedTrainingRecordId })),
+      }
+    })
+    .filter((s) => s.attendeeCount > 0)
 
   const upcomingStaffKeys = new Set<string>()
   for (const sched of upcomingSchedules) {
