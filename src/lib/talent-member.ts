@@ -191,6 +191,17 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   const upcomingSchedules = tmSchedules.filter((s) => s.endDate.getTime() >= now)
 
   const rosterKeys = new Set(roster.map((s) => normalizeStaffIdKey(s.staffId)))
+  // A schedule's trainingType is one shared value for the whole training, not per-attendee — an
+  // admin correcting "this particular person's attendance here isn't really a TM training for
+  // them" has no way to edit that on the schedule itself, only by retyping THEIR OWN linked
+  // TrainingRecord away from "TM" (e.g. to "External Training"). That per-person override takes
+  // precedence over the schedule's own type wherever it exists.
+  const recordTypeById = new Map(yearTrainingRecords.map((r) => [r.id, r.trainingType]))
+  const isOverriddenAwayFromTM = (linkedTrainingRecordId: string | null) => {
+    if (!linkedTrainingRecordId) return false
+    const rt = recordTypeById.get(linkedTrainingRecordId)
+    return !!rt && normTM(rt) !== 'tm'
+  }
   const attended: TMAttendedRecord[] = []
   const attendedKeys = new Set<string>()
   let totalSpend = 0
@@ -199,6 +210,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     for (const att of sched.attendees) {
       const key = normalizeStaffIdKey(att.staffId)
       if (!rosterKeys.has(key)) continue // only Talent Members count toward TM completion
+      if (isOverriddenAwayFromTM(att.linkedTrainingRecordId)) continue
       attended.push({
         recordId: att.linkedTrainingRecordId,
         scheduleId: sched.id,
@@ -251,14 +263,16 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     totalSpend += rec.cost
   }
 
-  // A TM-tagged schedule can still carry an attendee who isn't actually a Talent Member (the
-  // schedule's trainingType is one value for the whole training, not per-attendee) — filtered to
-  // roster members only here, same as the "attended" loops above ("only Talent Members count
-  // toward TM completion"), so this list matches staffWithUpcomingTraining below instead of
-  // showing someone the TM report shouldn't be counting at all.
+  // A TM-tagged schedule can still carry an attendee who isn't actually a Talent Member, or one
+  // whose own linked record has been individually retyped away from TM (see
+  // isOverriddenAwayFromTM above) — filtered out here the same way the "attended" loops above
+  // already are, so this list matches staffWithUpcomingTraining below instead of showing someone
+  // the TM report shouldn't be counting at all.
   const upcoming: TMUpcomingRecord[] = upcomingSchedules
     .map((s) => {
-      const rosterAttendees = s.attendees.filter((a) => rosterKeys.has(normalizeStaffIdKey(a.staffId)))
+      const rosterAttendees = s.attendees.filter((a) =>
+        rosterKeys.has(normalizeStaffIdKey(a.staffId)) && !isOverriddenAwayFromTM(a.linkedTrainingRecordId)
+      )
       return {
         scheduleId: s.id,
         trainingName: s.trainingName,
@@ -277,7 +291,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   for (const sched of upcomingSchedules) {
     for (const att of sched.attendees) {
       const key = normalizeStaffIdKey(att.staffId)
-      if (rosterKeys.has(key)) upcomingStaffKeys.add(key)
+      if (rosterKeys.has(key) && !isOverriddenAwayFromTM(att.linkedTrainingRecordId)) upcomingStaffKeys.add(key)
     }
   }
   const staffWithUpcomingTraining = upcomingStaffKeys.size
