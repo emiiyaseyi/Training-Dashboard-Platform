@@ -115,7 +115,7 @@ export default function YetToAttendPage() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard
                 title="Confirmed Staff"
                 value={data.totalConfirmedStaff.toLocaleString()}
@@ -133,10 +133,17 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Yet to Attend"
                 value={data.totalYetToAttend.toLocaleString()}
-                subtitle="No training record in period"
+                subtitle="No training record in period, and nothing scheduled"
                 icon={UserX}
                 color="red"
                 alert={data.totalYetToAttend > 0}
+              />
+              <KPICard
+                title="Coming Up"
+                value={data.totalUpcoming.toLocaleString()}
+                subtitle="On a scheduled, not-yet-happened training"
+                icon={Clock}
+                color="blue"
               />
               <KPICard
                 title="Coverage"
@@ -168,6 +175,7 @@ export default function YetToAttendPage() {
                   'Business Unit': b.businessUnit,
                   'Confirmed Staff': b.totalConfirmed,
                   Attended: b.attended,
+                  'Coming Up': b.upcoming,
                   'Yet to Attend': b.yetToAttend,
                 }))}
                 filename="yet_to_attend_by_bu"

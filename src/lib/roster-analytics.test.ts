@@ -101,17 +101,47 @@ describe('computeYetToAttend', () => {
     ])
   })
 
-  it('unions TrainingSchedule attendees into "attended" alongside TrainingRecord', async () => {
+  it('unions past TrainingSchedule attendees into "attended" alongside TrainingRecord', async () => {
     findManyRoster.mockResolvedValue([rosterRow({ staffId: 'S1' })])
     findManyTraining.mockResolvedValue([])
     findManySchedule.mockResolvedValue([
-      { startDate: new Date('2026-02-01'), attendees: [{ staffId: 'S1' }] },
+      { startDate: new Date('2026-02-01'), endDate: new Date('2026-02-01'), attendees: [{ staffId: 'S1' }] },
     ])
 
     const report = await computeYetToAttend({ mode: 'all' })
 
     expect(report.totalAttended).toBe(1)
     expect(report.totalYetToAttend).toBe(0)
+  })
+
+  it('counts a staff member on a not-yet-happened schedule as "upcoming", not "yet to attend"', async () => {
+    findManyRoster.mockResolvedValue([rosterRow({ staffId: 'S1' })])
+    findManyTraining.mockResolvedValue([])
+    const farFuture = new Date(Date.now() + 365 * 86400000)
+    findManySchedule.mockResolvedValue([
+      { startDate: farFuture, endDate: farFuture, attendees: [{ staffId: 'S1' }] },
+    ])
+
+    const report = await computeYetToAttend({ mode: 'all' })
+
+    expect(report.totalAttended).toBe(0)
+    expect(report.totalUpcoming).toBe(1)
+    expect(report.totalYetToAttend).toBe(0)
+    expect(report.list).toEqual([])
+  })
+
+  it('excludes a schedule-linked TrainingRecord from the record-path (would otherwise double-count/mis-date it)', async () => {
+    findManyRoster.mockResolvedValue([rosterRow({ staffId: 'S1' })])
+    // A record auto-written the moment S1 was added to the schedule below, sharing its id.
+    findManyTraining.mockResolvedValue([{ id: 'linked-1', staffId: 'S1', year: 2026, month: 'February' }])
+    findManySchedule.mockResolvedValue([
+      { startDate: new Date('2026-02-01'), endDate: new Date('2026-02-01'), attendees: [{ staffId: 'S1', linkedTrainingRecordId: 'linked-1' }] },
+    ])
+
+    const report = await computeYetToAttend({ mode: 'all' })
+
+    // Still counted exactly once — via the schedule, not doubled via the linked record.
+    expect(report.totalAttended).toBe(1)
   })
 
   it('applies a BU scope filter to both the roster and the byBU breakdown', async () => {

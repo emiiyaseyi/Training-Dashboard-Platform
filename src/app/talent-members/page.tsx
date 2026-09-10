@@ -356,8 +356,8 @@ export default function TalentMembersPage() {
 
         <SectionCard
           icon={CalendarClock}
-          title={`TM Trainings Coming Up (${data.upcoming.length})`}
-          description="Scheduled TM trainings that haven't happened yet."
+          title={`TM Trainings Coming Up (${data.staffWithUpcomingTraining})`}
+          description={`${data.upcoming.length} scheduled training${data.upcoming.length === 1 ? '' : 's'} that haven't happened yet.`}
           headerActions={<SectionExport rows={upcomingRows} filename={`tm_upcoming_${year}`} format="xlsx" label="Excel" />}
         >
           <DataTable
