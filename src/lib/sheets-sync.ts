@@ -76,20 +76,26 @@ async function reconcileTraining(
 ): Promise<{ newRows: TrainingRow[]; changes: TrainingRecordChangeCandidate[] }> {
   const existing = await prisma.trainingRecord.findMany({ where: { year } })
 
-  const looseMap = new Map<string, (typeof existing)[number]>()
+  // Bucketed (not "first wins" single-row) — if the sheet genuinely has more than one row sharing
+  // a name+training+month (e.g. two cohorts of the same course in the same month), each incoming
+  // row consumes its own existing DB row via shift() below. A single-row map here would let only
+  // the first incoming row ever match, so every sync run would create a fresh, never-matched
+  // duplicate for the rest — compounding by one extra duplicate row per day forever.
+  const looseMap = new Map<string, (typeof existing)[number][]>()
   for (const r of existing) {
     const k = trainingLooseKey(r.staffName, r.training, r.month)
-    if (!looseMap.has(k)) looseMap.set(k, r) // first wins — ambiguous duplicates aren't worth resolving here
+    const bucket = looseMap.get(k)
+    if (bucket) bucket.push(r)
+    else looseMap.set(k, [r])
   }
 
   const newRows: TrainingRow[] = []
   const changes: TrainingRecordChangeCandidate[] = []
-  const claimed = new Set<string>()
 
   for (const row of rows) {
-    const match = looseMap.get(trainingLooseKey(row.staffName, row.training, row.month))
-    if (match && !claimed.has(match.id)) {
-      claimed.add(match.id)
+    const bucket = looseMap.get(trainingLooseKey(row.staffName, row.training, row.month))
+    const match = bucket?.shift() // consumes one existing row per matching sheet row, not just the first ever
+    if (match) {
       const oldData: TrainingRecordSnapshot = {
         staffId: match.staffId, staffName: match.staffName, businessUnit: match.businessUnit,
         cost: match.cost, hours: match.hours, trainingType: match.trainingType, capability: match.capability,

@@ -38,10 +38,17 @@ export async function backfillTrainingRecordsFromSchedules(): Promise<BackfillRe
     where: { year },
     select: { id: true, staffName: true, training: true, month: true },
   })
-  const existingByKey = new Map<string, string>()
+  // Bucketed, not "first wins" — if two different attendees genuinely share the same
+  // name+training+month key, a single-id map would link BOTH to the same existing TrainingRecord,
+  // leaving one of them with a dangling link once whichever attendee is removed later deletes it
+  // out from under the other. shift() below hands each attendee its own existing record where one
+  // is available, same fix as reconcileTraining's identical bug (sheets-sync.ts).
+  const existingByKey = new Map<string, string[]>()
   existingRecords.forEach((r) => {
     const key = looseKey(r.staffName, r.training, r.month)
-    if (!existingByKey.has(key)) existingByKey.set(key, r.id)
+    const bucket = existingByKey.get(key)
+    if (bucket) bucket.push(r.id)
+    else existingByKey.set(key, [r.id])
   })
 
   const batch = await getOrCreateNativeBatch('training', 'Training Schedule attendees (backfill)')
@@ -53,7 +60,7 @@ export async function backfillTrainingRecordsFromSchedules(): Promise<BackfillRe
   for (const a of attendees) {
     const month = MONTHS[a.schedule.startDate.getMonth()]
     const key = looseKey(a.staffName, a.schedule.trainingName, month)
-    const existingId = existingByKey.get(key)
+    const existingId = existingByKey.get(key)?.shift()
 
     if (existingId) {
       alreadyMatched++
