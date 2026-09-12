@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import {
-  LayoutGrid, Users, UserSearch, GraduationCap, TrendingUp, Users2, Wallet, LogOut, X, ChevronsLeft, ChevronsRight,
+  LayoutGrid, Users, UserSearch, GraduationCap, TrendingUp, Users2, Wallet, LogOut, X, ChevronsLeft, ChevronsRight, Settings,
 } from 'lucide-react'
 import { hasAccess, PAGE_LABELS, PAGE_ROUTES, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
@@ -118,6 +118,25 @@ export function HrSidebar({ open = false, onClose }: HrSidebarProps) {
                 HR Units
               </p>
               {visibleUnits.map((key) => renderLink(key, PAGE_LABELS[key].replace('HR — ', ''), UNIT_ICONS[key]))}
+            </>
+          )}
+
+          {isSuperAdmin && (
+            <>
+              <p className={`px-3 pt-4 pb-1 text-xs font-medium text-slate-400 uppercase tracking-wider ${collapsed ? 'md:hidden' : ''}`}>
+                Super Admin
+              </p>
+              <Link
+                href="/hr/admin"
+                onClick={onClose}
+                title={collapsed ? 'Admin Settings' : undefined}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${collapsed ? 'md:justify-center md:px-2' : ''} ${
+                  pathname === '/hr/admin' ? 'bg-meristem-600 text-white' : 'text-slate-600 hover:bg-meristem-50 hover:text-meristem-800'
+                }`}
+              >
+                <Settings className="w-4 h-4 shrink-0" />
+                <span className={collapsed ? 'md:hidden' : ''}>Admin Settings</span>
+              </Link>
             </>
           )}
         </nav>

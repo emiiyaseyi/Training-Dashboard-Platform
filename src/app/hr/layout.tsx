@@ -23,7 +23,14 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
   // see the rollup that links to it — same fallback HrSidebar already applies to its own
   // "Summary" nav link, kept in sync with it here so the link it renders is never a dead end.
   const canSeeSummaryViaAnyUnit = pageKey === 'hr-summary' && HR_UNIT_KEYS.some((k) => hasAccess(session.user.permissions?.[k], 'view'))
-  const allowed = session.user.isSuperAdmin || !pageKey || hasAccess(session.user.permissions?.[pageKey], 'view') || canSeeSummaryViaAnyUnit
+  // /hr/admin has no PageKey (it's gated on isSuperAdmin directly, not the generic permission
+  // system — see src/app/hr/admin/page.tsx) — pageKeyForPath returns null for it, which the
+  // generic `!pageKey` fallback below would otherwise treat as "no gate, let anyone through".
+  // Called out explicitly so that fallback can't accidentally cover this page too.
+  const isHrAdminPath = pathname.startsWith('/hr/admin')
+  const allowed = isHrAdminPath
+    ? Boolean(session.user.isSuperAdmin)
+    : session.user.isSuperAdmin || !pageKey || hasAccess(session.user.permissions?.[pageKey], 'view') || canSeeSummaryViaAnyUnit
 
   return (
     <div className="flex-1 flex h-screen overflow-hidden bg-meristem-50">
