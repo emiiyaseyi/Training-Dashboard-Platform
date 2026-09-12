@@ -1,26 +1,25 @@
 'use client'
 
-import { TrendingUp, Award, Repeat, Users2 } from 'lucide-react'
+import { TrendingUp, ClipboardCheck, Star, Users2 } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { BarChart } from '@/components/charts/BarChart'
 
-// Dummy data shaped from HR Dashboard/PM & TM_Data_for_Dashboard_CLEAN.xlsx ("TM Dashboard
-// Metrics — Live Summary" sheet) — real figures TBD once Performance Management confirms the
-// live data source (the sheet already exists; connecting it is a fast follow, not a redesign).
+// Dummy data shaped from HR REPORT — 1ST QPR 2026 (performance contract review completion) —
+// real figures TBD once Performance Management confirms the live data source. Talent Management
+// (TM pool, promotion, mobility, succession) is its own unit now — see /hr/talent-management.
 const KPIS = [
-  { label: 'Total TM Pool', value: '84', sub: 'Talent Management roster', icon: Users2 },
-  { label: 'Promotion Rate', value: '18%', sub: '% of TM pool promoted (tracked years)', icon: TrendingUp },
-  { label: 'Internal Mobility', value: '22%', sub: 'Changed BU/role, 2025–2026', icon: Repeat },
-  { label: 'Committee Involvement', value: '31%', sub: 'On a Strategic Committee', icon: Award },
+  { label: 'Contracts Reviewed', value: '80%', sub: 'Group‑wide, Q1 2026', icon: ClipboardCheck },
+  { label: 'Avg. Rating', value: '4.1 / 5', sub: 'H1 2026, highest on record', icon: Star },
+  { label: 'Contracts Outstanding', value: '20%', sub: 'Target: 100% by quarter end', icon: TrendingUp },
+  { label: 'Staff in Scope', value: '329', sub: 'Group‑wide headcount', icon: Users2 },
 ]
 
-const PERFORMANCE_TREND = { labels: ['H1 2025', 'H2 2025', 'H1 2026'], values: [3.8, 4.0, 4.1] }
-const TENURE_BUCKETS = { labels: ['0–2 yrs', '3–5 yrs', '6–10 yrs', '10+ yrs'], values: [22, 31, 19, 12] }
+const RATING_TREND = { labels: ['H1 2025', 'H2 2025', 'H1 2026'], values: [3.8, 4.0, 4.1] }
 
 export default function PerformanceManagementPage() {
   return (
     <div>
-      <UnitPageHeader title="Performance Management" description="Performance contracts & Talent Management promotion, mobility, tenure" icon={TrendingUp} />
+      <UnitPageHeader title="Performance Management" description="Performance contracts, reviews & ratings" icon={TrendingUp} />
 
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -38,24 +37,19 @@ export default function PerformanceManagementPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <p className="text-sm font-bold text-slate-800 mb-1">Average Performance Score</p>
-            <p className="text-xs text-slate-400 mb-3">Out of 5.0, by half-year</p>
-            <BarChart labels={PERFORMANCE_TREND.labels} values={PERFORMANCE_TREND.values} color="#2F6B2B" showLabels height={220} />
+            <p className="text-sm font-bold text-slate-800 mb-1">Average Performance Rating</p>
+            <p className="text-xs text-slate-400 mb-3">Out of 5.0, by half‑year</p>
+            <BarChart labels={RATING_TREND.labels} values={RATING_TREND.values} color="#2F6B2B" showLabels height={220} />
           </div>
-          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <p className="text-sm font-bold text-slate-800 mb-1">TM Pool by Tenure</p>
-            <p className="text-xs text-slate-400 mb-3">Average tenure at Meristem</p>
-            <BarChart labels={TENURE_BUCKETS.labels} values={TENURE_BUCKETS.values} color="#4F9A43" showLabels height={220} />
-          </div>
-        </div>
 
-        <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-          <p className="text-sm font-bold text-slate-800 mb-1">Organization-wide Performance Contract Review</p>
-          <p className="text-xs text-slate-400 mb-3">Q1 2026 completion status</p>
-          <div className="w-full bg-meristem-50 rounded-full h-2.5">
-            <div className="h-2.5 rounded-full bg-meristem-600" style={{ width: '80%' }} />
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <p className="text-sm font-bold text-slate-800 mb-1">Organization‑wide Contract Review</p>
+            <p className="text-xs text-slate-400 mb-3">Q1 2026 completion status</p>
+            <div className="w-full bg-meristem-50 rounded-full h-2.5">
+              <div className="h-2.5 rounded-full bg-meristem-600" style={{ width: '80%' }} />
+            </div>
+            <p className="text-xs text-slate-500 mt-2">80% complete — target 100% by quarter end</p>
           </div>
-          <p className="text-xs text-slate-500 mt-2">80% complete</p>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { ArrowLeft, ChevronDown, Users, UserSearch, GraduationCap, TrendingUp, Wallet } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Users, UserSearch, GraduationCap, TrendingUp, Users2, Wallet } from 'lucide-react'
 import { hasAccess, PAGE_LABELS, PAGE_ROUTES, HR_UNIT_KEYS } from '@/lib/permissions'
 
 const UNIT_ICONS = {
@@ -12,6 +12,7 @@ const UNIT_ICONS = {
   'hr-talent-acquisition': UserSearch,
   'hr-learning-development': GraduationCap,
   'hr-performance-management': TrendingUp,
+  'hr-talent-management': Users2,
   'hr-compensation-benefits': Wallet,
 } as const
 

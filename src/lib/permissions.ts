@@ -21,6 +21,7 @@ export const PAGE_KEYS = [
   'hr-talent-acquisition',
   'hr-learning-development',
   'hr-performance-management',
+  'hr-talent-management',
   'hr-compensation-benefits',
 ] as const
 
@@ -42,6 +43,7 @@ export const PAGE_LABELS: Record<PageKey, string> = {
   'hr-talent-acquisition': 'HR — Talent Acquisition',
   'hr-learning-development': 'HR — Learning & Development',
   'hr-performance-management': 'HR — Performance Management',
+  'hr-talent-management': 'HR — Talent Management',
   'hr-compensation-benefits': 'HR — Compensation & Benefits',
 }
 
@@ -61,17 +63,21 @@ export const PAGE_ROUTES: Record<PageKey, string> = {
   'hr-talent-acquisition': '/hr/talent-acquisition',
   'hr-learning-development': '/hr/learning-development',
   'hr-performance-management': '/hr/performance-management',
+  'hr-talent-management': '/hr/talent-management',
   'hr-compensation-benefits': '/hr/compensation-benefits',
 }
 
-// The 5 HR units + the summary page, as a single ordered list — driving the HR sidebar nav and
+// The 6 HR units + the summary page, as a single ordered list — driving the HR sidebar nav and
 // the unit tiles on the summary page, so both always stay in sync with each other and with
-// PAGE_KEYS/PAGE_ROUTES above (one list to edit, not three).
+// PAGE_KEYS/PAGE_ROUTES above (one list to edit, not three). Talent Management stands alone
+// from Performance Management — separate pool/promotion/mobility/succession concerns from
+// contract-review compliance, even though both live under the same "performance" umbrella.
 export const HR_UNIT_KEYS = [
   'hr-employee-services',
   'hr-talent-acquisition',
   'hr-learning-development',
   'hr-performance-management',
+  'hr-talent-management',
   'hr-compensation-benefits',
 ] as const satisfies readonly PageKey[]
 

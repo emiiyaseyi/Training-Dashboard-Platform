@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import {
-  LayoutGrid, Users, UserSearch, GraduationCap, TrendingUp, Wallet, LogOut, X,
+  LayoutGrid, Users, UserSearch, GraduationCap, TrendingUp, Users2, Wallet, LogOut, X,
 } from 'lucide-react'
 import { hasAccess, PAGE_LABELS, PAGE_ROUTES, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
@@ -13,6 +13,7 @@ const UNIT_ICONS: Record<(typeof HR_UNIT_KEYS)[number], typeof Users> = {
   'hr-talent-acquisition': UserSearch,
   'hr-learning-development': GraduationCap,
   'hr-performance-management': TrendingUp,
+  'hr-talent-management': Users2,
   'hr-compensation-benefits': Wallet,
 }
 
@@ -67,12 +68,11 @@ export function HrSidebar({ open = false, onClose }: HrSidebarProps) {
           md:relative md:inset-auto md:z-auto md:translate-x-0
           ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
-        {/* Brand — Meristem wordmark, top-left, per the meristudy reference. Text placeholder
-            until the actual logo asset is added to /public (see brainstorm notes). */}
         <div className="px-5 py-5 border-b border-meristem-100 flex items-center justify-between">
           <Link href="/hr" onClick={onClose} className="min-w-0">
-            <p className="font-serif text-xl font-bold text-meristem-800 tracking-wide leading-none">MERISTEM</p>
-            <p className="text-slate-400 text-[11px] mt-1">HR Dashboard</p>
+            {/* eslint-disable-next-line @next/next/no-img-element -- small static brand asset */}
+            <img src="/brand/meristem-logo.png" alt="Meristem" className="h-6 w-auto" />
+            <p className="text-slate-400 text-[11px] mt-1.5">HR Dashboard</p>
           </Link>
           <button
             onClick={onClose}
