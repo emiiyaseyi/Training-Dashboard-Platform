@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/session-guard'
+import { requireSession } from '@/lib/session-guard'
+import { hasAccess } from '@/lib/permissions'
 import { computeTalentMemberReport } from '@/lib/talent-member'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
 
 export async function GET(req: NextRequest) {
-  const gate = await requirePermission('talent-members', 'view')
-  if (gate instanceof NextResponse) return gate
+  // Consumed by both the Learning Intelligence Talent Members page and the HR Talent Management
+  // unit (see src/app/hr/talent-management/page.tsx) — either permission is enough to read it,
+  // since it's the same underlying roster/coverage figures either audience needs.
+  const session = await requireSession()
+  if (session instanceof NextResponse) return session
+  if (
+    !session.user.isSuperAdmin &&
+    !hasAccess(session.user.permissions?.['talent-members'], 'view') &&
+    !hasAccess(session.user.permissions?.['hr-talent-management'], 'view')
+  ) {
+    return NextResponse.json({ error: 'You do not have permission to perform this action.' }, { status: 403 })
+  }
 
   const sp = req.nextUrl.searchParams
   const mode = (sp.get('filterMode') ?? 'year') as PeriodFilter['mode']

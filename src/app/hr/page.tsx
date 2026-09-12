@@ -14,11 +14,21 @@ import { hasAccess, HR_UNIT_KEYS, PAGE_ROUTES } from '@/lib/permissions'
 type Layout = 'signal' | 'ledger' | 'executive'
 const LAYOUT_STORAGE_KEY = 'hr-summary-layout'
 
-// Real figures where the HR Report — 1st Quarter 2026 gives them; placeholders (marked as such
-// in the UI) where a unit's live data source is not yet connected — see each unit's own page for
-// the caveat on its numbers. Kept as one object so all three layouts read the same source of
-// truth instead of three copies of the same figures.
-const METRICS = {
+function formatNaira(n: number): string {
+  if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `₦${(n / 1_000).toFixed(1)}K`
+  return `₦${n.toLocaleString()}`
+}
+
+// Baseline figures where the HR Report — 1st Quarter 2026 gives them; placeholders (marked as
+// such in the UI) where a unit's live data source is not yet connected — see each unit's own
+// page for the caveat on its numbers. `ld` and `tm.pool`/`tm.coveragePct` are overwritten with
+// real, live figures from /api/analytics/group once it loads (see useEffect below) — Learning
+// & Development's investment/coverage/impact and the Talent Member roster both already exist as
+// real data in this app; everything else here (attrition, TA, promotion/mobility/committee,
+// succession, HR service resolution) has no live source yet and stays a clearly-labelled
+// placeholder until each unit provides one.
+const BASE_METRICS = {
   headcount: 329, male: 161, female: 168,
   attritionTrend: [5.1, 4.6, 4.3, 4.0],
   attritionLabels: ['Q2 25', 'Q3 25', 'Q4 25', 'Q1 26'],
@@ -30,12 +40,49 @@ const METRICS = {
   ],
   joiners: 24, exits: 19,
   ta: { timeToFill: 34, openRoles: 18, offerAcceptance: 72 },
-  ld: { investment: '₦22.5M', coverage: 5.5, impact: 4.3, completion: 91 },
+  ld: { investment: '—', coverage: 0, impact: 0, live: false },
   pm: { reviewed: 80, avgRating: 4.1 },
-  tm: { pool: 84, promotion: 18, mobility: 22, committee: 31, tenureBuckets: [22, 31, 19, 12] },
+  tm: { pool: 0, coveragePct: 0, live: false, promotion: 18, mobility: 22, committee: 31, tenureBuckets: [22, 31, 19, 12] },
   cb: { loanBook: '₦96.4M', beneficiaries: 36, entitiesCovered: 7 },
   successionCovered: 14, successionTotal: 22,
   hrServiceResolution: 88,
+}
+
+type Metrics = typeof BASE_METRICS
+
+// Pulls the same group-wide analytics the Executive Overview uses (`full=true`, YTD) so the L&D
+// and Talent Member figures on this page are never out of sync with the real numbers elsewhere
+// in the app — no separate HR-only copy of these to drift.
+function useLiveMetrics(): Metrics {
+  const [metrics, setMetrics] = useState<Metrics>(BASE_METRICS)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/analytics/group?filterMode=ytd&full=true')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return
+        setMetrics((prev) => ({
+          ...prev,
+          ld: {
+            investment: formatNaira(data.totalLearningInvestment ?? 0),
+            coverage: Math.round((data.groupCoverageRatio ?? 0) * 10) / 10,
+            impact: Math.round((data.avgImpactScore ?? 0) * 10) / 10,
+            live: true,
+          },
+          tm: {
+            ...prev.tm,
+            pool: data.talentMember?.totalHeadcount ?? 0,
+            coveragePct: Math.round((data.talentMember?.coveragePct ?? 0) * 10) / 10,
+            live: true,
+          },
+        }))
+      })
+      .catch(() => { /* keep placeholders on failure */ })
+    return () => { cancelled = true }
+  }, [])
+
+  return metrics
 }
 
 function Ring({ pct, color, track, size = 84, hole = 60, children }: { pct: number; color: string; track: string; size?: number; hole?: number; children: React.ReactNode }) {
@@ -119,8 +166,7 @@ function AttentionPanel() {
 }
 
 // ---- Layout 1: Signal Board — colour-coded KPI strip + a grid of chart cards, one per metric ----
-function SignalBoard() {
-  const m = METRICS
+function SignalBoard({ m }: { m: Metrics }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -177,16 +223,18 @@ function SignalBoard() {
         </Link>
 
         <Link href={PAGE_ROUTES['hr-learning-development']} className="bg-white border border-meristem-100 rounded-2xl p-4 hover:border-meristem-300 transition-colors">
-          <p className="text-xs font-bold text-slate-700 mb-1">Learning &amp; Development <span className="block font-normal text-slate-400">{m.ld.investment} invested YTD</span></p>
+          <p className="text-xs font-bold text-slate-700 mb-1">
+            Learning &amp; Development <span className="block font-normal text-slate-400">{m.ld.investment} invested YTD</span>
+          </p>
           <div className="space-y-1.5 mt-3">
-            <HBar label="Coverage" pct={m.ld.coverage * 10} value={`${m.ld.coverage}%`} color="#3F7A38" />
+            <HBar label="Coverage" pct={m.ld.coverage} value={`${m.ld.coverage}%`} color="#3F7A38" />
             <HBar label="Impact" pct={m.ld.impact * 20} value={`${m.ld.impact}/5`} color="#3F7A38" />
-            <HBar label="Completion" pct={m.ld.completion} value={`${m.ld.completion}%`} color="#3F7A38" />
           </div>
+          {!m.ld.live && <p className="text-[10px] text-slate-400 mt-2">Loading live figures…</p>}
         </Link>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-4 sm:col-span-2">
-          <p className="text-xs font-bold text-slate-700 mb-3">Staff Loan Portfolio by Entity <span className="font-normal text-slate-400">{METRICS.cb.loanBook} across {METRICS.cb.entitiesCovered} entities</span></p>
+          <p className="text-xs font-bold text-slate-700 mb-3">Staff Loan Portfolio by Entity <span className="font-normal text-slate-400">{m.cb.loanBook} across {m.cb.entitiesCovered} entities</span></p>
           <div className="flex items-end gap-3 h-24">
             {m.entities.map((e) => (
               <div key={e.name} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
@@ -235,6 +283,20 @@ function SignalBoard() {
           </div>
         </Link>
 
+        <Link href={PAGE_ROUTES['hr-talent-management']} className="bg-white border border-meristem-100 rounded-2xl p-4 hover:border-meristem-300 transition-colors">
+          <p className="text-xs font-bold text-slate-700 mb-1">
+            Talent Member Training Coverage <span className="ml-1 text-[9px] font-bold uppercase tracking-wide text-meristem-700 bg-meristem-50 rounded-full px-2 py-0.5 align-middle">live</span>
+          </p>
+          <p className="text-[11px] text-slate-400 mb-3">Real TM roster, from Learning Intelligence</p>
+          <div className="flex items-center gap-4">
+            <Ring pct={m.tm.coveragePct} color="#2F6B2B" track="#E7EFE3"><span className="text-sm font-extrabold">{m.tm.pool}</span><span className="text-[8px] text-slate-400">on roster</span></Ring>
+            <div className="text-[11px] text-slate-500 space-y-1">
+              <div>{m.tm.coveragePct}% trained this year</div>
+              {!m.tm.live && <div className="text-slate-400">Loading live figures…</div>}
+            </div>
+          </div>
+        </Link>
+
         <div className="bg-white border border-meristem-100 rounded-2xl p-4">
           <p className="text-xs font-bold text-slate-700 mb-3">Critical Roles &amp; Succession</p>
           <div className="flex items-center gap-4">
@@ -264,8 +326,7 @@ function SignalBoard() {
 }
 
 // ---- Layout 2: Ledger Grid — a compact BI-style KPI row + report table ----
-function LedgerGrid() {
-  const m = METRICS
+function LedgerGrid({ m }: { m: Metrics }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-meristem-100 border border-meristem-100 rounded-xl overflow-hidden">
@@ -275,7 +336,7 @@ function LedgerGrid() {
           { k: 'Time to fill', v: `${m.ta.timeToFill}d`, d: '↑ 3d', up: false },
           { k: 'Training spend', v: m.ld.investment, d: '↑ 12%', up: true },
           { k: 'Reviews done', v: `${m.pm.reviewed}%`, d: '↑ 6pp', up: true },
-          { k: 'Loan book', v: METRICS.cb.loanBook, d: '↑ 4%', up: true },
+          { k: 'Loan book', v: m.cb.loanBook, d: '↑ 4%', up: true },
         ].map((c) => (
           <div key={c.k} className="bg-white p-3.5">
             <p className="font-mono text-lg font-semibold text-slate-800 tabular-nums">{c.v}</p>
@@ -304,7 +365,7 @@ function LedgerGrid() {
               { href: PAGE_ROUTES['hr-learning-development'], name: 'Learning & Development', a: `${m.ld.investment} YTD`, b: `${m.ld.coverage}% coverage`, c: `${m.ld.impact}/5 impact`, status: 'on' as const },
               { href: PAGE_ROUTES['hr-performance-management'], name: 'Performance Management', a: `${m.pm.reviewed}% reviewed`, b: `${m.pm.avgRating}/5 rating`, c: '—', status: 'watch' as const },
               { href: PAGE_ROUTES['hr-talent-management'], name: 'Talent Management', a: `${m.tm.pool} pool`, b: `${m.tm.promotion}% promoted`, c: `${m.tm.mobility}% mobility`, status: 'watch' as const },
-              { href: PAGE_ROUTES['hr-compensation-benefits'], name: 'Compensation & Benefits', a: METRICS.cb.loanBook, b: `${METRICS.cb.beneficiaries} benef.`, c: `${METRICS.cb.entitiesCovered} entities`, status: 'on' as const },
+              { href: PAGE_ROUTES['hr-compensation-benefits'], name: 'Compensation & Benefits', a: m.cb.loanBook, b: `${m.cb.beneficiaries} benef.`, c: `${m.cb.entitiesCovered} entities`, status: 'on' as const },
             ].map((row) => (
               <tr key={row.name} className="hover:bg-meristem-50/60">
                 <td className="px-4 py-2.5"><Link href={row.href} className="font-semibold text-slate-700 hover:text-meristem-800">{row.name}</Link></td>
@@ -326,15 +387,14 @@ function LedgerGrid() {
 }
 
 // ---- Layout 3: Executive Blocks — colour-coded pillar headers over each unit's stat block ----
-function ExecutiveBlocks() {
-  const m = METRICS
+function ExecutiveBlocks({ m }: { m: Metrics }) {
   const blocks: { key: keyof typeof PAGE_ROUTES; label: string; color: string; value: string | number; sub: string; a: [string, string]; b: [string, string] }[] = [
     { key: 'hr-employee-services', label: 'Employee Services', color: 'bg-meristem-700', value: m.headcount, sub: 'headcount', a: ['Male', String(m.male)], b: ['Female', String(m.female)] },
     { key: 'hr-talent-acquisition', label: 'Talent Acquisition', color: 'bg-amber-600', value: m.ta.openRoles, sub: 'open roles', a: ['Time to fill', `${m.ta.timeToFill}d`], b: ['Accepted', `${m.ta.offerAcceptance}%`] },
     { key: 'hr-learning-development', label: 'Learning & Dev.', color: 'bg-sky-700', value: m.ld.investment, sub: 'YTD invested', a: ['Coverage', `${m.ld.coverage}%`], b: ['Impact', `${m.ld.impact}/5`] },
     { key: 'hr-performance-management', label: 'Performance', color: 'bg-violet-600', value: `${m.pm.reviewed}%`, sub: 'reviewed', a: ['Avg. rating', `${m.pm.avgRating}/5`], b: ['Target', '100%'] },
-    { key: 'hr-talent-management', label: 'Talent Mgmt.', color: 'bg-orange-800', value: m.tm.pool, sub: 'TM pool', a: ['Promoted', `${m.tm.promotion}%`], b: ['Committee', `${m.tm.committee}%`] },
-    { key: 'hr-compensation-benefits', label: 'Comp. & Benefits', color: 'bg-lime-700', value: METRICS.cb.loanBook, sub: 'loan book', a: ['Benef.', String(METRICS.cb.beneficiaries)], b: ['Entities', String(METRICS.cb.entitiesCovered)] },
+    { key: 'hr-talent-management', label: 'Talent Mgmt.', color: 'bg-orange-800', value: m.tm.pool, sub: 'TM pool (live)', a: ['Trained', `${m.tm.coveragePct}%`], b: ['Committee', `${m.tm.committee}%`] },
+    { key: 'hr-compensation-benefits', label: 'Comp. & Benefits', color: 'bg-lime-700', value: m.cb.loanBook, sub: 'loan book', a: ['Benef.', String(m.cb.beneficiaries)], b: ['Entities', String(m.cb.entitiesCovered)] },
   ]
   return (
     <div className="space-y-4">
@@ -414,6 +474,7 @@ function ExecutiveBlocks() {
 export default function HrSummaryPage() {
   const { data: session } = useSession()
   const [layout, setLayout] = useState<Layout>('signal')
+  const metrics = useLiveMetrics()
 
   useEffect(() => {
     const saved = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
@@ -445,11 +506,11 @@ export default function HrSummaryPage() {
           <p className="text-sm text-slate-500">You don&apos;t have access to any HR unit yet. Contact your administrator.</p>
         </div>
       ) : layout === 'signal' ? (
-        <SignalBoard />
+        <SignalBoard m={metrics} />
       ) : layout === 'ledger' ? (
-        <LedgerGrid />
+        <LedgerGrid m={metrics} />
       ) : (
-        <ExecutiveBlocks />
+        <ExecutiveBlocks m={metrics} />
       )}
     </div>
   )
