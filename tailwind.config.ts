@@ -52,6 +52,21 @@ const config: Config = {
           gray: '#6B7280',
         },
         sidebar: '#0f172a',
+        // HR Dashboard design system — matches meristudy.meristem.com.ng (soft sage/mint
+        // background, white cards, deep-green wordmark/headings) rather than the navy/gold
+        // Learning Intelligence report theme above. Scoped to src/app/hr and its components.
+        meristem: {
+          50:  '#F4F9F3',
+          100: '#E7F3E4',
+          200: '#CFE7C9',
+          300: '#A9D3A0',
+          400: '#7BB86E',
+          500: '#4F9A43',
+          600: '#2F6B2B',
+          700: '#245420',
+          800: '#1B3F19',
+          900: '#132C12',
+        },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],

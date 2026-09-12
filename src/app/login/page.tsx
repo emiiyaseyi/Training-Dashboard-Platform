@@ -1,14 +1,18 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, getSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { BookOpen, Loader2, ArrowLeft } from 'lucide-react'
+import { hasAccess, HR_UNIT_KEYS } from '@/lib/permissions'
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/'
+  // Only set when middleware/AppShell redirected here from a specific protected page — a direct
+  // visit to /login (no callbackUrl) gets a permission-based default landing page instead of
+  // always assuming Learning Intelligence's executive overview (see attemptSignIn below).
+  const explicitCallbackUrl = searchParams.get('callbackUrl')
 
   const [step, setStep] = useState<'identifier' | 'password'>('identifier')
   const [identifier, setIdentifier] = useState('')
@@ -29,8 +33,22 @@ function LoginForm() {
       setError('Invalid Staff ID/email or password.')
       return
     }
-    router.push(callbackUrl)
+    router.push(await resolveLandingPage())
     router.refresh()
+  }
+
+  // Where a direct (non-redirected) login lands — Learning Intelligence if they can see it,
+  // otherwise the HR Summary if they can see any HR unit, otherwise "/" (where AppShell's own
+  // access-restricted screen takes over — same as today for a user with no permissions at all).
+  const resolveLandingPage = async (): Promise<string> => {
+    if (explicitCallbackUrl) return explicitCallbackUrl
+    const session = await getSession()
+    const perms = session?.user?.permissions
+    const isSuperAdmin = !!session?.user?.isSuperAdmin
+    const canSeeLearning = isSuperAdmin || hasAccess(perms?.['executive-overview'], 'view')
+    if (canSeeLearning) return '/'
+    const canSeeHr = isSuperAdmin || hasAccess(perms?.['hr-summary'], 'view') || HR_UNIT_KEYS.some((k) => hasAccess(perms?.[k], 'view'))
+    return canSeeHr ? '/hr' : '/'
   }
 
   const handleContinue = async (e: React.FormEvent) => {
@@ -67,7 +85,12 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-navy-700 px-4">
+    <div className="min-h-screen w-full flex items-center justify-center bg-navy-700 px-4 relative">
+      {/* Meristem wordmark, top-left — this login screen is shared by both Learning Intelligence
+          and the HR Dashboard, so the group brand anchors it regardless of which app someone
+          lands in. Text placeholder until the real logo asset is added to /public. */}
+      <p className="absolute top-6 left-6 font-serif text-lg font-bold text-white tracking-wide">MERISTEM</p>
+
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <div className="w-12 h-12 rounded-lg bg-gold-400 flex items-center justify-center mb-4">

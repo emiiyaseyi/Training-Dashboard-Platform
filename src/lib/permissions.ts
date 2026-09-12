@@ -9,6 +9,19 @@ export const PAGE_KEYS = [
   'report-generation',
   'upload-data',
   'admin-settings',
+  // HR Dashboard — a separate section (own layout/sidebar, see src/app/hr) sitting alongside the
+  // Learning Intelligence pages above, not replacing them. 'hr-summary' gates the cross-unit
+  // rollup page; each unit below gates that unit's own full report. 'hr-learning-development'
+  // is deliberately separate from the existing L&D page keys above — it only gates whether the
+  // L&D tile/summary shows up in HR context, not access to Learning Intelligence itself, since
+  // the two audiences (someone who just needs the HR rollup vs. someone administering L&D) don't
+  // have to overlap.
+  'hr-summary',
+  'hr-employee-services',
+  'hr-talent-acquisition',
+  'hr-learning-development',
+  'hr-performance-management',
+  'hr-compensation-benefits',
 ] as const
 
 export type PageKey = (typeof PAGE_KEYS)[number]
@@ -24,6 +37,12 @@ export const PAGE_LABELS: Record<PageKey, string> = {
   'report-generation': 'Report Generation',
   'upload-data': 'Upload & Data',
   'admin-settings': 'Admin Settings',
+  'hr-summary': 'HR Summary',
+  'hr-employee-services': 'HR — Employee Services',
+  'hr-talent-acquisition': 'HR — Talent Acquisition',
+  'hr-learning-development': 'HR — Learning & Development',
+  'hr-performance-management': 'HR — Performance Management',
+  'hr-compensation-benefits': 'HR — Compensation & Benefits',
 }
 
 export const PAGE_ROUTES: Record<PageKey, string> = {
@@ -37,7 +56,24 @@ export const PAGE_ROUTES: Record<PageKey, string> = {
   'report-generation': '/reports',
   'upload-data': '/upload',
   'admin-settings': '/admin',
+  'hr-summary': '/hr',
+  'hr-employee-services': '/hr/employee-services',
+  'hr-talent-acquisition': '/hr/talent-acquisition',
+  'hr-learning-development': '/hr/learning-development',
+  'hr-performance-management': '/hr/performance-management',
+  'hr-compensation-benefits': '/hr/compensation-benefits',
 }
+
+// The 5 HR units + the summary page, as a single ordered list — driving the HR sidebar nav and
+// the unit tiles on the summary page, so both always stay in sync with each other and with
+// PAGE_KEYS/PAGE_ROUTES above (one list to edit, not three).
+export const HR_UNIT_KEYS = [
+  'hr-employee-services',
+  'hr-talent-acquisition',
+  'hr-learning-development',
+  'hr-performance-management',
+  'hr-compensation-benefits',
+] as const satisfies readonly PageKey[]
 
 export const PERMISSION_LEVELS = ['view', 'view-export', 'admin'] as const
 export type PermissionLevel = (typeof PERMISSION_LEVELS)[number]

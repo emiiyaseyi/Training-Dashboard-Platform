@@ -18,6 +18,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // must never redirect to login (mirrors middleware.ts's matcher, which already skips auth for
   // these paths server-side; this is the client-side equivalent for AppShell's own session check).
   const isPublicPage = isLoginPage || pathname.startsWith('/survey/')
+  // HR Dashboard is a separate section with its own layout (src/app/hr/layout.tsx) — own sidebar,
+  // own branding, own per-unit access-denied handling — still fully auth-gated below, just not
+  // wrapped in the Learning Intelligence Sidebar/chrome.
+  const isHrSection = pathname.startsWith('/hr')
 
   // Defense in depth: middleware normally redirects unauthenticated requests to /login before
   // this ever renders, but a stale/undecryptable session cookie (e.g. left over from before
@@ -51,12 +55,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'loading' || status === 'unauthenticated' || !session?.user) {
+    if (isHrSection) {
+      return (
+        <main className="flex-1 w-full overflow-y-auto overflow-x-hidden flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+        </main>
+      )
+    }
     return (
       <>
         <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
         </main>
+      </>
+    )
+  }
+
+  // Authenticated and inside /hr — hand off entirely to src/app/hr/layout.tsx for its own
+  // sidebar/chrome and per-unit access checks, rather than the Learning Intelligence Sidebar/
+  // page-key gate below.
+  if (isHrSection) {
+    return (
+      <>
+        <IdleLogout />
+        {children}
       </>
     )
   }
