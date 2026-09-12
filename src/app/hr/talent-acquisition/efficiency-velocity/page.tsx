@@ -2,7 +2,7 @@ import { BarChart3, Clock, Zap, UserSearch } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
-import { TaSampleDataBanner } from '@/components/hr/ta/TaSampleDataBanner'
+import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
 import { parseFilters, type SearchParams } from '@/lib/ta-filters'
@@ -13,7 +13,7 @@ const AGING_WARNING_DAYS = 21
 // Real port of the source repo's Efficiency & Velocity page — see
 // /hr/talent-acquisition/page.tsx for the porting notes shared by all four TA views.
 export default async function EfficiencyVelocityPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const { records, config } = await getTaDashboardData()
+  const { records, config, connectionError } = await getTaDashboardData()
   const filters = parseFilters(await searchParams)
   const filtered = applyFilters(records, filters)
   const usingSampleData = !hasTaCredentials()
@@ -29,7 +29,7 @@ export default async function EfficiencyVelocityPage({ searchParams }: { searchP
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
-        {usingSampleData && <TaSampleDataBanner />}
+        {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">Efficiency &amp; Velocity Metrics</h1>
         <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 

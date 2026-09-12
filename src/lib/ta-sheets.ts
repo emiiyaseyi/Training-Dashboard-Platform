@@ -199,32 +199,47 @@ function parseConfigColumns(rows: unknown[][]): ConfigLists {
   }
 }
 
-/** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data outside
- * production when TA credentials aren't configured yet, so the UI is reviewable before the real
- * sheet is connected — never used in production. */
-export async function getTaDashboardData(): Promise<DashboardData> {
+export interface TaDashboardResult extends DashboardData {
+  /** Set when real credentials are configured but the fetch/parse failed for any reason (bad
+   * key, wrong sheet ID, sheet not shared, tab names don't match) — the page shows this as an
+   * actionable error banner instead of the whole route crashing with a server-side exception. */
+  connectionError: string | null
+}
+
+/** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data — with
+ * no credentials configured yet (silently) or when a real connection attempt fails (with
+ * `connectionError` set) — so a bad env var or a sheet-sharing mistake degrades to a visible
+ * banner rather than a crashed page. */
+export async function getTaDashboardData(): Promise<TaDashboardResult> {
   if (!hasTaCredentials()) {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[ta-sheets] TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID not set — showing sample data.')
     }
-    return getSampleTaDashboardData()
+    return { ...getSampleTaDashboardData(), connectionError: null }
   }
 
-  const spreadsheetId = process.env.TA_GOOGLE_SHEET_ID as string
-  const accessToken = await getTaAccessToken()
+  try {
+    const spreadsheetId = process.env.TA_GOOGLE_SHEET_ID as string
+    const accessToken = await getTaAccessToken()
 
-  const [hiresRows, configRows, pipelineRows] = await Promise.all([
-    fetchRange(spreadsheetId, HIRES_RANGE, accessToken),
-    fetchRange(spreadsheetId, CONFIG_RANGE, accessToken),
-    fetchRange(spreadsheetId, PIPELINE_RANGE, accessToken).catch(() => {
-      console.warn('[ta-sheets] No "Pipeline" tab found — pipeline section will be empty.')
-      return [] as unknown[][]
-    }),
-  ])
+    const [hiresRows, configRows, pipelineRows] = await Promise.all([
+      fetchRange(spreadsheetId, HIRES_RANGE, accessToken),
+      fetchRange(spreadsheetId, CONFIG_RANGE, accessToken),
+      fetchRange(spreadsheetId, PIPELINE_RANGE, accessToken).catch(() => {
+        console.warn('[ta-sheets] No "Pipeline" tab found — pipeline section will be empty.')
+        return [] as unknown[][]
+      }),
+    ])
 
-  return {
-    records: parseHiresRows(hiresRows),
-    config: parseConfigColumns(configRows),
-    pipeline: parsePipelineRows(pipelineRows),
+    return {
+      records: parseHiresRows(hiresRows),
+      config: parseConfigColumns(configRows),
+      pipeline: parsePipelineRows(pipelineRows),
+      connectionError: null,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error connecting to the Talent Acquisition sheet.'
+    console.error('[ta-sheets] Falling back to sample data after a connection error:', message)
+    return { ...getSampleTaDashboardData(), connectionError: message }
   }
 }

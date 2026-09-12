@@ -3,7 +3,7 @@ import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaStatTile } from '@/components/hr/ta/TaStatTile'
 import { TaRingStat } from '@/components/hr/ta/TaRingStat'
-import { TaSampleDataBanner } from '@/components/hr/ta/TaSampleDataBanner'
+import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -24,7 +24,7 @@ import {
 // repo's Recharts + CSS-variable theme. Falls back to sample data (banner shown) until
 // TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID are set.
 export default async function TalentAcquisitionPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const { records: allRecords, pipeline, config } = await getTaDashboardData()
+  const { records: allRecords, pipeline, config, connectionError } = await getTaDashboardData()
   const filters = parseFilters(await searchParams)
   const records = applyFilters(allRecords, filters)
   const usingSampleData = !hasTaCredentials()
@@ -68,7 +68,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
-        {usingSampleData && <TaSampleDataBanner />}
+        {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
 
         <p className="text-xs text-slate-400">As of {asOf}</p>
 

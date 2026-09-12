@@ -2,7 +2,7 @@ import { Wallet, Landmark, Users, TrendingUp, UserSearch } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
-import { TaSampleDataBanner } from '@/components/hr/ta/TaSampleDataBanner'
+import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -14,7 +14,7 @@ import { applyFilters, costBreakdownByCategory, costPerHireByRole, costPerHireTr
 // Real port of the source repo's Financial Insights page — see /hr/talent-acquisition/page.tsx
 // for the porting notes shared by all four TA views.
 export default async function FinancialInsightsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const { records, config } = await getTaDashboardData()
+  const { records, config, connectionError } = await getTaDashboardData()
   const filters = parseFilters(await searchParams)
   const filtered = applyFilters(records, filters)
   const usingSampleData = !hasTaCredentials()
@@ -30,7 +30,7 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
-        {usingSampleData && <TaSampleDataBanner />}
+        {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">Financial Insights</h1>
         <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 
