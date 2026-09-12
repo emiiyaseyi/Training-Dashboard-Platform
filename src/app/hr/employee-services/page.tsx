@@ -1,18 +1,32 @@
 'use client'
 
-import { Users, UserPlus, UserMinus, Clock } from 'lucide-react'
+import { Users, UserPlus, UserMinus, Clock, Wallet, Headphones } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 
-// Dummy data shaped from HR REPORT — 1ST QPR 2026 (see HR Dashboard/ reference folder) — real
-// figures TBD from Employee Services once their data source is confirmed. Structure (KPI tiles +
-// donut + BU bar + roster table) is the reusable template for the other placeholder units.
+// The first 6 KPIs and the engagement initiatives below are real, from HR REPORT — 1ST QPR
+// 2026 — everything else on this page (employment type split, BU breakdown, roster, absenteeism,
+// HR service resolution) has no data source yet and is illustrative until Employee Services
+// confirms one.
 const KPIS = [
-  { label: 'Total Headcount', value: '329', sub: 'M 161 · F 168', icon: Users },
-  { label: 'Attrition Rate (Q1)', value: '4.0%', sub: 'Industry avg. 5.0%', icon: UserMinus },
-  { label: 'New Joiners (Q1)', value: '18', sub: '100% retention so far', icon: UserPlus },
-  { label: 'Avg. Time to Hire', value: '5 wks', sub: 'From requisition to resumption', icon: Clock },
+  { label: 'Total Headcount', value: '329', sub: 'M 161 · F 168', icon: Users, tag: 'HR Report' },
+  { label: 'Attrition Rate (Q1)', value: '4.0%', sub: 'Industry avg. 5.0%', icon: UserMinus, tag: 'HR Report' },
+  { label: 'New Joiners (Q1)', value: '18', sub: '100% retention so far', icon: UserPlus, tag: 'HR Report' },
+  { label: 'Avg. Time to Hire', value: '5 wks', sub: 'From requisition to resumption', icon: Clock, tag: 'HR Report' },
+  { label: 'Revenue / Employee', value: '₦24.15M', sub: '₦24,151,772.04, Q1 2026', icon: Wallet, tag: 'HR Report' },
+  { label: 'HR Service Resolution', value: '88%', sub: 'Requests resolved within SLA', icon: Headphones, tag: 'placeholder' },
+]
+
+const TAG_STYLES: Record<string, string> = {
+  'HR Report': 'text-meristem-700 bg-meristem-50',
+  placeholder: 'text-rose-600 bg-rose-50',
+}
+
+const ENGAGEMENT_INITIATIVES = [
+  { title: 'International Women’s Day', detail: 'Complimentary professional headshots and self-care packages for female employees group-wide.' },
+  { title: 'Employee Appreciation Day', detail: 'Personalised appreciation letters and a sponsored lunch across the group.' },
+  { title: 'Valentine Celebration', detail: 'Rose flowers for female staff and curated care packages for male staff, group-wide.' },
 ]
 
 const EMPLOYMENT_TYPE = { labels: ['Full-time', 'Part-time', 'Contractor'], values: [289, 24, 16] }
@@ -45,8 +59,11 @@ export default function EmployeeServicesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {KPIS.map((k) => (
             <div key={k.label} className="bg-white border border-meristem-100 rounded-2xl p-5">
-              <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
-                <k.icon className="w-4.5 h-4.5 text-meristem-700" />
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center">
+                  <k.icon className="w-4.5 h-4.5 text-meristem-700" />
+                </div>
+                <span className={`text-[9px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 ${TAG_STYLES[k.tag]}`}>{k.tag}</span>
               </div>
               <p className="text-2xl font-bold text-slate-800 tabular-nums">{k.value}</p>
               <p className="text-xs font-medium text-slate-600 mt-1">{k.label}</p>
@@ -63,6 +80,19 @@ export default function EmployeeServicesPage() {
           <div className="bg-white border border-meristem-100 rounded-2xl p-5 lg:col-span-2">
             <p className="text-sm font-bold text-slate-800 mb-3">Headcount by Business Unit</p>
             <BarChart labels={HEADCOUNT_BY_BU.labels} values={HEADCOUNT_BY_BU.values} color="#2F6B2B" showLabels height={240} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+          <p className="text-sm font-bold text-slate-800 mb-1">Employee Engagement Initiatives — Q1 2026</p>
+          <p className="text-xs text-slate-400 mb-4">From HR REPORT — 1ST QPR 2026</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {ENGAGEMENT_INITIATIVES.map((e) => (
+              <div key={e.title} className="bg-meristem-50/60 rounded-xl p-4">
+                <p className="text-xs font-bold text-slate-800">{e.title}</p>
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">{e.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
 

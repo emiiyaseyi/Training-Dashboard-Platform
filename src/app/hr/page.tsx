@@ -41,8 +41,11 @@ const BASE_METRICS = {
   joiners: 24, exits: 19,
   ta: { timeToFill: 34, openRoles: 18, offerAcceptance: 72 },
   ld: { investment: '—', coverage: 0, impact: 0, live: false },
-  pm: { reviewed: 80, avgRating: 4.1 },
-  tm: { pool: 0, coveragePct: 0, live: false, promotion: 18, mobility: 22, committee: 31, tenureBuckets: [22, 31, 19, 12] },
+  pm: { reviewed: 80, avgRating: 3.8 },
+  // promotion/mobility/committee/tenureBuckets are real, Excel-sourced figures (see
+  // src/app/hr/talent-management/page.tsx for the exact cell references) — all-time/cumulative
+  // rates, not a quarterly one, per the workbook's own metric definitions.
+  tm: { pool: 0, coveragePct: 0, live: false, promotion: 83, mobility: 65, committee: 90, tenureBuckets: [0, 12, 13, 16] },
   cb: { loanBook: '₦96.4M', beneficiaries: 36, entitiesCovered: 7 },
   successionCovered: 14, successionTotal: 22,
   hrServiceResolution: 88,
@@ -252,7 +255,7 @@ function SignalBoard({ m }: { m: Metrics }) {
             {['0–2 yrs', '3–5 yrs', '6–10 yrs', '10+ yrs'].map((label, i) => (
               <div key={label} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                 <span className="text-[10px] font-bold">{m.tm.tenureBuckets[i]}</span>
-                <div className="w-full rounded-t bg-orange-800" style={{ height: `${(m.tm.tenureBuckets[i] / 31) * 100}%` }} />
+                <div className="w-full rounded-t bg-orange-800" style={{ height: `${(m.tm.tenureBuckets[i] / 16) * 100}%` }} />
               </div>
             ))}
           </div>
@@ -262,7 +265,7 @@ function SignalBoard({ m }: { m: Metrics }) {
         <Link href={PAGE_ROUTES['hr-performance-management']} className="bg-white border border-meristem-100 rounded-2xl p-4 hover:border-meristem-300 transition-colors">
           <p className="text-xs font-bold text-slate-700 mb-3">Performance Ratings <span className="block font-normal text-slate-400">Half‑year average, out of 5</span></p>
           <div className="flex items-end gap-2 h-20">
-            {[3.8, 4.0, 4.1].map((v, i) => (
+            {[3.9, 3.9, 3.8].map((v, i) => (
               <div key={v} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                 <span className="text-[10px] font-bold">{v}</span>
                 <div className={`w-full rounded-t ${i === 2 ? 'bg-lime-700' : 'bg-lime-200'}`} style={{ height: `${(v / 4.1) * 100}%` }} />
@@ -453,7 +456,7 @@ function ExecutiveBlocks({ m }: { m: Metrics }) {
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">TM pool by tenure</p>
           <div className="space-y-2">
             {['0–2 yrs', '3–5 yrs', '6–10 yrs', '10+ yrs'].map((l, i) => (
-              <HBar key={l} label={l} pct={(m.tm.tenureBuckets[i] / 31) * 100} value={String(m.tm.tenureBuckets[i])} color="#9A4A2E" />
+              <HBar key={l} label={l} pct={(m.tm.tenureBuckets[i] / 16) * 100} value={String(m.tm.tenureBuckets[i])} color="#9A4A2E" />
             ))}
           </div>
         </div>
