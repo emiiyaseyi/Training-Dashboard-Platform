@@ -2,6 +2,7 @@
 
 import { Users, UserPlus, UserMinus, Clock, Wallet, Headphones } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
+import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 
@@ -12,7 +13,9 @@ import { PieChart } from '@/components/charts/PieChart'
 const KPIS = [
   { label: 'Total Headcount', value: '329', sub: 'M 161 · F 168', icon: Users, tag: 'HR Report' },
   { label: 'Attrition Rate (Q1)', value: '4.0%', sub: 'Industry avg. 5.0%', icon: UserMinus, tag: 'HR Report' },
-  { label: 'New Joiners (Q1)', value: '18', sub: '100% retention so far', icon: UserPlus, tag: 'HR Report' },
+  // Q1 joiner/exit headcounts sit in a chart image in the PPTX, not extractable text — only the
+  // retention rate and time-to-hire were confirmed numbers, so those are what's shown as real.
+  { label: 'Retention Rate of Joiners', value: '100%', sub: 'All Q1 2026 joiners retained', icon: UserPlus, tag: 'HR Report' },
   { label: 'Avg. Time to Hire', value: '5 wks', sub: 'From requisition to resumption', icon: Clock, tag: 'HR Report' },
   { label: 'Revenue / Employee', value: '₦24.15M', sub: '₦24,151,772.04, Q1 2026', icon: Wallet, tag: 'HR Report' },
   { label: 'HR Service Resolution', value: '88%', sub: 'Requests resolved within SLA', icon: Headphones, tag: 'placeholder' },
@@ -22,6 +25,15 @@ const TAG_STYLES: Record<string, string> = {
   'HR Report': 'text-meristem-700 bg-meristem-50',
   placeholder: 'text-rose-600 bg-rose-50',
 }
+
+// Categories from the HR executive-scorecard framework with no data source anywhere in this app
+// yet (no HRIS/attendance/case-management feed exists) — kept as explicit "—" rows rather than
+// invented numbers, grouped by the framework's own section headings so it's clear what's covered
+// and what's still missing, not silently dropped.
+const MOVEMENT_METRICS = ['Resignations (voluntary)', 'Terminations (involuntary)', 'Retirements', 'Transfers between BUs', 'Internal Mobility Rate', 'Exit Rate']
+const ATTENDANCE_METRICS = ['Attendance Rate', 'Absenteeism Rate', 'Unplanned Absence Rate', 'Sick Leave Utilisation', 'Annual Leave Utilisation', 'Overtime Hours']
+const HR_OPS_METRICS = ['HR Requests Received', 'HR Requests Resolved', 'Avg. Resolution Time', 'Payroll Accuracy Rate', 'Employee Data Completeness', 'HR Service Satisfaction Score']
+const RELATIONS_METRICS = ['Grievances Raised', 'Grievances Resolved', 'Disciplinary Cases', 'Employee Complaints', 'Workplace Conflict Cases', 'Avg. Case Resolution Time']
 
 const ENGAGEMENT_INITIATIVES = [
   { title: 'International Women’s Day', detail: 'Complimentary professional headshots and self-care packages for female employees group-wide.' },
@@ -94,6 +106,13 @@ export default function EmployeeServicesPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricListCard title="Employee Movement" metrics={MOVEMENT_METRICS} />
+          <MetricListCard title="Attendance & Leave" metrics={ATTENDANCE_METRICS} />
+          <MetricListCard title="HR Operations" metrics={HR_OPS_METRICS} />
+          <MetricListCard title="Employee Relations" metrics={RELATIONS_METRICS} />
         </div>
 
         <div className="bg-white border border-meristem-100 rounded-2xl overflow-hidden">

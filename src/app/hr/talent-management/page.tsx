@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Users2, TrendingUp, Repeat, Award, GraduationCap, Clock } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
+import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
 
 // Sourced directly from the live formulas in "HR Dashboard/PM & TM_Data_for_Dashboard_CLEAN.xlsx"
@@ -25,6 +26,15 @@ const AVG_TM_TENURE = 10.0
 // (columns E/F/G respectively) — a declining trend, not the improving one a rough estimate
 // might assume, which is exactly why this needed pulling from the source file directly.
 const RATING_TREND = { labels: ['H1 2025', 'H2 2025', 'H1 2026'], values: [3.9, 3.9, 3.8] }
+
+// None of these have a source anywhere in this app (no succession-planning, 9-box, career-plan
+// or attrition-risk tracking exists yet) — every value is an honest "—", not a guess.
+const SUCCESSION_METRICS = ['Critical Positions', 'Positions With a Successor', 'Ready‑Now Successors', 'Ready in 1–2 Years', 'Ready in 3–5 Years']
+const NINE_BOX_METRICS = ['High Performance / High Potential', 'High Performance / Medium Potential', 'Medium Performance / High Potential', 'Ready‑Now Talent', 'Future Talent']
+const TALENT_RISK_METRICS = ['Critical Talent at Risk', 'High Performer Attrition Risk', 'Retirement Risk', 'Single‑Point‑of‑Failure Roles', 'Critical Skills at Risk']
+const CAREER_DEV_METRICS = ['Employees With a Career Plan', 'Development Plan Completion', 'Career Conversations Completed', 'Employees Ready for Promotion']
+const RETENTION_METRICS = ['Critical Talent Retention', 'High Performer Retention', 'HiPo Retention', 'Regrettable Attrition (Critical Roles)']
+const PIPELINE_METRICS = ['Leadership Pipeline', 'Successor Pipeline', 'Graduate/Entry‑Level Pipeline', 'Future Capability Gaps']
 
 interface LiveTm { totalTalentMembers: number; coveragePct: number; staffTrained: number }
 
@@ -90,16 +100,13 @@ export default function TalentManagementPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-          <p className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
-            Succession Coverage
-            <span className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5">no data source yet</span>
-          </p>
-          <p className="text-xs text-slate-400 mb-3">Critical roles with an identified successor — placeholder, not in the TM dashboard workbook</p>
-          <div className="w-full bg-meristem-50 rounded-full h-2.5">
-            <div className="h-2.5 rounded-full bg-meristem-600" style={{ width: '64%' }} />
-          </div>
-          <p className="text-xs text-slate-500 mt-2">14 of 22 critical roles covered (64%) — 8 roles have no identified successor</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <MetricListCard title="Succession Planning" metrics={SUCCESSION_METRICS} />
+          <MetricListCard title="9‑Box / Talent Segmentation" metrics={NINE_BOX_METRICS} />
+          <MetricListCard title="Talent Risk" metrics={TALENT_RISK_METRICS} />
+          <MetricListCard title="Career Development" metrics={CAREER_DEV_METRICS} />
+          <MetricListCard title="Retention of Key Talent" metrics={RETENTION_METRICS} />
+          <MetricListCard title="Workforce Pipeline" metrics={PIPELINE_METRICS} />
         </div>
 
         <p className="text-[11px] text-slate-400 flex items-center gap-1.5">

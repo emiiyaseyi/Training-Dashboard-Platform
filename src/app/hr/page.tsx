@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { LayoutGrid, Rows3, LayoutDashboard } from 'lucide-react'
 import { hasAccess, HR_UNIT_KEYS, PAGE_ROUTES } from '@/lib/permissions'
+import { MetricListCard } from '@/components/hr/MetricListCard'
 
 // Three interchangeable visual treatments for the same underlying figures — trialled as five
 // artifact mockups with the business, narrowed to these three. "Signal Board" is the default;
@@ -30,16 +31,23 @@ function formatNaira(n: number): string {
 // placeholder until each unit provides one.
 const BASE_METRICS = {
   headcount: 329, male: 161, female: 168,
-  attritionTrend: [5.1, 4.6, 4.3, 4.0],
-  attritionLabels: ['Q2 25', 'Q3 25', 'Q4 25', 'Q1 26'],
+  // Only the single Q1 2026 figure is real (HR Report) — no trailing-quarter trend exists yet,
+  // so this compares the one real data point against the one real benchmark rather than
+  // inventing a multi-quarter history.
+  attrition: { current: 4.0, industry: 5.0 },
+  // Real loan figures from HR REPORT — 1ST QPR 2026, slide 15 (₦96.4M total across 7 entities);
+  // MRPSL/MCL/MFL/NESI collapsed into "Others" for this compact card (see the Compensation &
+  // Benefits page for the full 7-entity breakdown).
   entities: [
-    { name: 'MSL', headcount: 128, loan: 41.0 },
-    { name: 'WDJM', headcount: 81, loan: 19.4 },
-    { name: 'MSBL', headcount: 52, loan: 13.6 },
-    { name: 'Others', headcount: 68, loan: 22.4 },
+    { name: 'MSL', loan: 41.0 },
+    { name: 'MWML', loan: 19.4 },
+    { name: 'MSBL', loan: 13.6 },
+    { name: 'Others', loan: 22.4 },
   ],
-  joiners: 24, exits: 19,
-  ta: { timeToFill: 34, openRoles: 18, offerAcceptance: 72 },
+  // timeToFill (35d = the HR Report's real "5 weeks average time to hire") is the one real
+  // number here — openRoles/offerAcceptance have no source yet and stay placeholders, all under
+  // the same "data pending" badge until the real Talent Acquisition port lands.
+  ta: { timeToFill: 35, openRoles: 18, offerAcceptance: 72 },
   ld: { investment: '—', coverage: 0, impact: 0, live: false },
   pm: { reviewed: 80, avgRating: 3.8 },
   // promotion/mobility/committee/tenureBuckets are real, Excel-sourced figures (see
@@ -47,8 +55,6 @@ const BASE_METRICS = {
   // rates, not a quarterly one, per the workbook's own metric definitions.
   tm: { pool: 0, coveragePct: 0, live: false, promotion: 83, mobility: 65, committee: 90, tenureBuckets: [0, 12, 13, 16] },
   cb: { loanBook: '₦96.4M', beneficiaries: 36, entitiesCovered: 7 },
-  successionCovered: 14, successionTotal: 22,
-  hrServiceResolution: 88,
 }
 
 type Metrics = typeof BASE_METRICS
@@ -138,7 +144,7 @@ function LayoutSwitcher({ layout, onChange }: { layout: Layout; onChange: (l: La
 
 const ATTENTION_ITEMS = [
   { level: 'watch' as const, text: 'Performance contract reviews sit at 80% against a 100% target, with three weeks left in the cycle.' },
-  { level: 'watch' as const, text: 'Only 31% of the Talent Management pool holds a Strategic Committee seat — 8 of 22 critical roles have no identified successor.' },
+  { level: 'watch' as const, text: 'Average TM performance rating has slipped for two straight half-years — 3.9 (H1 2025) to 3.9 (H2 2025) to 3.8 (H1 2026).' },
   { level: 'pending' as const, text: 'Talent Acquisition figures are provisional until the live recruitment sheet finishes connecting.' },
   { level: 'positive' as const, text: 'Group attrition held at 4.0%, a full point under the 5.0% industry benchmark, for the second straight quarter.' },
 ]
@@ -204,16 +210,18 @@ function SignalBoard({ m }: { m: Metrics }) {
         </Link>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-4">
-          <p className="text-xs font-bold text-slate-700 mb-3">Attrition vs. Industry <span className="block font-normal text-slate-400">Trailing 4 quarters</span></p>
-          <div className="flex items-end gap-2 h-20">
-            {m.attritionTrend.map((v, i) => (
-              <div key={m.attritionLabels[i]} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
-                <span className="text-[10px] font-bold">{v}%</span>
-                <div className={`w-full rounded-t ${i === m.attritionTrend.length - 1 ? 'bg-meristem-700' : 'bg-meristem-200'}`} style={{ height: `${(v / 5.5) * 100}%` }} />
-              </div>
-            ))}
+          <p className="text-xs font-bold text-slate-700 mb-3">Attrition vs. Industry <span className="block font-normal text-slate-400">Q1 2026 — no trailing history yet</span></p>
+          <div className="flex items-end gap-4 h-20">
+            <div className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+              <span className="text-[10px] font-bold">{m.attrition.current}%</span>
+              <div className="w-full rounded-t bg-meristem-700" style={{ height: `${(m.attrition.current / m.attrition.industry) * 100}%` }} />
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+              <span className="text-[10px] font-bold">{m.attrition.industry}%</span>
+              <div className="w-full rounded-t bg-meristem-200" style={{ height: '100%' }} />
+            </div>
           </div>
-          <div className="flex gap-2 mt-1">{m.attritionLabels.map((l) => <span key={l} className="flex-1 text-center text-[9.5px] text-slate-400">{l}</span>)}</div>
+          <div className="flex gap-4 mt-1"><span className="flex-1 text-center text-[9.5px] text-slate-400">Meristem</span><span className="flex-1 text-center text-[9.5px] text-slate-400">Industry</span></div>
         </div>
 
         <Link href={PAGE_ROUTES['hr-talent-acquisition']} className="bg-white border border-meristem-100 rounded-2xl p-4 hover:border-meristem-300 transition-colors">
@@ -268,7 +276,7 @@ function SignalBoard({ m }: { m: Metrics }) {
             {[3.9, 3.9, 3.8].map((v, i) => (
               <div key={v} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                 <span className="text-[10px] font-bold">{v}</span>
-                <div className={`w-full rounded-t ${i === 2 ? 'bg-lime-700' : 'bg-lime-200'}`} style={{ height: `${(v / 4.1) * 100}%` }} />
+                <div className={`w-full rounded-t ${i === 2 ? 'bg-lime-700' : 'bg-lime-200'}`} style={{ height: `${(v / 3.9) * 100}%` }} />
               </div>
             ))}
           </div>
@@ -301,24 +309,24 @@ function SignalBoard({ m }: { m: Metrics }) {
         </Link>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-4">
-          <p className="text-xs font-bold text-slate-700 mb-3">Critical Roles &amp; Succession</p>
-          <div className="flex items-center gap-4">
-            <Ring pct={(m.successionCovered / m.successionTotal) * 100} color="#B0714F" track="#F1E4DD"><span className="text-sm font-extrabold">{m.successionCovered}/{m.successionTotal}</span><span className="text-[8px] text-slate-400">covered</span></Ring>
-            <div className="text-[11px] text-slate-500 space-y-1">
-              <div>64% succession coverage</div>
-              <div className="text-amber-600 font-semibold">{m.successionTotal - m.successionCovered} roles unsuccessored</div>
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-slate-700">Critical Roles &amp; Succession</p>
+            <span className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5">no data source yet</span>
+          </div>
+          <div className="text-[11px] text-slate-500 space-y-1.5">
+            <div className="flex justify-between"><span>Critical roles with a successor</span><span className="text-slate-300 font-semibold">—</span></div>
+            <div className="flex justify-between"><span>Succession coverage</span><span className="text-slate-300 font-semibold">—</span></div>
           </div>
         </div>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-4">
-          <p className="text-xs font-bold text-slate-700 mb-3">HR Service Requests <span className="block font-normal text-slate-400">Employee Services help‑desk</span></p>
-          <div className="flex items-center gap-4">
-            <Ring pct={m.hrServiceResolution} color="#2F6B2B" track="#E7EFE3"><span className="text-sm font-extrabold">{m.hrServiceResolution}%</span><span className="text-[8px] text-slate-400">resolved</span></Ring>
-            <div className="text-[11px] text-slate-500 space-y-1">
-              <div>Within SLA, Q1 2026</div>
-              <div>312 requests logged</div>
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-slate-700">HR Service Requests <span className="block font-normal text-slate-400">Employee Services help‑desk</span></p>
+            <span className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5 shrink-0">no data source yet</span>
+          </div>
+          <div className="text-[11px] text-slate-500 space-y-1.5">
+            <div className="flex justify-between"><span>Requests resolved within SLA</span><span className="text-slate-300 font-semibold">—</span></div>
+            <div className="flex justify-between"><span>Requests logged, Q1 2026</span><span className="text-slate-300 font-semibold">—</span></div>
           </div>
         </div>
       </div>
@@ -332,19 +340,21 @@ function SignalBoard({ m }: { m: Metrics }) {
 function LedgerGrid({ m }: { m: Metrics }) {
   return (
     <div className="space-y-4">
+      {/* No quarter-over-quarter comparison data exists yet for any of these, so this row shows
+          the current figure only — a trend column will follow once a prior period is available
+          to compare against, rather than an invented delta. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-meristem-100 border border-meristem-100 rounded-xl overflow-hidden">
         {[
-          { k: 'Headcount', v: m.headcount, d: '↑ 1.8% QoQ', up: true },
-          { k: 'Attrition', v: '4.0%', d: '↓ 0.6pp', up: true },
-          { k: 'Time to fill', v: `${m.ta.timeToFill}d`, d: '↑ 3d', up: false },
-          { k: 'Training spend', v: m.ld.investment, d: '↑ 12%', up: true },
-          { k: 'Reviews done', v: `${m.pm.reviewed}%`, d: '↑ 6pp', up: true },
-          { k: 'Loan book', v: m.cb.loanBook, d: '↑ 4%', up: true },
+          { k: 'Headcount', v: m.headcount },
+          { k: 'Attrition', v: '4.0%' },
+          { k: 'Time to fill', v: `${m.ta.timeToFill}d` },
+          { k: 'Training spend', v: m.ld.investment },
+          { k: 'Reviews done', v: `${m.pm.reviewed}%` },
+          { k: 'Loan book', v: m.cb.loanBook },
         ].map((c) => (
           <div key={c.k} className="bg-white p-3.5">
             <p className="font-mono text-lg font-semibold text-slate-800 tabular-nums">{c.v}</p>
             <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">{c.k}</p>
-            <p className={`text-[10px] font-semibold mt-1 ${c.up ? 'text-meristem-700' : 'text-rose-500'}`}>{c.d}</p>
           </div>
         ))}
       </div>
@@ -418,21 +428,13 @@ function ExecutiveBlocks({ m }: { m: Metrics }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-white border border-meristem-100 rounded-2xl p-4">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">Headcount by entity</p>
-          <div className="space-y-2">
-            {m.entities.map((e) => (
-              <HBar key={e.name} label={e.name} pct={(e.headcount / 128) * 100} value={String(e.headcount)} color="#2F6B2B" />
-            ))}
-          </div>
-        </div>
+        <MetricListCard title="Headcount by Entity" metrics={m.entities.map((e) => e.name)} />
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-4">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">Attrition, trailing 4Q</p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-3">Attrition vs. Industry — Q1 2026</p>
           <div className="space-y-2">
-            {m.attritionLabels.map((l, i) => (
-              <HBar key={l} label={l} pct={(m.attritionTrend[i] / 5.1) * 100} value={`${m.attritionTrend[i]}%`} color={i === 3 ? '#2F6B2B' : '#B8862E'} />
-            ))}
+            <HBar label="Meristem" pct={(m.attrition.current / m.attrition.industry) * 100} value={`${m.attrition.current}%`} color="#2F6B2B" />
+            <HBar label="Industry" pct={100} value={`${m.attrition.industry}%`} color="#B8862E" />
           </div>
         </div>
 

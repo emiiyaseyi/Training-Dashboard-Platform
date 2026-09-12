@@ -1,7 +1,8 @@
 'use client'
 
-import { TrendingUp, ClipboardCheck, Star, Users2, Target, Gauge } from 'lucide-react'
+import { TrendingUp, ClipboardCheck, Star, Users2 } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
+import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
 
 // Contract-review completion is real, from HR REPORT — 1ST QPR 2026. The rating trend is real
@@ -25,6 +26,13 @@ const TAG_STYLES: Record<string, string> = {
   'HR Report': 'text-meristem-700 bg-meristem-50',
   Excel: 'text-sky-700 bg-sky-50',
 }
+
+// No performance-distribution, goal-tracking or manager-effectiveness feed exists anywhere in
+// this app yet — every value below is an honest "—", not an invented number, until Performance
+// Management confirms a source for each.
+const DISTRIBUTION_BANDS = ['Outstanding', 'Exceeds Expectations', 'Meets Expectations', 'Needs Improvement', 'Unsatisfactory']
+const DEPARTMENTS = ['Sales', 'Finance', 'Operations']
+const MANAGER_METRICS = ['Manager Review Completion', 'Manager Goal Setting Completion', 'Team Performance Score', 'Manager Calibration Variance']
 
 export default function PerformanceManagementPage() {
   return (
@@ -66,44 +74,43 @@ export default function PerformanceManagementPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <p className="text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
-              Performance Distribution
+          <MetricListCard title="Performance Distribution" metrics={DISTRIBUTION_BANDS} />
+          <MetricListCard title="Goal Performance" metrics={['Goals Set', 'Goals Completed', 'Goal Achievement Rate', 'Overdue Goals']} />
+          <MetricListCard title="Performance Improvement" metrics={['Staff on a PIP', 'PIP Completion Rate', 'PIP Success Rate']} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5 lg:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-slate-800">Department Performance</p>
               <span className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5">no data source yet</span>
-            </p>
-            <p className="text-xs text-slate-400 mb-3">Outstanding / Exceeds / Meets / Needs Improvement / Unsatisfactory</p>
-            <div className="space-y-2">
-              {[
-                { label: 'Outstanding', pct: 12 }, { label: 'Exceeds Expectations', pct: 28 },
-                { label: 'Meets Expectations', pct: 46 }, { label: 'Needs Improvement', pct: 11 }, { label: 'Unsatisfactory', pct: 3 },
-              ].map((r) => (
-                <div key={r.label} className="grid grid-cols-[1fr_auto] items-center gap-2 text-[11px]">
-                  <span className="text-slate-500">{r.label}</span>
-                  <span className="font-semibold text-slate-700 tabular-nums">{r.pct}%</span>
-                </div>
-              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="text-left text-[10px] text-slate-400 uppercase tracking-wide border-b border-meristem-50">
+                    <th className="py-2 font-medium">Department</th>
+                    <th className="py-2 font-medium text-right">Avg. Score</th>
+                    <th className="py-2 font-medium text-right">Goal Achievement</th>
+                    <th className="py-2 font-medium text-right">High Performers</th>
+                    <th className="py-2 font-medium text-right">Low Performers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DEPARTMENTS.map((d) => (
+                    <tr key={d} className="border-b border-meristem-50 last:border-0">
+                      <td className="py-2.5 text-slate-700 font-medium">{d}</td>
+                      <td className="py-2.5 text-right text-slate-300 font-semibold">—</td>
+                      <td className="py-2.5 text-right text-slate-300 font-semibold">—</td>
+                      <td className="py-2.5 text-right text-slate-300 font-semibold">—</td>
+                      <td className="py-2.5 text-right text-slate-300 font-semibold">—</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Target className="w-4 h-4 text-meristem-700" />
-              <p className="text-sm font-bold text-slate-800">Goal Achievement Rate</p>
-            </div>
-            <p className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5 inline-block mb-3">no data source yet</p>
-            <p className="text-2xl font-bold text-slate-800 tabular-nums">—</p>
-            <p className="text-xs text-slate-400 mt-1">% of individual/business goals completed — needs a goal-tracking source</p>
-          </div>
-
-          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Gauge className="w-4 h-4 text-meristem-700" />
-              <p className="text-sm font-bold text-slate-800">Performance Improvement Plans</p>
-            </div>
-            <p className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5 inline-block mb-3">no data source yet</p>
-            <p className="text-2xl font-bold text-slate-800 tabular-nums">—</p>
-            <p className="text-xs text-slate-400 mt-1">Staff on a PIP, and PIP success rate</p>
-          </div>
+          <MetricListCard title="Manager Effectiveness" metrics={MANAGER_METRICS} />
         </div>
       </div>
     </div>
