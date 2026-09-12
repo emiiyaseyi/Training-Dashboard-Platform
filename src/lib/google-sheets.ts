@@ -31,7 +31,10 @@ export function serviceAccountEmail(): string | null {
 // line breaks — collapsed onto one line, or with escaped "\n" text instead of actual newlines.
 // Node's crypto decoder rejects a PEM key that isn't formatted exactly right (the
 // "DECODER routines::unsupported" error), so rebuild it from scratch from whatever we're given.
-function normalizePrivateKey(raw: string): string {
+// Exported so ta-sheets.ts (a separate, TA_-prefixed credential set) can reuse the same
+// cleanup logic without duplicating it — the parsing quirks (escaped \n, wrapping quotes) are
+// about how values get pasted into Vercel, not specific to which service account they belong to.
+export function normalizePrivateKey(raw: string): string {
   let key = raw.trim()
   // Strip surrounding quotes, in case the whole env var value was pasted including them.
   if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
