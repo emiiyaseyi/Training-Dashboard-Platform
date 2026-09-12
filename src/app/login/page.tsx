@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { signIn, getSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { BookOpen, Loader2, ArrowLeft } from 'lucide-react'
+import { Loader2, ArrowLeft } from 'lucide-react'
 import { hasAccess, HR_UNIT_KEYS } from '@/lib/permissions'
 
 function LoginForm() {
@@ -37,17 +37,19 @@ function LoginForm() {
     router.refresh()
   }
 
-  // Where a direct (non-redirected) login lands — Learning Intelligence if they can see it,
-  // otherwise the HR Summary if they can see any HR unit, otherwise "/" (where AppShell's own
-  // access-restricted screen takes over — same as today for a user with no permissions at all).
+  // Where a direct (non-redirected) login lands — HR Summary is the primary landing page now
+  // (including for super admins, who can technically see everything, so "can see Learning
+  // Intelligence" alone can't be the tiebreaker), falling back to Learning Intelligence only for
+  // someone with no HR access at all, and to "/" (AppShell's own access-restricted screen) for
+  // someone with no permissions whatsoever.
   const resolveLandingPage = async (): Promise<string> => {
     if (explicitCallbackUrl) return explicitCallbackUrl
     const session = await getSession()
     const perms = session?.user?.permissions
     const isSuperAdmin = !!session?.user?.isSuperAdmin
-    const canSeeLearning = isSuperAdmin || hasAccess(perms?.['executive-overview'], 'view')
-    if (canSeeLearning) return '/'
     const canSeeHr = isSuperAdmin || hasAccess(perms?.['hr-summary'], 'view') || HR_UNIT_KEYS.some((k) => hasAccess(perms?.[k], 'view'))
+    // '/' either shows Learning Intelligence (if they have access) or AppShell's own
+    // access-restricted screen (if they have neither) — both correct outcomes for "no HR access".
     return canSeeHr ? '/hr' : '/'
   }
 
@@ -85,23 +87,19 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-navy-700 px-4 relative">
-      {/* Meristem wordmark, top-left — this login screen is shared by both Learning Intelligence
-          and the HR Dashboard, so the group brand anchors it regardless of which app someone
-          lands in. Text placeholder until the real logo asset is added to /public. */}
-      <p className="absolute top-6 left-6 font-serif text-lg font-bold text-white tracking-wide">MERISTEM</p>
-
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-meristem-50 via-meristem-100 to-meristem-50 px-4 relative">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-lg bg-gold-400 flex items-center justify-center mb-4">
-            <BookOpen className="w-6 h-6 text-navy-800" />
+          <div className="bg-white rounded-2xl shadow-sm px-8 py-5 mb-5">
+            {/* eslint-disable-next-line @next/next/no-img-element -- small static brand asset, not worth next/image's config for a login page */}
+            <img src="/brand/meristem-logo.png" alt="Meristem" className="h-10 w-auto" />
           </div>
-          <p className="text-white font-semibold text-lg">Learning Intelligence</p>
-          <p className="text-slate-400 text-sm">Dashboard Platform</p>
+          <p className="text-meristem-900 font-semibold text-lg">HR &amp; Learning Intelligence</p>
+          <p className="text-meristem-600 text-sm">Dashboard Platform</p>
         </div>
 
         {step === 'identifier' ? (
-          <form onSubmit={handleContinue} className="bg-white rounded-xl shadow-xl p-6 space-y-4">
+          <form onSubmit={handleContinue} className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Staff ID or Email</label>
               <input
@@ -109,7 +107,7 @@ function LoginForm() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="e.g. MSL-0123 or you@meristem.com"
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meristem-600 focus:border-transparent"
                 autoFocus
                 required
               />
@@ -120,14 +118,14 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 bg-meristem-600 hover:bg-meristem-700 text-white text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-60"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Continue
             </button>
           </form>
         ) : (
-          <form onSubmit={handlePasswordSubmit} className="bg-white rounded-xl shadow-xl p-6 space-y-4">
+          <form onSubmit={handlePasswordSubmit} className="bg-white rounded-2xl shadow-xl p-6 space-y-4">
             <button
               type="button"
               onClick={() => { setStep('identifier'); setPassword(''); setError('') }}
@@ -142,7 +140,7 @@ function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 focus:border-transparent"
+                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meristem-600 focus:border-transparent"
                 autoFocus
                 required
               />
@@ -153,7 +151,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-navy-600 hover:bg-navy-700 text-white text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-2 bg-meristem-600 hover:bg-meristem-700 text-white text-sm font-medium rounded-lg py-2.5 transition-colors disabled:opacity-60"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Sign In

@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { GraduationCap, ArrowUpRight } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
