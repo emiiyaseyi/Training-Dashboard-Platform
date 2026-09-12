@@ -39,12 +39,12 @@ export function UnitPageHeader({ title, description, icon: Icon, actions }: Unit
 
   return (
     <div className="bg-white border-b border-meristem-100 px-4 sm:px-8 py-4">
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <Link href="/hr" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-meristem-800">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Summary
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {actions}
           {otherUnits.length > 0 && (
             <div className="relative">

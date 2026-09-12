@@ -1,15 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import { Users, UserPlus, UserMinus, Clock, Wallet, Headphones } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
+import { FilterBar } from '@/components/ui/FilterBar'
+import type { PeriodFilter } from '@/lib/filter-types'
 
 // The first 6 KPIs and the engagement initiatives below are real, from HR REPORT — 1ST QPR
-// 2026 — everything else on this page (employment type split, BU breakdown, roster, absenteeism,
-// HR service resolution) has no data source yet and is illustrative until Employee Services
-// confirms one.
+// 2026 — everything else on this page (employment type split, BU breakdown, roster, and every
+// MetricListCard below) has no data source yet and is illustrative until Employee Services
+// confirms one. The period filter mirrors Learning Intelligence's for UI consistency, but this
+// page has no time-series source behind it yet (the HR Report is a single Q1 2026 snapshot), so
+// changing it doesn't reshape these numbers until a live per-period feed exists.
 const KPIS = [
   { label: 'Total Headcount', value: '329', sub: 'M 161 · F 168', icon: Users, tag: 'HR Report' },
   { label: 'Attrition Rate (Q1)', value: '4.0%', sub: 'Industry avg. 5.0%', icon: UserMinus, tag: 'HR Report' },
@@ -30,8 +35,9 @@ const TAG_STYLES: Record<string, string> = {
 // yet (no HRIS/attendance/case-management feed exists) — kept as explicit "—" rows rather than
 // invented numbers, grouped by the framework's own section headings so it's clear what's covered
 // and what's still missing, not silently dropped.
-const MOVEMENT_METRICS = ['Resignations (voluntary)', 'Terminations (involuntary)', 'Retirements', 'Transfers between BUs', 'Internal Mobility Rate', 'Exit Rate']
-const ATTENDANCE_METRICS = ['Attendance Rate', 'Absenteeism Rate', 'Unplanned Absence Rate', 'Sick Leave Utilisation', 'Annual Leave Utilisation', 'Overtime Hours']
+const WORKFORCE_METRICS = ['Headcount by Department', 'Headcount by Location', 'Headcount by Grade/Level', 'Average Employee Tenure', 'New Employees (period)', 'Exits (period)', 'Headcount Growth Rate', 'FTE vs. Budgeted Headcount']
+const MOVEMENT_METRICS = ['New Hires', 'Resignations (voluntary)', 'Terminations (involuntary)', 'Retirements', 'Transfers between BUs', 'Promotions', 'Internal Mobility Rate', 'Exit Rate', 'Voluntary Turnover', 'Involuntary Turnover']
+const ATTENDANCE_METRICS = ['Attendance Rate', 'Absenteeism Rate', 'Unplanned Absence Rate', 'Sick Leave Utilisation', 'Annual Leave Utilisation', 'Average Leave Days Taken', 'Employees with Outstanding Leave', 'Overtime Hours']
 const HR_OPS_METRICS = ['HR Requests Received', 'HR Requests Resolved', 'Avg. Resolution Time', 'Payroll Accuracy Rate', 'Employee Data Completeness', 'HR Service Satisfaction Score']
 const RELATIONS_METRICS = ['Grievances Raised', 'Grievances Resolved', 'Disciplinary Cases', 'Employee Complaints', 'Workplace Conflict Cases', 'Avg. Case Resolution Time']
 
@@ -63,9 +69,16 @@ const BU_COLORS: Record<string, string> = {
 }
 
 export default function EmployeeServicesPage() {
+  const [period, setPeriod] = useState<PeriodFilter>({ mode: 'all' })
+
   return (
     <div>
-      <UnitPageHeader title="Employee Services" description="Headcount, attrition, engagement & workforce composition" icon={Users} />
+      <UnitPageHeader
+        title="Employee Services"
+        description="Headcount, attrition, engagement & workforce composition"
+        icon={Users}
+        actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
+      />
 
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -108,9 +121,12 @@ export default function EmployeeServicesPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <MetricListCard title="Workforce Overview" metrics={WORKFORCE_METRICS} />
           <MetricListCard title="Employee Movement" metrics={MOVEMENT_METRICS} />
           <MetricListCard title="Attendance & Leave" metrics={ATTENDANCE_METRICS} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <MetricListCard title="HR Operations" metrics={HR_OPS_METRICS} />
           <MetricListCard title="Employee Relations" metrics={RELATIONS_METRICS} />
         </div>

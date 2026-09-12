@@ -5,6 +5,8 @@ import { Users2, TrendingUp, Repeat, Award, GraduationCap, Clock } from 'lucide-
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
+import { FilterBar } from '@/components/ui/FilterBar'
+import type { PeriodFilter } from '@/lib/filter-types'
 
 // Sourced directly from the live formulas in "HR Dashboard/PM & TM_Data_for_Dashboard_CLEAN.xlsx"
 // ("TM Dashboard Metrics — Live Summary" sheet, cells B4/B7-B8/B11-B12/B15-B19/B27-B28) — these
@@ -29,8 +31,9 @@ const RATING_TREND = { labels: ['H1 2025', 'H2 2025', 'H1 2026'], values: [3.9, 
 
 // None of these have a source anywhere in this app (no succession-planning, 9-box, career-plan
 // or attrition-risk tracking exists yet) — every value is an honest "—", not a guess.
+const TALENT_POOL_METRICS = ['High Performers', 'High Potentials', 'Critical Talent', 'Emerging Leaders', 'Leadership Talent', 'Key Specialists', 'Talent Pool by Department']
 const SUCCESSION_METRICS = ['Critical Positions', 'Positions With a Successor', 'Ready‑Now Successors', 'Ready in 1–2 Years', 'Ready in 3–5 Years']
-const NINE_BOX_METRICS = ['High Performance / High Potential', 'High Performance / Medium Potential', 'Medium Performance / High Potential', 'Ready‑Now Talent', 'Future Talent']
+const NINE_BOX_METRICS = ['High Performance / High Potential', 'High Performance / Medium Potential', 'Medium Performance / High Potential', 'High Potential %', 'High Performer %', 'Ready‑Now Talent', 'Future Talent']
 const TALENT_RISK_METRICS = ['Critical Talent at Risk', 'High Performer Attrition Risk', 'Retirement Risk', 'Single‑Point‑of‑Failure Roles', 'Critical Skills at Risk']
 const CAREER_DEV_METRICS = ['Employees With a Career Plan', 'Development Plan Completion', 'Career Conversations Completed', 'Employees Ready for Promotion']
 const RETENTION_METRICS = ['Critical Talent Retention', 'High Performer Retention', 'HiPo Retention', 'Regrettable Attrition (Critical Roles)']
@@ -40,6 +43,7 @@ interface LiveTm { totalTalentMembers: number; coveragePct: number; staffTrained
 
 export default function TalentManagementPage() {
   const [live, setLive] = useState<LiveTm | null>(null)
+  const [period, setPeriod] = useState<PeriodFilter>({ mode: 'all' })
 
   useEffect(() => {
     let cancelled = false
@@ -52,7 +56,12 @@ export default function TalentManagementPage() {
 
   return (
     <div>
-      <UnitPageHeader title="Talent Management" description="TM pool, promotion, mobility & succession" icon={Users2} />
+      <UnitPageHeader
+        title="Talent Management"
+        description="TM pool, promotion, mobility & succession"
+        icon={Users2}
+        actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
+      />
 
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -101,6 +110,7 @@ export default function TalentManagementPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <MetricListCard title="Talent Pool Composition" metrics={TALENT_POOL_METRICS} />
           <MetricListCard title="Succession Planning" metrics={SUCCESSION_METRICS} />
           <MetricListCard title="9‑Box / Talent Segmentation" metrics={NINE_BOX_METRICS} />
           <MetricListCard title="Talent Risk" metrics={TALENT_RISK_METRICS} />
