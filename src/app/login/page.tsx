@@ -9,10 +9,15 @@ import { hasAccess, HR_UNIT_KEYS } from '@/lib/permissions'
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  // Only set when middleware/AppShell redirected here from a specific protected page — a direct
-  // visit to /login (no callbackUrl) gets a permission-based default landing page instead of
-  // always assuming Learning Intelligence's executive overview (see attemptSignIn below).
-  const explicitCallbackUrl = searchParams.get('callbackUrl')
+  // Set when middleware/AppShell redirected here from a specific protected page a signed-out
+  // visitor was actually trying to reach — a genuine deep link worth honoring. But NextAuth's
+  // own middleware also sets callbackUrl=/ for the single most common case of all: someone
+  // simply visiting the bare domain (typing it, or a mobile homescreen bookmark) while signed
+  // out. That's not a deliberate request for Learning Intelligence specifically, so '/' alone
+  // must NOT short-circuit the permission-based landing page below — only a more specific path
+  // counts as an explicit destination.
+  const rawCallbackUrl = searchParams.get('callbackUrl')
+  const explicitCallbackUrl = rawCallbackUrl && rawCallbackUrl !== '/' ? rawCallbackUrl : null
 
   const [step, setStep] = useState<'identifier' | 'password'>('identifier')
   const [identifier, setIdentifier] = useState('')

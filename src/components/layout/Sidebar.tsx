@@ -23,8 +23,9 @@ import {
   X,
   Database,
   Users,
+  ArrowLeftRight,
 } from 'lucide-react'
-import { hasAccess, type PageKey } from '@/lib/permissions'
+import { hasAccess, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
 const ANALYTICS_PAGE_COUNT = 7
 
@@ -61,6 +62,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   if (!session?.user) return null
 
   const isSuperAdmin = session.user.isSuperAdmin
+  const canSeeHr = isSuperAdmin || hasAccess(session.user.permissions?.['hr-summary'], 'view') || HR_UNIT_KEYS.some((k) => hasAccess(session.user.permissions?.[k], 'view'))
   const visibleItems = navItems.filter(
     (item) => isSuperAdmin || hasAccess(session.user.permissions?.[item.page], 'view')
   )
@@ -121,6 +123,19 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </button>
         </div>
       </div>
+
+      {canSeeHr && (
+        <div className="px-3 pt-3">
+          <Link
+            href="/hr"
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-meristem-600 text-white hover:bg-meristem-700 transition-colors"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            Go to HR Dashboard
+          </Link>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
