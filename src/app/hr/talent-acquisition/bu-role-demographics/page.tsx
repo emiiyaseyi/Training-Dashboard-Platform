@@ -26,7 +26,7 @@ export default async function BuRoleDemographicsPage({ searchParams }: { searchP
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={UserSearch} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">

@@ -26,7 +26,7 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={UserSearch} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
@@ -39,10 +39,10 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
             <PieChart labels={breakdown.map((c) => c.category)} values={breakdown.map((c) => c.amount)} donut showAmounts height={260} />
           </ChartBlock>
           <ChartBlock title="Total Recruitment Investment by BU" icon={Landmark}>
-            <BarChart labels={byBU.map((g) => g.key)} values={byBU.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelFormatter={formatTaCurrency} height={Math.max(180, byBU.length * 36)} />
+            <BarChart labels={byBU.map((g) => g.key)} values={byBU.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={byBU.map((g) => formatTaCurrency(g.total))} height={Math.max(180, byBU.length * 36)} />
           </ChartBlock>
           <ChartBlock title="Cost per Hire by Role" icon={Users}>
-            <BarChart labels={byRole.map((g) => g.key)} values={byRole.map((g) => g.avg)} color="#7A66B0" horizontal showLabels labelFormatter={formatTaCurrency} height={Math.max(180, byRole.length * 36)} />
+            <BarChart labels={byRole.map((g) => g.key)} values={byRole.map((g) => g.avg)} color="#7A66B0" horizontal showLabels labelText={byRole.map((g) => formatTaCurrency(g.avg))} height={Math.max(180, byRole.length * 36)} />
           </ChartBlock>
           <ChartBlock title="Cost per Hire Trend" icon={TrendingUp}>
             <LineChart labels={trend.map((p) => p.month)} values={trend.map((p) => p.value)} color="#3F7590" height={260} />

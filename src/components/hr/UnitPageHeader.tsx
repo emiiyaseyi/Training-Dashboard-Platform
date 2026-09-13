@@ -19,14 +19,19 @@ const UNIT_ICONS = {
 interface UnitPageHeaderProps {
   title: string
   description: string
-  icon: React.ComponentType<{ className?: string }>
+  // A pre-rendered icon element (e.g. `<Wallet className="w-5 h-5 text-meristem-700" />`), not a
+  // bare component reference — several callers (the Talent Acquisition pages) are Server
+  // Components fetching data with `await`, and a Server Component can't pass a raw function/
+  // component reference as a prop into this Client Component (RSC serialization rejects it);
+  // an already-rendered element is a plain serializable object, so it crosses that boundary fine.
+  icon: React.ReactNode
   /** Right-hand slot for the page's own controls (e.g. a period filter) — rendered next to Switch Unit. */
   actions?: React.ReactNode
 }
 
 // Every unit page renders this at the top — "return to summary" and "switch unit" per the brief,
 // so someone doesn't have to rely on the (drawer-hidden-on-mobile) sidebar to move between units.
-export function UnitPageHeader({ title, description, icon: Icon, actions }: UnitPageHeaderProps) {
+export function UnitPageHeader({ title, description, icon, actions }: UnitPageHeaderProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -82,7 +87,7 @@ export function UnitPageHeader({ title, description, icon: Icon, actions }: Unit
 
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-meristem-100 flex items-center justify-center shrink-0">
-          <Icon className="w-5 h-5 text-meristem-700" />
+          {icon}
         </div>
         <div>
           <h1 className="text-lg font-bold text-slate-800">{title}</h1>

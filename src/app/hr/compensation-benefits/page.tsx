@@ -54,7 +54,7 @@ export default function CompensationBenefitsPage() {
       <UnitPageHeader
         title="Compensation & Benefits"
         description="Compensation review, benefits & staff loans"
-        icon={Wallet}
+        icon={<Wallet className="w-5 h-5 text-meristem-700" />}
         actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
       />
 

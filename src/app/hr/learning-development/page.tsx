@@ -13,7 +13,7 @@ export default function LearningDevelopmentUnitPage() {
       <UnitPageHeader
         title="Learning & Development"
         description="Training investment, coverage & impact"
-        icon={GraduationCap}
+        icon={<GraduationCap className="w-5 h-5 text-meristem-700" />}
       />
       <div className="p-4 sm:p-8">
         <div className="bg-white border border-meristem-100 rounded-2xl p-6 max-w-xl">

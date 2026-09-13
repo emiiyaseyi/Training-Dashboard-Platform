@@ -13,6 +13,11 @@ interface BarChartProps {
   showLabels?: boolean
   labelSuffix?: string
   labelFormatter?: (v: number) => string
+  /** Pre-formatted label text, one per bar — the serializable alternative to `labelFormatter`
+   *  for callers that are Server Components (a Server Component can't pass a function prop like
+   *  `labelFormatter` into this Client Component; an array of already-formatted strings crosses
+   *  that boundary fine). Takes precedence over `labelFormatter`/`labelSuffix` when provided. */
+  labelText?: string[]
   /** Plain-text caption rendered above the chart naming this series (e.g. "Priority Score").
    *  Deliberately not a Plotly legend — legend.y is a fraction of the WHOLE canvas (paper),
    *  not the plot area, so on these short single-trace charts it either overlapped the first
@@ -29,6 +34,7 @@ export function BarChart({
   showLabels = false,
   labelSuffix = '',
   labelFormatter,
+  labelText: labelTextProp,
   legendLabel,
 }: BarChartProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -40,7 +46,7 @@ export function BarChart({
     const leftMargin = horizontal ? Math.min(Math.max(maxLabelLen * 7, 140), 300) : 50
 
     const labelText = showLabels
-      ? values.map((v) =>
+      ? labelTextProp ?? values.map((v) =>
           labelFormatter
             ? labelFormatter(v)
             : `${Number.isInteger(v) ? v : v.toFixed(1)}${labelSuffix}`

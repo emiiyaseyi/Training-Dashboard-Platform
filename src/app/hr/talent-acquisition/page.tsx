@@ -64,7 +64,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={UserSearch} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
@@ -147,7 +147,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
               <PieChart labels={costBreakdown.map((c) => c.category)} values={costBreakdown.map((c) => c.amount)} donut showAmounts height={260} />
             </ChartBlock>
             <ChartBlock title="Total Recruitment Investment by BU" icon={Landmark}>
-              <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelFormatter={formatTaCurrency} height={Math.max(180, buSpend.length * 36)} />
+              <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={buSpend.map((g) => formatTaCurrency(g.total))} height={Math.max(180, buSpend.length * 36)} />
             </ChartBlock>
             <ChartBlock title="Recruitment Costs" icon={TrendingUp}>
               <LineChart labels={monthlyCosts.map((m) => m.period)} values={monthlyCosts.map((m) => m.value)} color="#2F6B2B" height={260} />

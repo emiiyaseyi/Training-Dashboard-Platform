@@ -361,21 +361,44 @@ export default function HrAdminPage() {
 }
 
 function PermissionGrid({ draft, onChange }: { draft: DraftPerms; onChange: (d: DraftPerms) => void }) {
+  const applyToAll = (level: '' | PermissionLevel) => {
+    onChange(Object.fromEntries(HR_EDITABLE_KEYS.map((k) => [k, level])) as DraftPerms)
+  }
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-      {HR_EDITABLE_KEYS.map((k) => (
-        <label key={k} className="flex flex-col gap-1 text-[11px] font-medium text-slate-500">
-          {PAGE_LABELS[k].replace('HR — ', '')}
-          <select
-            value={draft[k] || ''}
-            onChange={(e) => onChange({ ...draft, [k]: e.target.value as PermissionLevel | '' })}
-            className="text-xs border border-meristem-100 rounded-lg px-2 py-1.5 bg-white"
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 bg-meristem-50/70 rounded-lg px-3 py-2">
+        <span className="text-[11px] font-semibold text-slate-600">Set every unit to:</span>
+        <button type="button" onClick={() => applyToAll('')} className="text-[11px] font-medium text-slate-500 hover:text-rose-600 bg-white border border-meristem-100 rounded-full px-2.5 py-1">
+          No access
+        </button>
+        {PERMISSION_LEVELS.map((lvl) => (
+          <button
+            key={lvl}
+            type="button"
+            onClick={() => applyToAll(lvl)}
+            className="text-[11px] font-medium text-meristem-800 hover:text-white hover:bg-meristem-600 bg-white border border-meristem-100 rounded-full px-2.5 py-1 transition-colors"
           >
-            <option value="">No access</option>
-            {PERMISSION_LEVELS.map((lvl) => <option key={lvl} value={lvl}>{PERMISSION_LEVEL_LABELS[lvl]}</option>)}
-          </select>
-        </label>
-      ))}
+            {PERMISSION_LEVEL_LABELS[lvl]}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        {HR_EDITABLE_KEYS.map((k) => (
+          <label key={k} className="flex flex-col gap-1 text-[11px] font-medium text-slate-500">
+            {PAGE_LABELS[k].replace('HR — ', '')}
+            <select
+              value={draft[k] || ''}
+              onChange={(e) => onChange({ ...draft, [k]: e.target.value as PermissionLevel | '' })}
+              className="text-xs border border-meristem-100 rounded-lg px-2 py-1.5 bg-white"
+            >
+              <option value="">No access</option>
+              {PERMISSION_LEVELS.map((lvl) => <option key={lvl} value={lvl}>{PERMISSION_LEVEL_LABELS[lvl]}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
     </div>
   )
 }

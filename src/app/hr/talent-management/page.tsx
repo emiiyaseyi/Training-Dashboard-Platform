@@ -59,7 +59,7 @@ export default function TalentManagementPage() {
       <UnitPageHeader
         title="Talent Management"
         description="TM pool, promotion, mobility & succession"
-        icon={Users2}
+        icon={<Users2 className="w-5 h-5 text-meristem-700" />}
         actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
       />
 

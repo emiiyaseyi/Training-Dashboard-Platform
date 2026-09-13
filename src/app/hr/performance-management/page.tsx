@@ -57,7 +57,7 @@ export default function PerformanceManagementPage() {
       <UnitPageHeader
         title="Performance Management"
         description="Performance contracts, reviews & ratings"
-        icon={TrendingUp}
+        icon={<TrendingUp className="w-5 h-5 text-meristem-700" />}
         actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
       />
 
