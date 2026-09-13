@@ -5,6 +5,7 @@ import { TrendingUp, TrendingDown, ClipboardCheck, Star, Users2, AlertCircle } f
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
+import { PieChart } from '@/components/charts/PieChart'
 import { FilterBar } from '@/components/ui/FilterBar'
 import type { PeriodFilter } from '@/lib/filter-types'
 
@@ -37,6 +38,9 @@ const DISTRIBUTION_BANDS = ['Outstanding', 'Exceeds Expectations', 'Meets Expect
 // Front Office / Back Office is the real departmental split used elsewhere in this app (Employee
 // Services, and Talent Acquisition's OfficeType) — not a fabricated department list.
 const DEPARTMENTS = ['Front Office', 'Back Office']
+// Real: HR REPORT — 1ST QPR 2026's "Cost & No of Employees Per Category" chart (89 + 240 = 329).
+// Order matches DEPARTMENTS (Front Office, Back Office) so the two lists can be zipped by index.
+const OFFICE_HEADCOUNT = { labels: ['Front Office', 'Back Office'], values: [89, 240] }
 const MANAGER_METRICS = ['Manager Review Completion', 'Manager Goal Setting Completion', 'Team Performance Score', 'Manager Calibration Variance']
 const PROCESS_METRICS = ['Goal Setting Completion', 'Goal Alignment Rate', 'Mid‑Year Review Completion', 'Year‑End Review Completion', 'Employee Self‑Assessment Completion']
 const GOAL_METRICS = ['Goals Set', 'Goals Completed', 'Goal Achievement Rate', 'Average Goal Score', 'Business Goals Achieved', 'Individual Goals Achieved', 'Strategic Goals Achieved', 'Overdue Goals']
@@ -130,15 +134,17 @@ export default function PerformanceManagementPage() {
             </div>
           </div>
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-bold text-slate-800">PC Completion by Department</p>
-              <span className="text-[9px] font-bold uppercase tracking-wide text-rose-600 bg-rose-50 rounded-full px-2 py-0.5">no data source yet</span>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-bold text-slate-800">Headcount by Office Category</p>
+              <span className="text-[9px] font-bold uppercase tracking-wide text-meristem-700 bg-meristem-50 rounded-full px-2 py-0.5">HR Report</span>
             </div>
-            <div className="space-y-2">
-              {DEPARTMENTS.map((d) => (
+            <p className="text-xs text-slate-400 mb-3">Real headcount split — PC completion by category isn&apos;t tracked yet, but the population it would apply to is known</p>
+            <PieChart labels={OFFICE_HEADCOUNT.labels} values={OFFICE_HEADCOUNT.values} donut showAmounts={false} height={200} />
+            <div className="mt-3 space-y-1.5">
+              {DEPARTMENTS.map((d, i) => (
                 <div key={d} className="flex items-center justify-between text-[12px]">
-                  <span className="text-slate-500">{d}</span>
-                  <span className="font-semibold text-slate-300">—</span>
+                  <span className="text-slate-500">{d} PC completion</span>
+                  <span className="font-semibold text-slate-300">— <span className="text-slate-400 font-normal">({OFFICE_HEADCOUNT.values[i]} staff)</span></span>
                 </div>
               ))}
             </div>
