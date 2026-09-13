@@ -95,7 +95,7 @@ function LoginForm() {
             <img src="/brand/meristem-logo.png" alt="Meristem" className="h-10 w-auto" />
           </div>
           <p className="text-meristem-900 font-semibold text-lg">Human Resources</p>
-          <p className="text-meristem-600 text-sm">Dashboard Platform</p>
+          <p className="text-meristem-600 text-sm">Analytical Platform</p>
         </div>
 
         {step === 'identifier' ? (
