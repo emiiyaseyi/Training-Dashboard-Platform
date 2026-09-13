@@ -205,8 +205,8 @@ export default function HrAdminPage() {
                   <p>Missing environment variable(s) — set these in Vercel (Project → Settings → Environment Variables → Production), then redeploy:</p>
                 </div>
                 <ul className="pl-6 list-disc space-y-1">
-                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_EMAIL</span> — the service account's email address (from the downloaded JSON key file's <span className="font-mono">client_email</span> field).</li>
-                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> — the same JSON file's <span className="font-mono">private_key</span> value, pasted in full (including the BEGIN/END lines) directly into Vercel — never through chat.</li>
+                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_EMAIL</span> — the service account&apos;s email address (from the downloaded JSON key file&apos;s <span className="font-mono">client_email</span> field).</li>
+                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> — the same JSON file&apos;s <span className="font-mono">private_key</span> value, pasted in full (including the BEGIN/END lines) directly into Vercel — never through chat.</li>
                   <li><span className="font-mono">TA_GOOGLE_SHEET_ID</span> — the ID from the sheet&apos;s URL (the long string between <span className="font-mono">/d/</span> and <span className="font-mono">/edit</span>).</li>
                 </ul>
                 <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, and <span className="font-mono">Config</span>.</p>

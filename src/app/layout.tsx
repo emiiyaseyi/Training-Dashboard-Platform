@@ -17,8 +17,8 @@ const reportSerif = Playfair_Display({
 })
 
 export const metadata: Metadata = {
-  title: 'Learning Intelligence Dashboard',
-  description: 'Enterprise training & professional development analytics platform',
+  title: 'Meristem HR Dashboard',
+  description: 'Human Resources & Learning Intelligence analytics platform',
 }
 
 // width/initialScale alone fixed the initial "assumes ~980px desktop layout" zoom-out, but still
