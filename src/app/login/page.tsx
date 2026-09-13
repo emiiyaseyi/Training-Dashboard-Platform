@@ -94,7 +94,7 @@ function LoginForm() {
             {/* eslint-disable-next-line @next/next/no-img-element -- small static brand asset, not worth next/image's config for a login page */}
             <img src="/brand/meristem-logo.png" alt="Meristem" className="h-10 w-auto" />
           </div>
-          <p className="text-meristem-900 font-semibold text-lg">HR &amp; Learning Intelligence</p>
+          <p className="text-meristem-900 font-semibold text-lg">Human Resources</p>
           <p className="text-meristem-600 text-sm">Dashboard Platform</p>
         </div>
 
