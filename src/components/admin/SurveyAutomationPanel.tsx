@@ -188,6 +188,10 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
+  const [refreshingAll, setRefreshingAll] = useState(false)
+  const [refreshAllResult, setRefreshAllResult] = useState<{ updated: number; total: number; scheduleCount: number } | null>(null)
+  const [sendingRemindersAll, setSendingRemindersAll] = useState(false)
+  const [remindersAllResult, setRemindersAllResult] = useState<{ sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
   // Delete flow: asks WHY (cancelled vs. rescheduled, and if rescheduled, the new dates or "will
   // be communicated later") before actually deleting, since that reason drives the heads-up email
   // every attendee gets sent first.
@@ -579,6 +583,42 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     }
   }
 
+  const refreshAllFromRoster = async () => {
+    if (!confirm('Re-check every attendee on every schedule against the current roster, and fix any Line Manager (or name/email) that has changed? Already-sent surveys keep their historical record — this only affects what any not-yet-sent survey will use next.')) return
+    setRefreshingAll(true)
+    setRefreshAllResult(null)
+    try {
+      const res = await fetch('/api/admin/training-schedule/refresh-all', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRefreshAllResult(data)
+        await loadSchedules()
+      } else {
+        alert(data.error || 'Failed to refresh attendees.')
+      }
+    } finally {
+      setRefreshingAll(false)
+    }
+  }
+
+  const sendRemindersToAll = async () => {
+    if (!confirm("Send another reminder right now to everyone who hasn't filled a survey yet — including anyone whose reminder already expired? This ignores today's normal reminder limit and expiry.")) return
+    setSendingRemindersAll(true)
+    setRemindersAllResult(null)
+    try {
+      const res = await fetch('/api/admin/training-schedule/send-reminders-all', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRemindersAllResult(data)
+        await loadSchedules()
+      } else {
+        alert(data.error || 'Failed to send reminders.')
+      }
+    } finally {
+      setSendingRemindersAll(false)
+    }
+  }
+
   const refreshAttendees = async (scheduleId: string) => {
     setRefreshingId(scheduleId)
     setRefreshResult(null)
@@ -762,16 +802,50 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               </p>
             </div>
           </div>
-          {scheduleView === 'active' && (
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
             <button
-              onClick={() => (showAddSchedule ? resetScheduleForm() : setShowAddSchedule(true))}
-              className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 shrink-0"
+              onClick={sendRemindersToAll}
+              disabled={sendingRemindersAll}
+              title="Sends another reminder right now to everyone across every schedule who hasn't filled a survey yet — including anyone whose reminder has already expired, and regardless of whether today's automatic reminder already went out."
+              className="flex items-center gap-1.5 text-xs font-medium text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 hover:bg-amber-50 disabled:opacity-50"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Add Schedule
+              {sendingRemindersAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send Reminders to Everyone Outstanding
             </button>
-          )}
+            <button
+              onClick={refreshAllFromRoster}
+              disabled={refreshingAll}
+              title="Re-pulls name, email, and Line Manager for every attendee on every schedule from the current roster — fixes not-yet-sent surveys after someone's Line Manager changes on their Employee record."
+              className="flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {refreshingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh All From Roster
+            </button>
+            {scheduleView === 'active' && (
+              <button
+                onClick={() => (showAddSchedule ? resetScheduleForm() : setShowAddSchedule(true))}
+                className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Schedule
+              </button>
+            )}
+          </div>
         </div>
+
+        {refreshAllResult && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-4">
+            Refreshed {refreshAllResult.updated} of {refreshAllResult.total} attendee(s) across {refreshAllResult.scheduleCount} schedule(s) from the current roster.
+          </p>
+        )}
+        {remindersAllResult && (
+          <div className="text-xs bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4 space-y-1">
+            <p className="text-amber-800">{remindersAllResult.sent} reminder{remindersAllResult.sent === 1 ? '' : 's'} sent.</p>
+            {remindersAllResult.skipped.length > 0 && (
+              <p className="text-amber-700">{remindersAllResult.skipped.length} skipped (missing email/manager address) — see individual schedules for detail.</p>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-1.5 mb-4">
           <button

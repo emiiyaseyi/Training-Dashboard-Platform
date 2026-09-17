@@ -203,3 +203,21 @@ export function resolveLineManager(staff: ResolvedStaff, directory: Map<string, 
   if (!staff.lineManagerStaffId) return null
   return directory.get(normalizeStaffIdKey(staff.lineManagerStaffId)) || null
 }
+
+// The single source of truth for "what should this attendee's manager fields be right now,
+// according to the current roster". Used both by the on-demand admin refresh AND, critically, by
+// survey-send.ts right before every stage/reminder email goes out — an Employee record's Line
+// Manager can change after a TrainingScheduleAttendee row was created (that row snapshots
+// name/email/manager at add-time so a send stays correct even if the roster later goes stale or
+// unavailable), and without this, a manager change would never reach an already-scheduled,
+// not-yet-sent survey. Returns null if the staffId no longer resolves at all (roster removed them)
+// so the caller can leave the existing cached values alone rather than blanking them out.
+export function resolveCurrentManagerFields(
+  staffId: string,
+  directory: Map<string, ResolvedStaff>
+): { lineManagerName: string | null; lineManagerEmail: string | null } | null {
+  const staff = resolveStaff(staffId, directory)
+  if (!staff) return null
+  const manager = resolveLineManager(staff, directory)
+  return { lineManagerName: manager?.name || null, lineManagerEmail: manager?.email || null }
+}

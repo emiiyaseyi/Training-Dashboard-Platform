@@ -3,6 +3,32 @@ import type { TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
 import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
+import { loadRosterDirectory, resolveCurrentManagerFields, type ResolvedStaff } from '@/lib/staff-directory'
+
+// Re-resolves an attendee's Line Manager against the CURRENT roster right before a send, and
+// persists it if it changed. attendee.lineManagerName/Email are a snapshot taken when the
+// attendee was added to the schedule — if their Employee record's manager changes afterward,
+// nothing previously touched that row again, so a not-yet-sent survey would still go out (or Cc)
+// the old manager. Applied to every send path (initial, resend, cron, reminder) so this is fixed
+// automatically everywhere rather than depending on an admin remembering to click "Refresh from
+// Roster" first. A survey stage that's ALREADY been sent is untouched — its historical record
+// (and the manager it actually went to) stays exactly as sent; only what's about to go out now
+// picks up the change.
+async function refreshManagerForSend(
+  attendee: TrainingScheduleAttendee,
+  directory: Map<string, ResolvedStaff>
+): Promise<TrainingScheduleAttendee> {
+  const fresh = resolveCurrentManagerFields(attendee.staffId, directory)
+  if (!fresh) return attendee
+  if (fresh.lineManagerName === attendee.lineManagerName && fresh.lineManagerEmail === attendee.lineManagerEmail) {
+    return attendee
+  }
+  await prisma.trainingScheduleAttendee.update({
+    where: { id: attendee.id },
+    data: { lineManagerName: fresh.lineManagerName, lineManagerEmail: fresh.lineManagerEmail },
+  })
+  return { ...attendee, lineManagerName: fresh.lineManagerName, lineManagerEmail: fresh.lineManagerEmail }
+}
 
 // Concurrency is bounded to mailer.ts's own maxConnections (currently 1 — many company mail
 // servers reject a 2nd simultaneous authenticated session per account with what looks like a bad
@@ -111,9 +137,11 @@ export async function sendSurveyStage(
   // connection + handshake per email — and actually sent with bounded concurrency (matching the
   // pool's own maxConnections), not one at a time, since a sequential await loop never uses more
   // than one pooled connection regardless of how many are available.
+  const directory = await loadRosterDirectory()
   const mailer = await createMailSender()
   try {
-    await runConcurrent(targets, 1, async (attendee) => {
+    await runConcurrent(targets, 1, async (attendeeBefore) => {
+      const attendee = await refreshManagerForSend(attendeeBefore, directory)
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
@@ -209,10 +237,17 @@ const DAY_MS = 86400000
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { expiryEnabled: boolean; expiryDays: number; excludeDefaultCcOnReminders?: boolean }
+  settings: { expiryEnabled: boolean; expiryDays: number; excludeDefaultCcOnReminders?: boolean },
+  // Set by the admin's manual "Send Reminders to Everyone Outstanding" button — a deliberate,
+  // one-off nudge that should reach EVERYONE still unresponded right now, including people the
+  // daily sweep has stopped nudging because their survey expired, and regardless of whether
+  // today's automated reminder already went out. The daily cron never sets this.
+  options: { force?: boolean } = {}
 ): Promise<SendSurveyResult> {
   const result: SendSurveyResult = { sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) return result
+  // remindersEnabled is a deliberate per-schedule admin decision (Admin -> Survey Automation ->
+  // Reminders: On/Off) — force only bypasses expiry and the once-per-day dedupe below, never this.
   if (!schedule.remindersEnabled) return result
   if (stage === 'pre' && !schedule.preEnabled) return result
   if (stage === 'post1' && !schedule.post1Enabled) return result
@@ -227,6 +262,7 @@ export async function sendSurveyReminders(
   const due = schedule.attendees.filter((a) => {
     const sentAt = a[sentField]
     if (!sentAt || a[respondedField]) return false
+    if (options.force) return true
     if (settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS) return false
     const lastNudge = a[reminderField] || sentAt
     return lastNudge.toISOString().slice(0, 10) !== todayKey
@@ -236,9 +272,11 @@ export async function sendSurveyReminders(
   const baseUrl = getAppBaseUrl()
   const recipientRole = surveyRecipientRole(stage)
 
+  const directory = await loadRosterDirectory()
   const mailer = await createMailSender()
   try {
-    await runConcurrent(due, 1, async (attendee) => {
+    await runConcurrent(due, 1, async (attendeeBefore) => {
+      const attendee = await refreshManagerForSend(attendeeBefore, directory)
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
