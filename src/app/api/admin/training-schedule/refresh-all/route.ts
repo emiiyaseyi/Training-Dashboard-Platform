@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { loadRosterDirectory, resolveStaff, resolveCurrentManagerFields } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveCurrentAttendeeFields } from '@/lib/staff-directory'
 
 // Same re-resolve-against-the-current-roster logic as the per-schedule "Refresh from Roster"
 // button, but across every schedule at once — so a Line Manager change on an Employee record can
@@ -21,17 +21,10 @@ export async function POST(_req: NextRequest) {
     for (const schedule of schedules) {
       for (const attendee of schedule.attendees) {
         total++
-        const staff = resolveStaff(attendee.staffId, directory)
-        if (!staff) {
+        const next = resolveCurrentAttendeeFields(attendee.staffId, directory)
+        if (!next) {
           stillMissing.push(attendee.staffName)
           continue
-        }
-        const managerFields = resolveCurrentManagerFields(attendee.staffId, directory)
-        const next = {
-          staffName: staff.name,
-          email: staff.email,
-          lineManagerName: managerFields?.lineManagerName ?? null,
-          lineManagerEmail: managerFields?.lineManagerEmail ?? null,
         }
         const changed =
           next.staffName !== attendee.staffName || next.email !== attendee.email ||
@@ -40,7 +33,7 @@ export async function POST(_req: NextRequest) {
           await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: next })
           updated++
         }
-        if (!staff.email) stillMissing.push(staff.name)
+        if (!next.email) stillMissing.push(next.staffName)
       }
     }
 

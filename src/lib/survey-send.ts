@@ -3,31 +3,30 @@ import type { TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
 import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
-import { loadRosterDirectory, resolveCurrentManagerFields, type ResolvedStaff } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveCurrentAttendeeFields, type ResolvedStaff } from '@/lib/staff-directory'
 
-// Re-resolves an attendee's Line Manager against the CURRENT roster right before a send, and
-// persists it if it changed. attendee.lineManagerName/Email are a snapshot taken when the
-// attendee was added to the schedule — if their Employee record's manager changes afterward,
-// nothing previously touched that row again, so a not-yet-sent survey would still go out (or Cc)
-// the old manager. Applied to every send path (initial, resend, cron, reminder) so this is fixed
-// automatically everywhere rather than depending on an admin remembering to click "Refresh from
-// Roster" first. A survey stage that's ALREADY been sent is untouched — its historical record
-// (and the manager it actually went to) stays exactly as sent; only what's about to go out now
-// picks up the change.
-async function refreshManagerForSend(
+// Re-resolves an attendee's name/email/Line Manager against the CURRENT roster right before a
+// send, and persists whatever changed. Those fields are a snapshot taken when the attendee was
+// added to the schedule — if their Employee record is edited afterward (email filled in, Line
+// Manager changed), nothing previously touched that row again, so a not-yet-sent survey would
+// still go out (or Cc) using the stale snapshot, or skip entirely for a "missing email" that's
+// since been fixed on the Employees page. Applied to every send path (initial, resend, cron,
+// reminder) so this is fixed automatically everywhere rather than depending on an admin
+// remembering to click "Refresh from Roster" first. A survey stage that's ALREADY been sent is
+// untouched — its historical record stays exactly as sent; only what's about to go out now picks
+// up the change.
+async function refreshAttendeeForSend(
   attendee: TrainingScheduleAttendee,
   directory: Map<string, ResolvedStaff>
 ): Promise<TrainingScheduleAttendee> {
-  const fresh = resolveCurrentManagerFields(attendee.staffId, directory)
+  const fresh = resolveCurrentAttendeeFields(attendee.staffId, directory)
   if (!fresh) return attendee
-  if (fresh.lineManagerName === attendee.lineManagerName && fresh.lineManagerEmail === attendee.lineManagerEmail) {
-    return attendee
-  }
-  await prisma.trainingScheduleAttendee.update({
-    where: { id: attendee.id },
-    data: { lineManagerName: fresh.lineManagerName, lineManagerEmail: fresh.lineManagerEmail },
-  })
-  return { ...attendee, lineManagerName: fresh.lineManagerName, lineManagerEmail: fresh.lineManagerEmail }
+  const changed =
+    fresh.staffName !== attendee.staffName || fresh.email !== attendee.email ||
+    fresh.lineManagerName !== attendee.lineManagerName || fresh.lineManagerEmail !== attendee.lineManagerEmail
+  if (!changed) return attendee
+  await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: fresh })
+  return { ...attendee, ...fresh }
 }
 
 // Concurrency is bounded to mailer.ts's own maxConnections (currently 1 — many company mail
@@ -141,7 +140,7 @@ export async function sendSurveyStage(
   const mailer = await createMailSender()
   try {
     await runConcurrent(targets, 1, async (attendeeBefore) => {
-      const attendee = await refreshManagerForSend(attendeeBefore, directory)
+      const attendee = await refreshAttendeeForSend(attendeeBefore, directory)
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
@@ -276,7 +275,7 @@ export async function sendSurveyReminders(
   const mailer = await createMailSender()
   try {
     await runConcurrent(due, 1, async (attendeeBefore) => {
-      const attendee = await refreshManagerForSend(attendeeBefore, directory)
+      const attendee = await refreshAttendeeForSend(attendeeBefore, directory)
       const toAddress = recipientRole === 'manager' ? attendee.lineManagerEmail : attendee.email
       const recipientName = recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail

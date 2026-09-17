@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { loadRosterDirectory, resolveStaff, resolveCurrentManagerFields } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveCurrentAttendeeFields } from '@/lib/staff-directory'
 
 // Attendee email/line-manager fields are snapshotted at add-time (see schema comment) so sending
 // stays correct even if the roster changes later — but that also means fixing a missing email in
@@ -21,17 +21,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const stillMissing: string[] = []
 
     for (const attendee of schedule.attendees) {
-      const staff = resolveStaff(attendee.staffId, directory)
-      if (!staff) {
+      const next = resolveCurrentAttendeeFields(attendee.staffId, directory)
+      if (!next) {
         stillMissing.push(attendee.staffName)
         continue
-      }
-      const managerFields = resolveCurrentManagerFields(attendee.staffId, directory)
-      const next = {
-        staffName: staff.name,
-        email: staff.email,
-        lineManagerName: managerFields?.lineManagerName ?? null,
-        lineManagerEmail: managerFields?.lineManagerEmail ?? null,
       }
       const changed =
         next.staffName !== attendee.staffName || next.email !== attendee.email ||
@@ -40,7 +33,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: next })
         updated++
       }
-      if (!staff.email) stillMissing.push(staff.name)
+      if (!next.email) stillMissing.push(next.staffName)
     }
 
     return NextResponse.json({ updated, total: schedule.attendees.length, stillMissing })
