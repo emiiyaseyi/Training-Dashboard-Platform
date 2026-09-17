@@ -258,14 +258,24 @@ export async function sendSurveyReminders(
   const now = Date.now()
   const todayKey = new Date(now).toISOString().slice(0, 10)
 
-  const due = schedule.attendees.filter((a) => {
+  const isExpired = (sentAt: Date) => settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS
+
+  const due: (TrainingScheduleAttendee & { _reopen: boolean })[] = []
+  for (const a of schedule.attendees) {
     const sentAt = a[sentField]
-    if (!sentAt || a[respondedField]) return false
-    if (options.force) return true
-    if (settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS) return false
+    if (!sentAt || a[respondedField]) continue
+    const expired = isExpired(sentAt)
+    if (options.force) {
+      // A forced reminder to someone already past expiry would otherwise email a link the submit
+      // route independently re-checks and rejects (isSurveyExpired against the ORIGINAL sentAt) —
+      // a dead link is worse than none. Reopen their window (below) instead of just re-nudging it.
+      due.push({ ...a, _reopen: expired })
+      continue
+    }
+    if (expired) continue
     const lastNudge = a[reminderField] || sentAt
-    return lastNudge.toISOString().slice(0, 10) !== todayKey
-  })
+    if (lastNudge.toISOString().slice(0, 10) !== todayKey) due.push({ ...a, _reopen: false })
+  }
   if (due.length === 0) return result
 
   const baseUrl = getAppBaseUrl()
@@ -299,7 +309,15 @@ export async function sendSurveyReminders(
       })
       try {
         await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: settings.excludeDefaultCcOnReminders })
-        await prisma.trainingScheduleAttendee.update({ where: { id: attendee.id }, data: { [reminderField]: new Date() } })
+        const nowTs = new Date()
+        await prisma.trainingScheduleAttendee.update({
+          where: { id: attendee.id },
+          // _reopen (an already-expired attendee caught by the manual force-send) resets sentField
+          // too, not just reminderField — otherwise the submit route still rejects them as expired
+          // (it checks sentField independently) and the tick stays a red X despite the "reminder"
+          // having gone out, which is exactly the dead-end this is meant to avoid.
+          data: attendeeBefore._reopen ? { [sentField]: nowTs, [reminderField]: nowTs } : { [reminderField]: nowTs },
+        })
         result.sent++
         await logSend(schedule, stage, attendee, toAddress, true, true, null)
       } catch (err) {
