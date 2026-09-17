@@ -192,6 +192,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   const [refreshAllResult, setRefreshAllResult] = useState<{ updated: number; total: number; scheduleCount: number } | null>(null)
   const [sendingRemindersAll, setSendingRemindersAll] = useState(false)
   const [remindersAllResult, setRemindersAllResult] = useState<{ sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
+  const [reopeningRecent, setReopeningRecent] = useState(false)
+  const [reopenRecentResult, setReopenRecentResult] = useState<{ checked: number; reopened: number; alreadyFine: number; skippedResponded: number } | null>(null)
   // Delete flow: asks WHY (cancelled vs. rescheduled, and if rescheduled, the new dates or "will
   // be communicated later") before actually deleting, since that reason drives the heads-up email
   // every attendee gets sent first.
@@ -601,6 +603,26 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     }
   }
 
+  const reopenRecentReminders = async () => {
+    if (!confirm("Fix the tick/status for reminders already sent (no new email — just corrects anyone left showing expired even though a reminder already went out to them in the last 24 hours)?")) return
+    setReopeningRecent(true)
+    setReopenRecentResult(null)
+    try {
+      const res = await fetch('/api/admin/training-schedule/reopen-recent-reminders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hours: 24 }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setReopenRecentResult(data)
+        await loadSchedules()
+      } else {
+        alert(data.error || 'Failed to fix tick status.')
+      }
+    } finally {
+      setReopeningRecent(false)
+    }
+  }
+
   const sendRemindersToAll = async () => {
     if (!confirm("Send another reminder right now to everyone who hasn't filled a survey yet — including anyone whose reminder already expired? This ignores today's normal reminder limit and expiry.")) return
     setSendingRemindersAll(true)
@@ -804,6 +826,15 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
             <button
+              onClick={reopenRecentReminders}
+              disabled={reopeningRecent}
+              title="No new email — corrects anyone still showing expired even though a reminder already went out to them in the last 24 hours (a one-time fix for reminders sent before this correction existed)."
+              className="flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {reopeningRecent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Fix Ticks for Recent Reminders
+            </button>
+            <button
               onClick={sendRemindersToAll}
               disabled={sendingRemindersAll}
               title="Sends another reminder right now to everyone across every schedule who hasn't filled a survey yet — including anyone whose reminder has already expired, and regardless of whether today's automatic reminder already went out."
@@ -833,6 +864,11 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           </div>
         </div>
 
+        {reopenRecentResult && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-4">
+            Checked {reopenRecentResult.checked} recent reminder(s): {reopenRecentResult.reopened} fixed, {reopenRecentResult.alreadyFine} already fine, {reopenRecentResult.skippedResponded} already responded.
+          </p>
+        )}
         {refreshAllResult && (
           <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mb-4">
             Refreshed {refreshAllResult.updated} of {refreshAllResult.total} attendee(s) across {refreshAllResult.scheduleCount} schedule(s) from the current roster.
