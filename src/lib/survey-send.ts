@@ -97,7 +97,11 @@ export async function sendSurveyStage(
   scheduleId: string,
   stage: SurveyStage,
   attendeeIds?: string[],
-  onlyUnsent = false
+  onlyUnsent = false,
+  // Lets an admin explicitly exclude Default Cc from a bulk FIRST send too (e.g. sending to a
+  // large batch of participants at once) — normally only a resend skips it. Only ever narrows:
+  // an already-a-resend still skips Default Cc regardless of this flag.
+  skipDefaultCcOverride = false
 ): Promise<SendSurveyResult> {
   if (!(await hasSmtpCredentials())) {
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
@@ -155,11 +159,14 @@ export async function sendSurveyStage(
         return
       }
 
-      // Default Cc only goes on a person's genuinely first-ever send of this stage. Once
-      // sentField is already set, this send is a resend/reminder — whether triggered by the
-      // per-attendee tick, "Send [stage] to all", or the bulk outstanding-reminders button —
-      // and the platform-wide Default Cc shouldn't keep getting copied on every re-nudge.
-      const isResend = !!attendeeBefore[sentField]
+      // Default Cc only goes on a person's genuinely first-ever send of this stage by default.
+      // Once sentField is already set, this send is a resend/reminder — whether triggered by
+      // the per-attendee tick, "Send [stage] to all", or the bulk outstanding-reminders button
+      // — and the platform-wide Default Cc shouldn't keep getting copied on every re-nudge.
+      // skipDefaultCcOverride additionally lets an admin exclude it from a bulk FIRST send too
+      // (e.g. a large batch of participants at once, to avoid clogging that inbox) via an
+      // explicit checkbox on the "Send [stage] to all" button.
+      const shouldSkipDefaultCc = !!attendeeBefore[sentField] || skipDefaultCcOverride
       const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
         stage,
@@ -176,7 +183,7 @@ export async function sendSurveyStage(
         isHistorical: schedule.sourcedFromHistoricalData,
       })
       try {
-        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: isResend })
+        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: shouldSkipDefaultCc })
         // Also stamps the reminder baseline (STAGE_REMINDER_FIELD) to now, so the reminder sweep's
         // "hours since last nudge" interval starts counting from this send, not from epoch/null.
         await prisma.trainingScheduleAttendee.update({

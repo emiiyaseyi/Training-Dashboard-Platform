@@ -18,12 +18,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params
-    const { stage, attendeeIds } = (await req.json()) as { stage: string; attendeeIds?: string[] }
+    const { stage, attendeeIds, skipDefaultCc } = (await req.json()) as { stage: string; attendeeIds?: string[]; skipDefaultCc?: boolean }
     if (!VALID_STAGES.includes(stage as SurveyStage)) {
       return NextResponse.json({ error: 'Invalid survey stage.' }, { status: 400 })
     }
 
-    const result: SendSurveyResult = await sendSurveyStage(id, stage as SurveyStage, attendeeIds)
+    const result: SendSurveyResult = await sendSurveyStage(id, stage as SurveyStage, attendeeIds, false, !!skipDefaultCc)
     return NextResponse.json(result)
   } catch (err) {
     console.error('[admin/training-schedule/send POST]', err)

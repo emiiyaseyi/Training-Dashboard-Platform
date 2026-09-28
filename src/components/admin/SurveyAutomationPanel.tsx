@@ -216,6 +216,11 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   const [sendingKey, setSendingKey] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
+  // Per-schedule "include Default Cc on this send" — ticked (include) by default, per schedule
+  // so unticking one doesn't silently affect every other expanded schedule. Meant for a bulk
+  // first send to a large batch of participants, where CC'ing Default Cc on every single one
+  // of them would clog that inbox.
+  const [includeDefaultCc, setIncludeDefaultCc] = useState<Record<string, boolean>>({})
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
@@ -593,9 +598,11 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   const sendStage = async (scheduleId: string, stage: 'pre' | 'post1' | 'post2', attendeeIds?: string[]) => {
     const key = `${scheduleId}:${stage}:${attendeeIds?.join(',') || 'all'}`
+    const skipDefaultCc = includeDefaultCc[scheduleId] === false
     const confirmMsg = attendeeIds
       ? `Send the ${STAGE_LABELS[stage]} email now?`
-      : `Send the ${STAGE_LABELS[stage]} email to everyone who hasn't already responded? (Anyone who already filled it out won't be re-sent.)`
+      : `Send the ${STAGE_LABELS[stage]} email to everyone who hasn't already responded? (Anyone who already filled it out won't be re-sent.)` +
+        (skipDefaultCc ? '\n\nDefault Cc will NOT be copied on this send (unticked below).' : '')
     if (!confirm(confirmMsg)) return
     setSendingKey(key)
     setSendResult(null)
@@ -603,7 +610,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       const res = await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage, attendeeIds }),
+        body: JSON.stringify({ stage, attendeeIds, skipDefaultCc }),
       })
       const data = await res.json().catch(() => null)
       if (res.ok && data) {
@@ -1312,6 +1319,14 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
                   {isExpanded && (
                     <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-4">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600" title="Untick to exclude the platform-wide Default Cc from this send — useful when sending to a large batch of participants at once, so it doesn't clog that inbox. Resends/reminders already skip it regardless of this.">
+                        <input
+                          type="checkbox"
+                          checked={includeDefaultCc[s.id] !== false}
+                          onChange={(e) => setIncludeDefaultCc({ ...includeDefaultCc, [s.id]: e.target.checked })}
+                        />
+                        Include Default Cc on this send
+                      </label>
                       {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; all three stages are further filtered per-schedule by preEnabled/post1Enabled/post2Enabled (set at creation, editable via Edit) */}
                       <div className="flex flex-wrap items-center gap-2">
                         {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const))
