@@ -920,8 +920,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                   return (
                     <tr key={key} className="border-t border-slate-100">
                       <td className="py-2 px-3 text-slate-700">{label}</td>
-                      <td className="py-2 px-3 text-center text-emerald-700">{sent}</td>
-                      <td className="py-2 px-3 text-center text-blue-700">{filled}</td>
+                      <td className="py-2 px-3 text-center text-blue-700">{sent}</td>
+                      <td className="py-2 px-3 text-center text-emerald-700">{filled}</td>
                       <td className="py-2 px-3 text-center text-amber-700">{sent - filled}</td>
                     </tr>
                   )
