@@ -412,13 +412,21 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setConfirmingGroupKey(null)
   }
 
+  // addingVendorForId doubles as which target gets the new vendor once saved: a real row id for
+  // the inline row-edit picker, or this sentinel for the New Training Schedule form's own picker.
+  const NEW_SCHEDULE_VENDOR_ID = '__new_schedule__'
+
   const saveNewVendor = async (rowId: string) => {
     const name = newVendorInput.trim()
     if (!name) return
+    const applyVendor = (vendorName: string) => {
+      if (rowId === NEW_SCHEDULE_VENDOR_ID) setNewTraining((prev) => ({ ...prev, vendor: vendorName }))
+      else setDraft((d) => (d ? { ...d, vendor: vendorName } : d))
+    }
     // Same name, different case/spacing — just select the existing one instead of creating a duplicate.
     const existing = vendors.find((v) => v.name.trim().toLowerCase() === name.toLowerCase())
     if (existing) {
-      setDraft((d) => (d ? { ...d, vendor: existing.name } : d))
+      applyVendor(existing.name)
       setAddingVendorForId(null)
       setNewVendorInput('')
       return
@@ -434,7 +442,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       if (res.ok) {
         const fresh = await fetch('/api/vendors').then((r) => r.json()).catch(() => [])
         setVendors(Array.isArray(fresh) ? fresh : [])
-        setDraft((d) => (d ? { ...d, vendor: name } : d))
+        applyVendor(name)
       }
     } finally {
       setSavingNewVendor(false)
@@ -707,10 +715,41 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             </label>
             <label className="text-xs text-slate-500">
               Vendor
-              <select value={newTraining.vendor} onChange={(e) => setNewTraining({ ...newTraining, vendor: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1">
-                <option value="">Select…</option>
-                {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
-              </select>
+              {addingVendorForId === NEW_SCHEDULE_VENDOR_ID ? (
+                <div className="flex items-center gap-1 mt-1">
+                  <input
+                    autoFocus
+                    value={newVendorInput}
+                    onChange={(e) => setNewVendorInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveNewVendor(NEW_SCHEDULE_VENDOR_ID) }}
+                    placeholder="New vendor name"
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                  />
+                  <button
+                    onClick={() => saveNewVendor(NEW_SCHEDULE_VENDOR_ID)}
+                    disabled={savingNewVendor || !newVendorInput.trim()}
+                    className="p-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {savingNewVendor ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  </button>
+                  <button onClick={() => { setAddingVendorForId(null); setNewVendorInput('') }} className="p-1.5 rounded border border-slate-300 text-slate-500 hover:bg-slate-50">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={newTraining.vendor}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') { setNewVendorInput(''); setAddingVendorForId(NEW_SCHEDULE_VENDOR_ID); return }
+                    setNewTraining({ ...newTraining, vendor: e.target.value })
+                  }}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                >
+                  <option value="">Select…</option>
+                  {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                  <option value="__add_new__">+ Add new vendor…</option>
+                </select>
+              )}
             </label>
           </div>
           <p className="text-[11px] text-slate-400">
