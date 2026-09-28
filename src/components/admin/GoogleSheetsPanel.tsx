@@ -43,6 +43,7 @@ interface SheetPreview {
   alreadyImported: number
   sample: Record<string, string | number>[]
   error?: string
+  warnings?: string[]
 }
 
 interface PreviewResult {
@@ -532,6 +533,13 @@ export function GoogleSheetsPanel() {
                             </span>
                           )}
                         </div>
+                        {s.warnings && s.warnings.length > 0 && (
+                          <div className="mt-1.5 space-y-1">
+                            {s.warnings.map((w, i) => (
+                              <p key={i} className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">{w}</p>
+                            ))}
+                          </div>
+                        )}
                         {s.error ? (
                           <p className="text-xs text-red-600 mt-1">{s.error}</p>
                         ) : s.sample.length > 0 ? (

@@ -300,6 +300,39 @@ async function dedupeRoster(rows: RosterRow[]): Promise<RosterRow[]> {
   })
 }
 
+// Guards against the same Staff ID being reused for two different people in the source sheet
+// (a copy-paste slip when adding a new row) — without this, both rows import fine individually,
+// but every "latest row per Staff ID wins" lookup across the app (loadRosterDirectory, Employees,
+// Staff Data Quality, survey resolution, …) then only ever resolves ONE of them, and the other
+// silently disappears everywhere with no error anywhere to explain why. Only rows that are about
+// to be imported are checked — an existing DB row is never flagged, since it was presumably fine
+// when it landed. Collisions are excluded from import entirely rather than picking a "winner",
+// since the app has no way to know which of the two people actually owns that Staff ID.
+function splitStaffIdCollisions(rows: RosterRow[]): { rows: RosterRow[]; warnings: string[] } {
+  const groups = new Map<string, RosterRow[]>()
+  for (const r of rows) {
+    const key = normalizeStaffIdKey(r.staffId)
+    if (!key) continue
+    const list = groups.get(key) || []
+    list.push(r)
+    groups.set(key, list)
+  }
+
+  const collidingKeys = new Set<string>()
+  const warnings: string[] = []
+  for (const [key, group] of groups) {
+    const distinctNames = new Set(group.map((r) => `${r.firstName} ${r.lastName}`.trim().toLowerCase()))
+    if (distinctNames.size > 1) {
+      collidingKeys.add(key)
+      const names = group.map((r) => `${r.firstName} ${r.lastName}`.trim()).join('" and "')
+      warnings.push(`Staff ID "${group[0].staffId}" is used by both "${names}" — neither was imported. Fix the Staff ID for one of them in the sheet and sync again.`)
+    }
+  }
+
+  if (collidingKeys.size === 0) return { rows, warnings }
+  return { rows: rows.filter((r) => !collidingKeys.has(normalizeStaffIdKey(r.staffId))), warnings }
+}
+
 type JobType = 'training' | 'feedback' | 'subscription' | 'kss' | 'roster'
 interface Job { type: JobType; sheetName: string; label: string }
 
@@ -351,6 +384,7 @@ export interface SheetPreview {
   alreadyImported: number
   sample: Record<string, string | number>[]
   error?: string
+  warnings?: string[]
 }
 
 export interface SyncPreviewResult {
@@ -409,8 +443,9 @@ export async function previewGoogleSheetsSync(): Promise<SyncPreviewResult> {
       } else if (job.type === 'roster') {
         const { rows, errors } = parseRosterExcel(buffer)
         if (errors.length) { sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: errors.join(' ') }); continue }
-        const newRows = await dedupeRoster(rows)
-        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: rosterSample(newRows) })
+        const dedupedRows = await dedupeRoster(rows)
+        const { rows: newRows, warnings } = splitStaffIdCollisions(dedupedRows)
+        sheets.push({ ...base, totalRows: rows.length, newRows: newRows.length, alreadyImported: rows.length - newRows.length, sample: rosterSample(newRows), warnings: warnings.length ? warnings : undefined })
       }
     } catch (err) {
       sheets.push({ ...base, totalRows: 0, newRows: 0, alreadyImported: 0, sample: [], error: err instanceof Error ? err.message : 'Failed to read this tab.' })
@@ -528,7 +563,9 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
         const { rows, errors: parseErrors, warnings } = parseRosterExcel(buffer)
         if (parseErrors.length) { errors.push({ sheet: job.label, message: parseErrors.join(' ') }); continue }
         if (rows.length === 0) { errors.push({ sheet: job.label, message: 'No data rows found.' }); continue }
-        const newRows = await dedupeRoster(rows)
+        const dedupedRows = await dedupeRoster(rows)
+        const { rows: newRows, warnings: collisionWarnings } = splitStaffIdCollisions(dedupedRows)
+        collisionWarnings.forEach((message) => errors.push({ sheet: job.label, message }))
         if (newRows.length === 0) { imported.roster = 0; continue }
         const result = await importRosterRows(newRows, filename, null, warnings)
         imported.roster = result.recordCount
