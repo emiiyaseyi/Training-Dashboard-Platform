@@ -5,6 +5,7 @@ import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, Alert
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { MONTHS } from '@/lib/filter-types'
+import { sendStageInBatches } from '@/lib/survey-send-batches'
 
 interface TrainingRecordRow {
   id: string
@@ -91,6 +92,8 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   // Whether to include the platform-wide default Cc on a stage's first send, if creating this
   // schedule triggers an immediate send because a stage is already due (see createSchedule below).
   const [newTrainingIncludeDefaultCc, setNewTrainingIncludeDefaultCc] = useState(true)
+  const [newTrainingIncludeLineManagerCc, setNewTrainingIncludeLineManagerCc] = useState(true)
+  const [createSendProgress, setCreateSendProgress] = useState<string | null>(null)
   // Only used when additionalCcMode === 'individual' — who (beyond the automatic line-manager Cc
   // and the platform-wide default Cc) each specific attendee should also Cc, picked from the same
   // roster search as the attendee picker itself.
@@ -206,6 +209,8 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setCreateError('')
     setExcludedQuestionIds({})
     setNewTrainingIncludeDefaultCc(true)
+    setNewTrainingIncludeLineManagerCc(true)
+    setCreateSendProgress(null)
   }
 
   // First attendee picked sets the Business Unit automatically, same convention as Survey
@@ -349,13 +354,13 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifiers: pendingAttendees.map((p) => p.staffId) }),
       })
+      const { createdAttendees } = await attendeesRes.json().catch(() => ({ createdAttendees: [] as { id: string; staffId: string }[] }))
 
       // Individual mode: push each attendee's own picked Cc list now that we finally have their
       // real attendeeId (createdAttendees maps staffId -> id) — anyone with none stays blank,
       // which still gets the automatic line-manager Cc and platform-wide default Cc, just no
       // extra addresses of their own.
       if (newTraining.additionalCcMode === 'individual') {
-        const { createdAttendees } = await attendeesRes.json().catch(() => ({ createdAttendees: [] as { id: string; staffId: string }[] }))
         for (const a of (createdAttendees || [])) {
           const ccList = pendingAttendeeCc[a.staffId]
           if (!ccList || ccList.length === 0) continue
@@ -369,24 +374,25 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
 
       // If any stage is already due right now — same exact windows the daily cron itself checks —
       // send it immediately instead of making everyone wait for tomorrow's tick. A stage that
-      // ISN'T due yet is untouched here; the cron picks it up once it actually becomes due.
+      // ISN'T due yet is untouched here; the cron picks it up once it actually becomes due. Sent
+      // in small batches (not one request for the whole list) so a large participant list shows
+      // live progress instead of one long hang, and never risks the server's request timeout.
       const daysUntilStart = (new Date(newTraining.startDate).getTime() - Date.now()) / 86400000
       const daysSinceEnd = (Date.now() - new Date(newTraining.endDate).getTime()) / 86400000
-      const skipDefaultCc = !newTrainingIncludeDefaultCc
-      if (newTraining.preEnabled && daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3) {
-        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre', skipDefaultCc }),
-        }).catch(() => {})
-      }
-      if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) {
-        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
-        }).catch(() => {})
-      }
-      if (newTraining.post2Enabled && daysSinceEnd >= surveyDaysAfter.post2DaysAfter) {
-        await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
-        }).catch(() => {})
+      const sendOptions = { skipDefaultCc: !newTrainingIncludeDefaultCc, skipLineManagerCc: !newTrainingIncludeLineManagerCc }
+      const attendeeIds: string[] = (createdAttendees || []).map((a: { id: string }) => a.id)
+      const dueStages: ('pre' | 'post1' | 'post2')[] = []
+      if (newTraining.preEnabled && daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3) dueStages.push('pre')
+      if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) dueStages.push('post1')
+      if (newTraining.post2Enabled && daysSinceEnd >= surveyDaysAfter.post2DaysAfter) dueStages.push('post2')
+
+      if (attendeeIds.length > 0 && dueStages.length > 0) {
+        for (const stage of dueStages) {
+          await sendStageInBatches(schedule.id, stage, attendeeIds, sendOptions, (sentSoFar, total) => {
+            setCreateSendProgress(`Sending ${stage === 'pre' ? 'Pre-Training' : stage === 'post1' ? 'Post-Training' : 'Manager Post-Training Impact Review'}… ${sentSoFar}/${total}`)
+          }).catch(() => {})
+        }
+        setCreateSendProgress(null)
       }
 
       resetNewTrainingForm()
@@ -914,6 +920,20 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             </p>
           </div>
 
+          <div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={newTrainingIncludeLineManagerCc}
+                onChange={(e) => setNewTrainingIncludeLineManagerCc(e.target.checked)}
+              />
+              Cc line managers on the first send
+            </label>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Untick to leave line managers off the Pre/Post-1 Cc for that first send (Post-2 already goes straight to the manager, so this has no effect there).
+            </p>
+          </div>
+
           {createError && <p className="text-xs text-red-600">{createError}</p>}
           <div className="flex items-center gap-2">
             <button
@@ -926,6 +946,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             </button>
             <button onClick={resetNewTrainingForm} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
           </div>
+          {createSendProgress && (
+            <p className="flex items-center gap-1.5 text-xs text-navy-700">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {createSendProgress}
+            </p>
+          )}
         </div>
       )}
 

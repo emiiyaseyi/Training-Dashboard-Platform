@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { History, Search, ChevronDown, ChevronUp, Loader2, Send, RefreshCw, UserPlus } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { Pagination, paginate } from '@/components/ui/Pagination'
+import { sendStageInBatches } from '@/lib/survey-send-batches'
 
 interface HistoricalAttendee { staffId: string; staffName: string; businessUnit: string }
 interface HistoricalGroup {
@@ -100,6 +101,11 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   // Whether to include the platform-wide default Cc on the immediate first send that createAndSend
   // triggers — useful to skip for a large historical group so it doesn't clog the default Cc inbox.
   const [includeDefaultCcOnCreate, setIncludeDefaultCcOnCreate] = useState(true)
+  const [includeLineManagerCcOnCreate, setIncludeLineManagerCcOnCreate] = useState(true)
+  // Live progress while the immediate post-1/post-2 send is running in batches (see createAndSend)
+  // — a large historical group can take a while, since the mailer sends one at a time over one
+  // pooled SMTP connection.
+  const [createSendProgress, setCreateSendProgress] = useState<string | null>(null)
   const [stageChoice, setStageChoice] = useState<StageChoice>('both')
   const [creating, setCreating] = useState(false)
   const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[]; post1Sent?: number; post2Sent?: number } | null>(null)
@@ -222,28 +228,32 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifiers: [...selected] }),
       })
-      const data = await attendeesRes.json().catch(() => ({ added: 0, notFound: [], noEmail: [] }))
+      const data = await attendeesRes.json().catch(() => ({ added: 0, notFound: [], noEmail: [], createdAttendees: [] }))
 
       // Send immediately — the whole point of "Already Attended Trainings" is catching up surveys
       // for training that already happened, so there's no reason to make the admin separately find
       // the new schedule and click Send by hand. The daily reminder sweep then picks these up
-      // automatically from here, exactly like it does for any other schedule.
+      // automatically from here, exactly like it does for any other schedule. Sent in small
+      // batches (not one request for the whole list) so a large group shows live progress instead
+      // of one long hang, and never risks the server's request timeout.
       let post1Sent: number | undefined
       let post2Sent: number | undefined
-      if (data.added > 0) {
-        const skipDefaultCc = !includeDefaultCcOnCreate
+      const attendeeIds: string[] = (data.createdAttendees || []).map((a: { id: string }) => a.id)
+      if (attendeeIds.length > 0) {
+        const sendOptions = { skipDefaultCc: !includeDefaultCcOnCreate, skipLineManagerCc: !includeLineManagerCcOnCreate }
         if (stageChoice !== 'post2') {
-          const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
-          }).then((res) => res.json()).catch(() => null)
+          const r = await sendStageInBatches(schedule.id, 'post1', attendeeIds, sendOptions, (sentSoFar, total) => {
+            setCreateSendProgress(`Sending Post-Training survey… ${sentSoFar}/${total}`)
+          }).catch(() => null)
           post1Sent = r?.sent
         }
         if (stageChoice !== 'post1') {
-          const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
-          }).then((res) => res.json()).catch(() => null)
+          const r = await sendStageInBatches(schedule.id, 'post2', attendeeIds, sendOptions, (sentSoFar, total) => {
+            setCreateSendProgress(`Sending Manager Post-Training Impact Review… ${sentSoFar}/${total}`)
+          }).catch(() => null)
           post2Sent = r?.sent
         }
+        setCreateSendProgress(null)
       }
 
       setResult({ key: groupKey(g), added: data.added ?? 0, notFound: data.notFound ?? [], noEmail: data.noEmail ?? [], post1Sent, post2Sent })
@@ -574,6 +584,21 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                           />
                           Include Default Cc on this first send
                         </label>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={includeLineManagerCcOnCreate}
+                            onChange={(e) => setIncludeLineManagerCcOnCreate(e.target.checked)}
+                          />
+                          Cc line managers on this first send
+                        </label>
+
+                        {createSendProgress && (
+                          <p className="flex items-center gap-1.5 text-xs text-navy-700">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> {createSendProgress}
+                          </p>
+                        )}
 
                         {result && result.key === key && (
                           <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">

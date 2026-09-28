@@ -101,7 +101,11 @@ export async function sendSurveyStage(
   // Lets an admin explicitly exclude Default Cc from a bulk FIRST send too (e.g. sending to a
   // large batch of participants at once) — normally only a resend skips it. Only ever narrows:
   // an already-a-resend still skips Default Cc regardless of this flag.
-  skipDefaultCcOverride = false
+  skipDefaultCcOverride = false,
+  // Drops the automatic line-manager Cc from a bulk send (pre/post1 only — post2 already goes
+  // TO the manager directly, so there's no "line manager Cc" to drop there). Schedule-level
+  // Additional Cc and the platform-wide Default Cc are unaffected either way.
+  skipLineManagerCc = false
 ): Promise<SendSurveyResult> {
   if (!(await hasSmtpCredentials())) {
     throw new Error('SMTP is not configured yet. Set it up in Admin Settings first.')
@@ -167,7 +171,8 @@ export async function sendSurveyStage(
       // (e.g. a large batch of participants at once, to avoid clogging that inbox) via an
       // explicit checkbox on the "Send [stage] to all" button.
       const shouldSkipDefaultCc = !!attendeeBefore[sentField] || skipDefaultCcOverride
-      const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
+      const dropLineManagerCc = skipLineManagerCc && recipientRole !== 'manager'
+      const cc = [...(ccAddress && !dropLineManagerCc ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
         stage,
         recipientName: recipientName || 'there',

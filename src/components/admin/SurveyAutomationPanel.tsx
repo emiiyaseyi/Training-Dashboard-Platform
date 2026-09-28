@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { sendStageInBatches } from '@/lib/survey-send-batches'
 
 const SCHEDULE_PAGE_SIZE = 10
 const ATTENDEE_PAGE_SIZE = 15
@@ -215,16 +216,24 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   const [newSchedulePending, setNewSchedulePending] = useState<RosterStaff[]>([])
 
   const [sendingKey, setSendingKey] = useState<string | null>(null)
-  const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[] } | null>(null)
+  const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[]; inProgress?: boolean; total?: number } | null>(null)
   // Per-schedule "include Default Cc on this send" — ticked (include) by default, per schedule
   // so unticking one doesn't silently affect every other expanded schedule. Meant for a bulk
   // first send to a large batch of participants, where CC'ing Default Cc on every single one
   // of them would clog that inbox.
   const [includeDefaultCc, setIncludeDefaultCc] = useState<Record<string, boolean>>({})
+  // Same per-schedule idea, but for the automatic line-manager Cc on pre/post1 sends (post2 has
+  // no line-manager Cc to drop — it already goes TO the manager). Ticked (include) by default.
+  const [includeLineManagerCc, setIncludeLineManagerCc] = useState<Record<string, boolean>>({})
   // Same "include Default Cc" choice, but for the NEW-schedule creation form specifically —
   // creating a schedule for a training that's already due sends immediately (see saveSchedule
   // below), so this is "when about to send the mail" too, not just the expanded-schedule buttons.
   const [newScheduleIncludeDefaultCc, setNewScheduleIncludeDefaultCc] = useState(true)
+  const [newScheduleIncludeLineManagerCc, setNewScheduleIncludeLineManagerCc] = useState(true)
+  // Progress feedback while the immediate send-on-create is running in batches (see saveSchedule)
+  // — replaces a single long spinner with a live count, since a large participant list can take
+  // a while (the mailer sends one at a time over one pooled SMTP connection).
+  const [createSendProgress, setCreateSendProgress] = useState<string | null>(null)
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
@@ -369,6 +378,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     setEditingScheduleId(null)
     setShowAddSchedule(false)
     setExcludedQuestionIds({})
+    setNewScheduleIncludeDefaultCc(true)
+    setNewScheduleIncludeLineManagerCc(true)
+    setCreateSendProgress(null)
   }
 
   const startEditSchedule = (s: Schedule) => {
@@ -427,33 +439,35 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           }).then(() => loadTaxonomies())
         }
         if (!editingScheduleId && newSchedulePending.length > 0) {
-          await fetch(`/api/admin/training-schedule/${saved.id}/attendees`, {
+          const attendeesRes = await fetch(`/api/admin/training-schedule/${saved.id}/attendees`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identifiers: newSchedulePending.map((p) => p.staffId) }),
           })
+          const { createdAttendees } = await attendeesRes.json().catch(() => ({ createdAttendees: [] as { id: string; staffId: string }[] }))
+          const attendeeIds: string[] = (createdAttendees || []).map((a: { id: string }) => a.id)
 
           // A schedule entered for a training that's already due for a stage right now (same exact
           // windows the daily cron itself checks) shouldn't have to wait for tomorrow's tick to
           // catch up — send it immediately instead. A stage that isn't due yet is untouched here;
-          // the cron picks it up once it actually becomes due, exactly as normal.
+          // the cron picks it up once it actually becomes due, exactly as normal. Sent in small
+          // batches (not one request for the whole list) so a large participant list shows live
+          // progress instead of one long hang, and never risks hitting the server's request timeout.
           const daysUntilStart = (new Date(newSchedule.startDate).getTime() - Date.now()) / 86400000
           const daysSinceEnd = (Date.now() - new Date(newSchedule.endDate).getTime()) / 86400000
-          const skipDefaultCc = !newScheduleIncludeDefaultCc
-          if (newSchedule.preEnabled && daysUntilStart <= settings.preDaysBefore && daysUntilStart >= -3) {
-            await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre', skipDefaultCc }),
-            }).catch(() => {})
-          }
-          if (newSchedule.post1Enabled && daysSinceEnd >= settings.post1DaysAfter) {
-            await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
-            }).catch(() => {})
-          }
-          if (newSchedule.post2Enabled && daysSinceEnd >= settings.post2DaysAfter) {
-            await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
-            }).catch(() => {})
+          const sendOptions = { skipDefaultCc: !newScheduleIncludeDefaultCc, skipLineManagerCc: !newScheduleIncludeLineManagerCc }
+          const dueStages: ('pre' | 'post1' | 'post2')[] = []
+          if (newSchedule.preEnabled && daysUntilStart <= settings.preDaysBefore && daysUntilStart >= -3) dueStages.push('pre')
+          if (newSchedule.post1Enabled && daysSinceEnd >= settings.post1DaysAfter) dueStages.push('post1')
+          if (newSchedule.post2Enabled && daysSinceEnd >= settings.post2DaysAfter) dueStages.push('post2')
+
+          if (attendeeIds.length > 0 && dueStages.length > 0) {
+            for (const stage of dueStages) {
+              await sendStageInBatches(saved.id, stage, attendeeIds, sendOptions, (sentSoFar, total) => {
+                setCreateSendProgress(`Sending ${STAGE_LABELS[stage]}… ${sentSoFar}/${total}`)
+              }).catch(() => {})
+            }
+            setCreateSendProgress(null)
           }
         }
         resetScheduleForm()
@@ -601,29 +615,46 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     await loadSchedules()
   }
 
+  const RESPONDED_FIELD = { pre: 'preSurveyRespondedAt', post1: 'post1SurveyRespondedAt', post2: 'post2SurveyRespondedAt' } as const
+
   const sendStage = async (scheduleId: string, stage: 'pre' | 'post1' | 'post2', attendeeIds?: string[]) => {
     const key = `${scheduleId}:${stage}:${attendeeIds?.join(',') || 'all'}`
     const skipDefaultCc = includeDefaultCc[scheduleId] === false
+    const skipLineManagerCc = includeLineManagerCc[scheduleId] === false
     const confirmMsg = attendeeIds
       ? `Send the ${STAGE_LABELS[stage]} email now?`
       : `Send the ${STAGE_LABELS[stage]} email to everyone who hasn't already responded? (Anyone who already filled it out won't be re-sent.)` +
-        (skipDefaultCc ? '\n\nDefault Cc will NOT be copied on this send (unticked below).' : '')
+        (skipDefaultCc ? '\n\nDefault Cc will NOT be copied on this send (unticked below).' : '') +
+        (skipLineManagerCc ? '\n\nLine managers will NOT be Cc\'d on this send (unticked below).' : '')
     if (!confirm(confirmMsg)) return
     setSendingKey(key)
     setSendResult(null)
     try {
-      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage, attendeeIds, skipDefaultCc }),
-      })
-      const data = await res.json().catch(() => null)
-      if (res.ok && data) {
-        setSendResult({ key, sent: data.sent, skipped: data.skipped })
-        await loadSchedules()
+      // A specific attendee (resend/reminder tick) is always just the one or few ids passed in —
+      // sent as a single request. A bulk "send to all" click can target hundreds of people, so
+      // that list is resolved client-side and sent in batches instead, with live progress, rather
+      // than one request that either hangs the UI or risks the server's own request timeout.
+      if (attendeeIds) {
+        const res = await fetch(`/api/admin/training-schedule/${scheduleId}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage, attendeeIds, skipDefaultCc, skipLineManagerCc }),
+        })
+        const data = await res.json().catch(() => null)
+        if (res.ok && data) {
+          setSendResult({ key, sent: data.sent, skipped: data.skipped })
+        } else {
+          alert(data?.error || `Failed to send (server returned ${res.status}). Check Survey Send Log below for whatever went out before the failure.`)
+        }
       } else {
-        alert(data?.error || `Failed to send (server returned ${res.status}). Check Survey Send Log below for whatever went out before the failure.`)
+        const schedule = schedules.find((s) => s.id === scheduleId)
+        const targetIds = (schedule?.attendees || []).filter((a) => !a[RESPONDED_FIELD[stage]]).map((a) => a.id)
+        const result = await sendStageInBatches(scheduleId, stage, targetIds, { skipDefaultCc, skipLineManagerCc }, (sentSoFar, total) => {
+          setSendResult({ key, sent: sentSoFar, skipped: [], inProgress: true, total })
+        })
+        setSendResult({ key, sent: result.sent, skipped: result.skipped })
       }
+      await loadSchedules()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to send — check your connection and try again.')
     } finally {
@@ -1279,6 +1310,19 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                 default Cc for that first send — useful for a large participant list so it doesn&apos;t clog the default Cc inbox.
               </p>
             </div>
+            <div>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={newScheduleIncludeLineManagerCc}
+                  onChange={(e) => setNewScheduleIncludeLineManagerCc(e.target.checked)}
+                />
+                Cc line managers on the first send
+              </label>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Untick to leave line managers off the Pre/Post-1 Cc for that first send (Post-2 already goes straight to the manager, so this has no effect there).
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={saveSchedule}
@@ -1294,6 +1338,11 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                 </button>
               )}
             </div>
+            {createSendProgress && (
+              <p className="flex items-center gap-1.5 text-xs text-navy-700">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> {createSendProgress}
+              </p>
+            )}
           </div>
         )}
 
@@ -1345,6 +1394,14 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                           onChange={(e) => setIncludeDefaultCc({ ...includeDefaultCc, [s.id]: e.target.checked })}
                         />
                         Include Default Cc on this send
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600" title="Untick to leave line managers off the Pre/Post-1 Cc for this send. Post-2 already goes straight to the manager, so this has no effect there.">
+                        <input
+                          type="checkbox"
+                          checked={includeLineManagerCc[s.id] !== false}
+                          onChange={(e) => setIncludeLineManagerCc({ ...includeLineManagerCc, [s.id]: e.target.checked })}
+                        />
+                        Cc line managers on this send
                       </label>
                       {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; all three stages are further filtered per-schedule by preEnabled/post1Enabled/post2Enabled (set at creation, editable via Edit) */}
                       <div className="flex flex-wrap items-center gap-2">
@@ -1453,7 +1510,13 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                       )}
                       {sendResult && sendResult.key.startsWith(`${s.id}:`) && (
                         <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 space-y-1">
-                          <p className="text-emerald-700">{sendResult.sent} email{sendResult.sent === 1 ? '' : 's'} sent.</p>
+                          {sendResult.inProgress ? (
+                            <p className="flex items-center gap-1.5 text-navy-700">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Sending… {sendResult.sent}/{sendResult.total}
+                            </p>
+                          ) : (
+                            <p className="text-emerald-700">{sendResult.sent} email{sendResult.sent === 1 ? '' : 's'} sent.</p>
+                          )}
                           {sendResult.skipped.length > 0 && (
                             <div className="text-amber-700">
                               {sendResult.skipped.map((sk, i) => (
