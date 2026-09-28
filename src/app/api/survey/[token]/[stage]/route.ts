@@ -61,6 +61,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       employeeName: attendee.staffName,
       role: staff?.role || '',
       trainingType: attendee.schedule.trainingType || '',
+      vendorName: attendee.schedule.vendor || '',
       recipientName: recipientRole === 'manager' ? attendee.lineManagerName || '' : attendee.staffName,
     }
 

@@ -8,7 +8,7 @@ export interface DefaultQuestion {
   type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
   options?: string[]
   required: boolean
-  autoFill?: 'trainingName' | 'businessUnit' | 'employeeName' | 'role' | 'recipientName' | 'trainingType'
+  autoFill?: 'trainingName' | 'businessUnit' | 'employeeName' | 'role' | 'recipientName' | 'trainingType' | 'vendorName'
   fieldKey?: string
   driveFolderId?: string
 }
@@ -57,7 +57,7 @@ export const DEFAULT_QUESTIONS: Record<'pre' | 'post1' | 'post2', DefaultQuestio
     { section: 'Business Impact & Performance', label: 'How confident are you that this training contributes to overall business goals?', type: 'rating', required: true, fieldKey: 'confidenceRating' },
 
     { section: 'Final Reflections', label: 'How would you rate the overall effectiveness and professionalism of the training vendor/provider/facilitator in delivering this programme?', type: 'rating', required: true, fieldKey: 'vendorRating' },
-    { section: 'Final Reflections', label: 'Training Provider/Facilitator', type: 'select', options: VENDOR_OPTIONS, required: false, fieldKey: 'vendorName' },
+    { section: 'Final Reflections', label: 'Training Provider/Facilitator', type: 'select', options: VENDOR_OPTIONS, required: false, autoFill: 'vendorName', fieldKey: 'vendorName' },
     { section: 'Final Reflections', label: 'Would you recommend this training to others in the business?', type: 'select', options: ['Yes', 'No', 'Maybe'], required: false },
     { section: 'Final Reflections', label: 'Any additional comments or recommendations?', type: 'textarea', required: false, fieldKey: 'qualitativeResponse' },
 

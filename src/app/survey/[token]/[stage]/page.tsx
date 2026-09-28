@@ -264,18 +264,48 @@ export default function SurveyPage() {
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
+  // Answers are saved to this browser's localStorage as the person types, keyed by the survey
+  // token itself (already unguessable, so it doubles fine as a per-link storage key) — so a
+  // reload, an accidental tab close, or coming back later picks up exactly where they left off
+  // instead of starting the whole form over. Never reaches the server or Claude; it only ever
+  // lives in this one browser. Cleared once the form actually submits.
+  const draftKey = `survey-draft-${params.token}-${params.stage}`
+
   useEffect(() => {
     fetch(`/api/survey/${params.token}/${params.stage}`)
       .then(async (res) => {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'This survey link is invalid.')
         setContext(data)
+        try {
+          const saved = localStorage.getItem(draftKey)
+          if (saved) setAnswers(JSON.parse(saved))
+        } catch {
+          // Private browsing, blocked storage, or corrupted JSON — just start with a blank form.
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'This survey link is invalid.'))
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.token, params.stage])
 
-  const visibleQuestions = useMemo(() => (context?.questions || []).filter((q) => !q.autoFill), [context])
+  useEffect(() => {
+    if (Object.keys(answers).length === 0) return
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(answers))
+    } catch {
+      // Storage full/blocked — the form still works, it just won't survive a reload this time.
+    }
+  }, [answers, draftKey])
+
+  // A question with an autoFill source is hidden only when that value actually resolved to
+  // something — e.g. Training Provider/Facilitator is prefilled and hidden when the admin set a
+  // vendor on the schedule, but shown for the participant to pick themselves when they didn't,
+  // rather than silently submitting blank.
+  const visibleQuestions = useMemo(
+    () => (context?.questions || []).filter((q) => !q.autoFill || !context?.autoFillValues[q.autoFill]),
+    [context]
+  )
   const sections = useMemo(() => {
     const seen: string[] = []
     for (const q of visibleQuestions) {
@@ -300,6 +330,7 @@ export default function SurveyPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to submit.')
       setSubmitted(true)
+      try { localStorage.removeItem(draftKey) } catch { /* nothing to clean up */ }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to submit.')
     } finally {

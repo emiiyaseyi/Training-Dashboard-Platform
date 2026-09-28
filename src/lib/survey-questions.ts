@@ -85,11 +85,16 @@ export async function getStageQuestions(stage: SurveyStageKey) {
   // since the row already exists under that same label.
   if (stage === 'post1') {
     const trainingType = existing.find((q) => q.label === 'Training Type' && q.section === 'Bio-Data')
-    if (trainingType && (trainingType.required || !trainingType.autoFill)) {
-      await prisma.surveyQuestion.update({
-        where: { id: trainingType.id },
-        data: { required: false, autoFill: 'trainingType' },
-      })
+    const vendorName = existing.find((q) => q.label === 'Training Provider/Facilitator' && q.section === 'Final Reflections')
+    const needsTrainingTypeFix = trainingType && (trainingType.required || !trainingType.autoFill)
+    const needsVendorNameFix = vendorName && !vendorName.autoFill
+    if (needsTrainingTypeFix || needsVendorNameFix) {
+      if (needsTrainingTypeFix) {
+        await prisma.surveyQuestion.update({ where: { id: trainingType.id }, data: { required: false, autoFill: 'trainingType' } })
+      }
+      if (needsVendorNameFix) {
+        await prisma.surveyQuestion.update({ where: { id: vendorName.id }, data: { autoFill: 'vendorName' } })
+      }
       return prisma.surveyQuestion.findMany({ where: { stage }, orderBy: { order: 'asc' } })
     }
   }

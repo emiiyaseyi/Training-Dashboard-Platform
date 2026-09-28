@@ -68,7 +68,10 @@ function buildMirrorFields(
       { label: 'Role Relevance', candidates: ['rolerelevance', 'trainingrelevance', 'relevanttorole', 'howrelevant', 'rolesuitability'], value: asNumber(fieldAnswer('roleRelevance')) },
       { label: 'Expectations Met', candidates: ['expectationsmet', 'expectationmet', 'metexpectations', 'extentmet', 'towhichextent'], value: asNumber(fieldAnswer('expectationsMet')) },
       { label: 'Vendor Rating', candidates: ['vendorrating', 'facilitatorrating', 'providerrating', 'trainerrating', 'facilitatorevaluation', 'instructorrating'], value: asNumber(fieldAnswer('vendorRating')) },
-      { label: 'Vendor Name', candidates: ['vendorname', 'facilitatorname', 'providername', 'trainername', 'facilitator', 'trainer', 'provider'], value: asText(fieldAnswer('vendorName')) },
+      // Falls back to the schedule's own vendor field — when the admin set one, that question is
+      // auto-filled and hidden from the respondent (see visibleQuestions in the survey page), so
+      // there's never an answers[q.id] to read for it in that case.
+      { label: 'Vendor Name', candidates: ['vendorname', 'facilitatorname', 'providername', 'trainername', 'facilitator', 'trainer', 'provider'], value: asText(fieldAnswer('vendorName')) || attendee.schedule.vendor || '' },
       { label: 'Qualitative responses', candidates: ['qualitativeresponse', 'qualitative', 'comments', 'feedback'], value: asText(fieldAnswer('qualitativeResponse')) },
       { label: 'Month', candidates: ['month', 'trainingmonth', 'period', 'feedbackmonth'], value: submittedMonth },
       { label: 'Date Filled', candidates: ['datefilled', 'submittedat', 'dateandtime', 'responsedate', 'datesubmitted'], value: submittedAtText },
