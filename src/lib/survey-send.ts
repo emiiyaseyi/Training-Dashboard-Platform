@@ -155,6 +155,11 @@ export async function sendSurveyStage(
         return
       }
 
+      // Default Cc only goes on a person's genuinely first-ever send of this stage. Once
+      // sentField is already set, this send is a resend/reminder — whether triggered by the
+      // per-attendee tick, "Send [stage] to all", or the bulk outstanding-reminders button —
+      // and the platform-wide Default Cc shouldn't keep getting copied on every re-nudge.
+      const isResend = !!attendeeBefore[sentField]
       const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
         stage,
@@ -171,7 +176,7 @@ export async function sendSurveyStage(
         isHistorical: schedule.sourcedFromHistoricalData,
       })
       try {
-        await mailer.send({ to: toAddress, cc, subject, html })
+        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: isResend })
         // Also stamps the reminder baseline (STAGE_REMINDER_FIELD) to now, so the reminder sweep's
         // "hours since last nudge" interval starts counting from this send, not from epoch/null.
         await prisma.trainingScheduleAttendee.update({
