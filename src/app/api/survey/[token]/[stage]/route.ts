@@ -5,6 +5,7 @@ import type { SurveyStage } from '@/lib/survey-email'
 import { getStageQuestions, excludeQuestions, parseExcludedQuestionIds, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { rateLimit } from '@/lib/rate-limit'
+import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 
 const VALID_STAGES: SurveyStage[] = ['pre', 'post1', 'post2']
 
@@ -51,11 +52,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const excluded = parseExcludedQuestionIds(attendee.schedule.excludedQuestionIds)
     const questions = excludeQuestions(allQuestions, excluded[stageKey as SurveyStageKey])
 
+    const directory = await loadRosterDirectory()
+    const staff = resolveStaff(attendee.staffId, directory)
+
     const autoFillValues: Record<string, string> = {
       trainingName: attendee.schedule.trainingName,
       businessUnit: attendee.schedule.businessUnit,
       employeeName: attendee.staffName,
-      role: '',
+      role: staff?.role || '',
+      trainingType: attendee.schedule.trainingType || '',
       recipientName: recipientRole === 'manager' ? attendee.lineManagerName || '' : attendee.staffName,
     }
 

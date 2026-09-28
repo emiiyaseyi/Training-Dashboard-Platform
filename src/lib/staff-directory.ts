@@ -13,6 +13,7 @@ export interface ResolvedStaff {
   email: string | null
   lineManagerStaffId: string | null
   businessUnit: string
+  role: string | null
   // Deactivated (Employees page) staff still resolve here — this directory is also used for
   // historical lookups (an old training record's attendee shouldn't fail to resolve just because
   // they've since left) — but callers adding someone to something NEW (a training schedule, the
@@ -88,6 +89,7 @@ async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>
       // BU-scoped data.
       bu: findHeader(headers, ['businessunit', 'businessunits', 'bu', 'costcenter']),
       lineManager: findHeader(headers, ['linemanagerstaffid', 'linemanagerid', 'reportsto', 'managerstaffid', 'manager', 'linemanager', 'supervisor']),
+      role: findHeader(headers, ['role', 'jobtitle', 'position', 'designation']),
     }
     if (!col.staffId) return map // can't join to anything without a Staff ID column
 
@@ -112,6 +114,7 @@ async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>
         email: col.email ? norm(r[col.email]).toLowerCase() || null : null,
         lineManagerStaffId: col.lineManager ? norm(r[col.lineManager]).toUpperCase() || null : null,
         businessUnit: col.bu ? normalizeBUName(norm(r[col.bu])) : '',
+        role: col.role ? norm(r[col.role]) || null : null,
         active: true,
       })
     }
@@ -145,6 +148,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       email: r.email,
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
+      role: r.role,
       active: r.active,
     })
   }
@@ -163,6 +167,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
         email: existing.email || extra.email,
         lineManagerStaffId: existing.lineManagerStaffId || extra.lineManagerStaffId,
         businessUnit: existing.businessUnit || extra.businessUnit,
+        role: existing.role || extra.role,
         active: existing.active,
       })
     }

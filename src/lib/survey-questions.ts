@@ -78,5 +78,21 @@ export async function getStageQuestions(stage: SurveyStageKey) {
     return prisma.surveyQuestion.findMany({ where: { stage }, orderBy: { order: 'asc' } })
   }
 
+  // Correct one already-seeded row in place: "Bio-Data: Training Type" (post1) was originally
+  // seeded as a required manual select, before it got an autoFill source (TrainingSchedule.
+  // trainingType) — any stage seeded before that change still has the old required/no-autoFill
+  // row sitting in the DB, which the empty-table/missing-by-label backfills above never touch
+  // since the row already exists under that same label.
+  if (stage === 'post1') {
+    const trainingType = existing.find((q) => q.label === 'Training Type' && q.section === 'Bio-Data')
+    if (trainingType && (trainingType.required || !trainingType.autoFill)) {
+      await prisma.surveyQuestion.update({
+        where: { id: trainingType.id },
+        data: { required: false, autoFill: 'trainingType' },
+      })
+      return prisma.surveyQuestion.findMany({ where: { stage }, orderBy: { order: 'asc' } })
+    }
+  }
+
   return existing
 }

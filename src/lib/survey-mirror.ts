@@ -3,6 +3,7 @@ import { MONTHS } from '@/lib/filter-types'
 import { connectToSpreadsheet, appendMirrorRow, appendMirrorRows, type MirrorField } from '@/lib/google-sheets'
 import type { SurveyStageKey } from '@/lib/survey-questions'
 import type { SurveyQuestion, TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
+import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 
 const MIRROR_SHEET_FIELD = {
   pre: 'preMirrorSheetName',
@@ -41,7 +42,8 @@ function buildMirrorFields(
   attendee: TrainingScheduleAttendee & { schedule: TrainingSchedule },
   answers: Record<string, string | string[]>,
   questions: SurveyQuestion[],
-  submittedAt: Date
+  submittedAt: Date,
+  role: string
 ): MirrorField[] {
   const fieldAnswer = (fieldKey: string) => {
     const q = questions.find((q) => q.fieldKey === fieldKey)
@@ -59,7 +61,7 @@ function buildMirrorFields(
       { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
       { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
       { label: 'Training Title', candidates: ['trainingtitle', 'training', 'course', 'programme'], value: attendee.schedule.trainingName },
-      { label: 'Role', candidates: ['role', 'jobtitle', 'position'], value: '' },
+      { label: 'Role', candidates: ['role', 'jobtitle', 'position'], value: role },
       { label: 'Application response', candidates: ['applicationresponse', 'application', 'applied'], value: asText(fieldAnswer('applicationResponse')) },
       { label: 'Impact alignment', candidates: ['impactalignment', 'impact', 'alignment', 'strategicalignment'], value: asText(fieldAnswer('impactAlignment')) },
       { label: 'Confidence rating', candidates: ['confidencerating', 'confidencelevel', 'basedonconfidence', 'confidence'], value: asNumber(fieldAnswer('confidenceRating')) },
@@ -124,8 +126,10 @@ export async function mirrorSurveyResponse(
   }
 
   try {
+    const directory = await loadRosterDirectory()
+    const role = resolveStaff(attendee.staffId, directory)?.role || ''
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-    const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt)
+    const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt, role)
     await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
     await recordStatus(true, `Synced to "${sheetName}".`)
     return { attempted: true, success: true, message: `Synced to "${sheetName}".` }
@@ -156,7 +160,7 @@ export async function mirrorSurveyResponses(items: MirrorBatchItem[]): Promise<M
   const results = new Map<string, MirrorResult>()
   if (items.length === 0) return results
 
-  const [settings, config] = await Promise.all([prisma.surveySettings.findFirst(), prisma.googleSheetsConfig.findFirst()])
+  const [settings, config, directory] = await Promise.all([prisma.surveySettings.findFirst(), prisma.googleSheetsConfig.findFirst(), loadRosterDirectory()])
 
   const byStage = new Map<SurveyStageKey, MirrorBatchItem[]>()
   for (const item of items) {
@@ -173,7 +177,10 @@ export async function mirrorSurveyResponses(items: MirrorBatchItem[]): Promise<M
       continue
     }
 
-    const withFields = stageItems.map((it) => ({ item: it, fields: buildMirrorFields(stageKey, it.attendee, it.answers, it.questions, it.submittedAt) }))
+    const withFields = stageItems.map((it) => ({
+      item: it,
+      fields: buildMirrorFields(stageKey, it.attendee, it.answers, it.questions, it.submittedAt, resolveStaff(it.attendee.staffId, directory)?.role || ''),
+    }))
     const shapeKey = (fields: MirrorField[]) => fields.map((f) => f.label).join('|')
 
     const shapeGroups = new Map<string, typeof withFields>()

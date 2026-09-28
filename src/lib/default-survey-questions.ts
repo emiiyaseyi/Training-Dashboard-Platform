@@ -8,7 +8,7 @@ export interface DefaultQuestion {
   type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file'
   options?: string[]
   required: boolean
-  autoFill?: 'trainingName' | 'businessUnit' | 'employeeName' | 'role' | 'recipientName'
+  autoFill?: 'trainingName' | 'businessUnit' | 'employeeName' | 'role' | 'recipientName' | 'trainingType'
   fieldKey?: string
   driveFolderId?: string
 }
@@ -41,7 +41,7 @@ export const DEFAULT_QUESTIONS: Record<'pre' | 'post1' | 'post2', DefaultQuestio
     { section: 'Bio-Data', label: 'Business Unit', type: 'text', required: false, autoFill: 'businessUnit' },
     { section: 'Bio-Data', label: 'Role', type: 'text', required: false, autoFill: 'role' },
     { section: 'Bio-Data', label: 'Training Title', type: 'text', required: false, autoFill: 'trainingName' },
-    { section: 'Bio-Data', label: 'Training Type', type: 'select', options: ['External', 'Internal', 'LMS'], required: true },
+    { section: 'Bio-Data', label: 'Training Type', type: 'select', options: ['External', 'Internal', 'LMS'], required: false, autoFill: 'trainingType' },
     { section: 'Bio-Data', label: 'Proposed date to share acquired training knowledge with your team', type: 'date', required: false },
 
     { section: 'Reaction & Relevance', label: 'How relevant is this training to your current role?', type: 'rating', required: true, fieldKey: 'roleRelevance' },
