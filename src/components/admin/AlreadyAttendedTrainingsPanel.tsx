@@ -97,6 +97,9 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [remindersEnabled, setRemindersEnabled] = useState(true)
+  // Whether to include the platform-wide default Cc on the immediate first send that createAndSend
+  // triggers — useful to skip for a large historical group so it doesn't clog the default Cc inbox.
+  const [includeDefaultCcOnCreate, setIncludeDefaultCcOnCreate] = useState(true)
   const [stageChoice, setStageChoice] = useState<StageChoice>('both')
   const [creating, setCreating] = useState(false)
   const [result, setResult] = useState<{ key: string; added: number; notFound: string[]; noEmail: string[]; post1Sent?: number; post2Sent?: number } | null>(null)
@@ -228,15 +231,16 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
       let post1Sent: number | undefined
       let post2Sent: number | undefined
       if (data.added > 0) {
+        const skipDefaultCc = !includeDefaultCcOnCreate
         if (stageChoice !== 'post2') {
           const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
           }).then((res) => res.json()).catch(() => null)
           post1Sent = r?.sent
         }
         if (stageChoice !== 'post1') {
           const r = await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
           }).then((res) => res.json()).catch(() => null)
           post2Sent = r?.sent
         }
@@ -560,6 +564,15 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                         <label className="flex items-center gap-2 text-xs text-slate-600">
                           <input type="checkbox" checked={remindersEnabled} onChange={(e) => setRemindersEnabled(e.target.checked)} />
                           Enable daily reminder nudges for this training (on by default)
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={includeDefaultCcOnCreate}
+                            onChange={(e) => setIncludeDefaultCcOnCreate(e.target.checked)}
+                          />
+                          Include Default Cc on this first send
                         </label>
 
                         {result && result.key === key && (

@@ -221,6 +221,10 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   // first send to a large batch of participants, where CC'ing Default Cc on every single one
   // of them would clog that inbox.
   const [includeDefaultCc, setIncludeDefaultCc] = useState<Record<string, boolean>>({})
+  // Same "include Default Cc" choice, but for the NEW-schedule creation form specifically —
+  // creating a schedule for a training that's already due sends immediately (see saveSchedule
+  // below), so this is "when about to send the mail" too, not just the expanded-schedule buttons.
+  const [newScheduleIncludeDefaultCc, setNewScheduleIncludeDefaultCc] = useState(true)
 
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [refreshResult, setRefreshResult] = useState<{ scheduleId: string; updated: number; total: number; stillMissing: string[] } | null>(null)
@@ -435,19 +439,20 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           // the cron picks it up once it actually becomes due, exactly as normal.
           const daysUntilStart = (new Date(newSchedule.startDate).getTime() - Date.now()) / 86400000
           const daysSinceEnd = (Date.now() - new Date(newSchedule.endDate).getTime()) / 86400000
+          const skipDefaultCc = !newScheduleIncludeDefaultCc
           if (newSchedule.preEnabled && daysUntilStart <= settings.preDaysBefore && daysUntilStart >= -3) {
             await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre' }),
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre', skipDefaultCc }),
             }).catch(() => {})
           }
           if (newSchedule.post1Enabled && daysSinceEnd >= settings.post1DaysAfter) {
             await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
             }).catch(() => {})
           }
           if (newSchedule.post2Enabled && daysSinceEnd >= settings.post2DaysAfter) {
             await fetch(`/api/admin/training-schedule/${saved.id}/send`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
             }).catch(() => {})
           }
         }
@@ -1258,6 +1263,20 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               )}
               <p className="text-[11px] text-slate-400 mt-1">
                 Added on top of the automatic line-manager Cc and the platform-wide default Cc — never replaces either.
+              </p>
+            </div>
+            <div>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={newScheduleIncludeDefaultCc}
+                  onChange={(e) => setNewScheduleIncludeDefaultCc(e.target.checked)}
+                />
+                Include Default Cc on the first send
+              </label>
+              <p className="text-[11px] text-slate-400 mt-1">
+                If a survey stage is already due and sends immediately on creation, untick this to skip the platform-wide
+                default Cc for that first send — useful for a large participant list so it doesn&apos;t clog the default Cc inbox.
               </p>
             </div>
             <div className="flex items-center gap-2">

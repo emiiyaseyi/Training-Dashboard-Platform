@@ -88,6 +88,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
   })
   const [surveyDaysAfter, setSurveyDaysAfter] = useState({ preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30 })
+  // Whether to include the platform-wide default Cc on a stage's first send, if creating this
+  // schedule triggers an immediate send because a stage is already due (see createSchedule below).
+  const [newTrainingIncludeDefaultCc, setNewTrainingIncludeDefaultCc] = useState(true)
   // Only used when additionalCcMode === 'individual' — who (beyond the automatic line-manager Cc
   // and the platform-wide default Cc) each specific attendee should also Cc, picked from the same
   // roster search as the attendee picker itself.
@@ -202,6 +205,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setAddingNew(false)
     setCreateError('')
     setExcludedQuestionIds({})
+    setNewTrainingIncludeDefaultCc(true)
   }
 
   // First attendee picked sets the Business Unit automatically, same convention as Survey
@@ -368,19 +372,20 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       // ISN'T due yet is untouched here; the cron picks it up once it actually becomes due.
       const daysUntilStart = (new Date(newTraining.startDate).getTime() - Date.now()) / 86400000
       const daysSinceEnd = (Date.now() - new Date(newTraining.endDate).getTime()) / 86400000
+      const skipDefaultCc = !newTrainingIncludeDefaultCc
       if (newTraining.preEnabled && daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3) {
         await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre' }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'pre', skipDefaultCc }),
         }).catch(() => {})
       }
       if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) {
         await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1' }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post1', skipDefaultCc }),
         }).catch(() => {})
       }
       if (newTraining.post2Enabled && daysSinceEnd >= surveyDaysAfter.post2DaysAfter) {
         await fetch(`/api/admin/training-schedule/${schedule.id}/send`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2' }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage: 'post2', skipDefaultCc }),
         }).catch(() => {})
       }
 
@@ -892,6 +897,21 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                 <p className="text-[11px] text-slate-400 pt-1">Anyone left blank here still gets the automatic line-manager Cc and the platform-wide default Cc, just no extra addresses of their own.</p>
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={newTrainingIncludeDefaultCc}
+                onChange={(e) => setNewTrainingIncludeDefaultCc(e.target.checked)}
+              />
+              Include Default Cc on the first send
+            </label>
+            <p className="text-[11px] text-slate-400 mt-1">
+              If a survey stage is already due and sends immediately on creation, untick this to skip the platform-wide
+              default Cc for that first send — useful for a large participant list so it doesn&apos;t clog the default Cc inbox.
+            </p>
           </div>
 
           {createError && <p className="text-xs text-red-600">{createError}</p>}
