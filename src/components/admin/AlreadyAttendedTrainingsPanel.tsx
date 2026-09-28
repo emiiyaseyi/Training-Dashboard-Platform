@@ -106,6 +106,34 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
   const [addingMoreFor, setAddingMoreFor] = useState<string | null>(null)
   const [addMoreSelected, setAddMoreSelected] = useState<Set<string>>(new Set())
 
+  // Per-schedule question exclusion (Post-1/Post-2 only here — Pre-Training never applies to
+  // "Already Attended," the training already happened). Same shared, single-form-at-a-time
+  // pattern as stageChoice/startDate above — only one group's form is expanded at once.
+  const [excludedQuestionIds, setExcludedQuestionIds] = useState<Partial<Record<'post1' | 'post2', string[]>>>({})
+  const [stageQuestions, setStageQuestions] = useState<Record<'post1' | 'post2', { id: string; label: string; section: string | null }[]>>({
+    post1: [], post2: [],
+  })
+  const [stageQuestionsLoaded, setStageQuestionsLoaded] = useState(false)
+  useEffect(() => {
+    if (stageQuestionsLoaded) return
+    setStageQuestionsLoaded(true)
+    ;(async () => {
+      const [post1, post2] = await Promise.all(
+        ['post1', 'post2'].map((st) => fetch(`/api/admin/survey-questions?stage=${st}`).then((r) => r.json()))
+      )
+      setStageQuestions({ post1, post2 })
+    })()
+  }, [stageQuestionsLoaded])
+
+  const toggleExcludedQuestion = (stage: 'post1' | 'post2', questionId: string, exclude: boolean) => {
+    setExcludedQuestionIds((prev) => {
+      const current = new Set(prev[stage] ?? [])
+      if (exclude) current.add(questionId)
+      else current.delete(questionId)
+      return { ...prev, [stage]: Array.from(current) }
+    })
+  }
+
   const load = async () => {
     setLoading(true)
     try {
@@ -147,6 +175,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     setStageChoice('both')
     setResult(null)
     setSendFeedback(null)
+    setExcludedQuestionIds({})
     setAddingMoreFor(null)
     setAddMoreSelected(new Set())
   }
@@ -176,6 +205,7 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
           post1Enabled: stageChoice !== 'post2',
           post2Enabled: stageChoice !== 'post1',
           sourcedFromHistoricalData: true,
+          excludedQuestionIds,
         }),
       })
       if (!scheduleRes.ok) {
@@ -485,6 +515,45 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                                 {label}
                               </button>
                             ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium text-slate-600 mb-1.5">Survey Questions</p>
+                          <p className="text-[11px] text-slate-400 mb-2">
+                            Untick a question to hide it from this schedule&apos;s respondents only — it stays in the shared bank for every
+                            other schedule.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {(['post1', 'post2'] as const)
+                              .filter((stage) => (stage === 'post1' ? stageChoice !== 'post2' : stageChoice !== 'post1'))
+                              .map((stage) => (
+                                <div key={stage} className="border border-slate-200 rounded-lg p-2.5 max-h-52 overflow-y-auto">
+                                  <p className="text-xs font-semibold text-slate-700 mb-1.5">{stage === 'post1' ? 'Post-1' : 'Post-2'}</p>
+                                  {!stageQuestionsLoaded ? (
+                                    <p className="text-[11px] text-slate-400">Loading…</p>
+                                  ) : stageQuestions[stage].length === 0 ? (
+                                    <p className="text-[11px] text-slate-400">No questions configured for this stage.</p>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {stageQuestions[stage].map((q) => {
+                                        const isExcluded = (excludedQuestionIds[stage] ?? []).includes(q.id)
+                                        return (
+                                          <label key={q.id} className="flex items-start gap-1.5 text-[11px] text-slate-600">
+                                            <input
+                                              type="checkbox"
+                                              className="mt-0.5"
+                                              checked={!isExcluded}
+                                              onChange={(e) => toggleExcludedQuestion(stage, q.id, !e.target.checked)}
+                                            />
+                                            <span>{q.section ? <span className="text-slate-400">{q.section}: </span> : null}{q.label}</span>
+                                          </label>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                           </div>
                         </div>
 

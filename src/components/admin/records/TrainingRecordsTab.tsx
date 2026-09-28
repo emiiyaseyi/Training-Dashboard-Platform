@@ -98,6 +98,35 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [createError, setCreateError] = useState('')
 
+  // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
+  // Schedule form: untick a question (from the shared, global bank) to hide it from THIS
+  // schedule's respondents only. Question lists load lazily, only once this form is actually
+  // opened.
+  type StageKey = 'pre' | 'post1' | 'post2'
+  const [excludedQuestionIds, setExcludedQuestionIds] = useState<Partial<Record<StageKey, string[]>>>({})
+  const [stageQuestions, setStageQuestions] = useState<Record<StageKey, { id: string; label: string; section: string | null }[]>>({
+    pre: [], post1: [], post2: [],
+  })
+  const [stageQuestionsLoaded, setStageQuestionsLoaded] = useState(false)
+  useEffect(() => {
+    if (!addingNew || stageQuestionsLoaded) return
+    setStageQuestionsLoaded(true)
+    ;(async () => {
+      const stages: StageKey[] = ['pre', 'post1', 'post2']
+      const results = await Promise.all(stages.map((st) => fetch(`/api/admin/survey-questions?stage=${st}`).then((r) => r.json())))
+      setStageQuestions({ pre: results[0], post1: results[1], post2: results[2] })
+    })()
+  }, [addingNew, stageQuestionsLoaded])
+
+  const toggleExcludedQuestion = (stage: StageKey, questionId: string, exclude: boolean) => {
+    setExcludedQuestionIds((prev) => {
+      const current = new Set(prev[stage] ?? [])
+      if (exclude) current.add(questionId)
+      else current.delete(questionId)
+      return { ...prev, [stage]: Array.from(current) }
+    })
+  }
+
   const [bulkMode, setBulkMode] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [bulkResult, setBulkResult] = useState<{ added: number; notFound: string[] } | null>(null)
@@ -172,6 +201,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setCcSearchQuery({})
     setAddingNew(false)
     setCreateError('')
+    setExcludedQuestionIds({})
   }
 
   // First attendee picked sets the Business Unit automatically, same convention as Survey
@@ -301,6 +331,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           post2Enabled: newTraining.post2Enabled,
           additionalCc: newTraining.additionalCc || undefined,
           additionalCcMode: newTraining.additionalCcMode,
+          excludedQuestionIds,
         }),
       })
       if (!scheduleRes.ok) {
@@ -737,6 +768,49 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             <p className="text-[11px] text-slate-400 mt-1">
               All three are on by default. Uncheck any stage to disable it entirely for this schedule — it will never be sent, initially or as a reminder.
             </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Survey Questions</p>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Untick a question to hide it from this schedule&apos;s respondents only — the question stays in the shared bank for every
+              other schedule. Everything&apos;s ticked (shown) by default.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                ['pre', 'Pre-Training', newTraining.preEnabled] as const,
+                ['post1', 'Post-1', newTraining.post1Enabled] as const,
+                ['post2', 'Post-2', newTraining.post2Enabled] as const,
+              ] as const)
+                .filter(([, , enabled]) => enabled)
+                .map(([stage, label]) => (
+                  <div key={stage} className="border border-slate-200 rounded-lg p-2.5 max-h-52 overflow-y-auto">
+                    <p className="text-xs font-semibold text-slate-700 mb-1.5">{label}</p>
+                    {!stageQuestionsLoaded ? (
+                      <p className="text-[11px] text-slate-400">Loading…</p>
+                    ) : stageQuestions[stage].length === 0 ? (
+                      <p className="text-[11px] text-slate-400">No questions configured for this stage.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {stageQuestions[stage].map((q) => {
+                          const isExcluded = (excludedQuestionIds[stage] ?? []).includes(q.id)
+                          return (
+                            <label key={q.id} className="flex items-start gap-1.5 text-[11px] text-slate-600">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={!isExcluded}
+                                onChange={(e) => toggleExcludedQuestion(stage, q.id, !e.target.checked)}
+                              />
+                              <span>{q.section ? <span className="text-slate-400">{q.section}: </span> : null}{q.label}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
           </div>
 
           <div>
