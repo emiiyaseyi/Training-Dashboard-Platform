@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { MONTHS } from '@/lib/filter-types'
-import type { SurveyStageKey } from '@/lib/survey-questions'
+import { excludeQuestions, parseExcludedQuestionIds, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { mirrorSurveyResponse } from '@/lib/survey-mirror'
 import { rateLimit } from '@/lib/rate-limit'
@@ -50,7 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const { answers } = (await req.json()) as { answers: Record<string, string | string[]> }
 
-    const questions = await prisma.surveyQuestion.findMany({ where: { stage: stageKey }, orderBy: { order: 'asc' } })
+    const allQuestions = await prisma.surveyQuestion.findMany({ where: { stage: stageKey }, orderBy: { order: 'asc' } })
+    const excluded = parseExcludedQuestionIds(attendee.schedule.excludedQuestionIds)
+    const questions = excludeQuestions(allQuestions, excluded[stageKey])
 
     // Validate required questions (skip auto-filled ones — those aren't asked of the respondent).
     const missing = questions.filter((q) => q.required && !q.autoFill && !answers[q.id]?.toString().trim())

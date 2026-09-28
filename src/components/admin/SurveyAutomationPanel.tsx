@@ -60,6 +60,7 @@ interface Schedule {
   trainingMode: string
   location: string | null
   meetingLink: string | null
+  excludedQuestionIds: Partial<Record<'pre' | 'post1' | 'post2', string[]>>
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -155,6 +156,36 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
     trainingMode: 'physical' as 'physical' | 'virtual' | 'platform' | 'hybrid', location: '', meetingLink: '',
   })
+  // Per-schedule question exclusion — lets an admin untick specific questions (from the shared,
+  // global question bank) so THIS schedule's respondents never see them, without touching the
+  // bank for any other schedule. Kept out of `newSchedule` since it's a nested object, not a
+  // plain form field. Question lists are loaded lazily (only once the form is actually open) so
+  // every panel load doesn't pay for three extra fetches nobody asked for.
+  type StageKey = 'pre' | 'post1' | 'post2'
+  const [excludedQuestionIds, setExcludedQuestionIds] = useState<Partial<Record<StageKey, string[]>>>({})
+  const [stageQuestions, setStageQuestions] = useState<Record<StageKey, { id: string; label: string; section: string | null }[]>>({
+    pre: [], post1: [], post2: [],
+  })
+  const [stageQuestionsLoaded, setStageQuestionsLoaded] = useState(false)
+  useEffect(() => {
+    if (!showAddSchedule || stageQuestionsLoaded) return
+    setStageQuestionsLoaded(true)
+    ;(async () => {
+      const stages: StageKey[] = ['pre', 'post1', 'post2']
+      const results = await Promise.all(stages.map((st) => fetch(`/api/admin/survey-questions?stage=${st}`).then((r) => r.json())))
+      setStageQuestions({ pre: results[0], post1: results[1], post2: results[2] })
+    })()
+  }, [showAddSchedule, stageQuestionsLoaded])
+
+  const toggleExcludedQuestion = (stage: StageKey, questionId: string, exclude: boolean) => {
+    setExcludedQuestionIds((prev) => {
+      const current = new Set(prev[stage] ?? [])
+      if (exclude) current.add(questionId)
+      else current.delete(questionId)
+      return { ...prev, [stage]: Array.from(current) }
+    })
+  }
+
   const [trainingTypes, setTrainingTypes] = useState<NamedOption[]>([])
   const [capabilities, setCapabilities] = useState<NamedOption[]>([])
   const [vendors, setVendors] = useState<NamedOption[]>([])
@@ -328,6 +359,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     setNewScheduleSearchQuery('')
     setEditingScheduleId(null)
     setShowAddSchedule(false)
+    setExcludedQuestionIds({})
   }
 
   const startEditSchedule = (s: Schedule) => {
@@ -351,6 +383,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       location: s.location ?? '',
       meetingLink: s.meetingLink ?? '',
     })
+    setExcludedQuestionIds(s.excludedQuestionIds ?? {})
     setEditingScheduleId(s.id)
     setShowAddSchedule(true)
   }
@@ -368,6 +401,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
             isHistorical: undefined, // local UI flag only (hides the Pre-Training checkbox when editing an already-historical schedule) — not a field the API accepts
             hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
             costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
+            excludedQuestionIds,
           }),
         }
       )
@@ -1139,6 +1173,48 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               <p className="text-[11px] text-slate-400 mt-1">
                 All three are on by default. Uncheck any stage to disable it entirely for this schedule — it will never be sent, initially or as a reminder.
               </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1.5">Survey Questions</p>
+              <p className="text-[11px] text-slate-400 mb-2">
+                Untick a question to hide it from this schedule&apos;s respondents only — the question stays in the shared bank for every
+                other schedule. Everything&apos;s ticked (shown) by default.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {([
+                  ...(newSchedule.isHistorical ? [] : [['pre', 'Pre-Training', newSchedule.preEnabled] as const]),
+                  ['post1', 'Post-1', newSchedule.post1Enabled] as const,
+                  ['post2', 'Post-2', newSchedule.post2Enabled] as const,
+                ] as const)
+                  .filter(([, , enabled]) => enabled)
+                  .map(([stage, label]) => (
+                    <div key={stage} className="border border-slate-200 rounded-lg p-2.5 max-h-52 overflow-y-auto">
+                      <p className="text-xs font-semibold text-slate-700 mb-1.5">{label}</p>
+                      {!stageQuestionsLoaded ? (
+                        <p className="text-[11px] text-slate-400">Loading…</p>
+                      ) : stageQuestions[stage].length === 0 ? (
+                        <p className="text-[11px] text-slate-400">No questions configured for this stage.</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {stageQuestions[stage].map((q) => {
+                            const isExcluded = (excludedQuestionIds[stage] ?? []).includes(q.id)
+                            return (
+                              <label key={q.id} className="flex items-start gap-1.5 text-[11px] text-slate-600">
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5"
+                                  checked={!isExcluded}
+                                  onChange={(e) => toggleExcludedQuestion(stage, q.id, !e.target.checked)}
+                                />
+                                <span>{q.section ? <span className="text-slate-400">{q.section}: </span> : null}{q.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
             </div>
             <div>
               <p className="text-xs font-medium text-slate-600 mb-1.5">Additional Cc (optional)</p>

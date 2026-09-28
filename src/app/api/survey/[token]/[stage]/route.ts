@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { surveyRecipientRole } from '@/lib/survey-email'
 import type { SurveyStage } from '@/lib/survey-email'
-import { getStageQuestions, type SurveyStageKey } from '@/lib/survey-questions'
+import { getStageQuestions, excludeQuestions, parseExcludedQuestionIds, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { rateLimit } from '@/lib/rate-limit'
 
@@ -47,7 +47,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const recipientRole = surveyRecipientRole(stageKey)
     const alreadyResponded = !!attendee[RESPONDED_FIELD[stageKey]]
     const expired = !alreadyResponded && (await isSurveyExpired(attendee[SENT_FIELD[stageKey]]))
-    const questions = alreadyResponded || expired ? [] : await getStageQuestions(stageKey as SurveyStageKey)
+    const allQuestions = alreadyResponded || expired ? [] : await getStageQuestions(stageKey as SurveyStageKey)
+    const excluded = parseExcludedQuestionIds(attendee.schedule.excludedQuestionIds)
+    const questions = excludeQuestions(allQuestions, excluded[stageKey as SurveyStageKey])
 
     const autoFillValues: Record<string, string> = {
       trainingName: attendee.schedule.trainingName,

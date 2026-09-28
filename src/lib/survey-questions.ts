@@ -3,6 +3,30 @@ import { DEFAULT_QUESTIONS, type DefaultQuestion } from '@/lib/default-survey-qu
 
 export type SurveyStageKey = 'pre' | 'post1' | 'post2'
 
+export type ExcludedQuestionIds = Partial<Record<SurveyStageKey, string[]>>
+
+// TrainingSchedule.excludedQuestionIds is stored as one JSON blob covering all three stages —
+// parsed defensively since it's free-form text in the DB (blank/malformed = nothing excluded,
+// never a crash).
+export function parseExcludedQuestionIds(raw: string | null | undefined): ExcludedQuestionIds {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+// The question bank (SurveyQuestion) is shared/global across every schedule — this is what
+// actually makes an exclusion "per schedule": filters that shared list down to what THIS
+// schedule's respondents should see, without touching the underlying bank for anyone else.
+export function excludeQuestions<T extends { id: string }>(questions: T[], excludedIds: string[] | undefined): T[] {
+  if (!excludedIds || excludedIds.length === 0) return questions
+  const excluded = new Set(excludedIds)
+  return questions.filter((q) => !excluded.has(q.id))
+}
+
 export async function getStageQuestions(stage: SurveyStageKey) {
   const existing = await prisma.surveyQuestion.findMany({
     where: { stage },

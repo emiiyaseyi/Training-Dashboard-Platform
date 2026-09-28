@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import type { ExcludedQuestionIds } from '@/lib/survey-questions'
 import { createMailSender } from '@/lib/mailer'
 import { buildScheduleChangeEmail, type ScheduleChangeReason } from '@/lib/schedule-change-email'
 
@@ -15,12 +16,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, trainingMode, location, meetingLink } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
       remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
       additionalCc?: string; additionalCcMode?: string
-      trainingMode?: string; location?: string; meetingLink?: string
+      trainingMode?: string; location?: string; meetingLink?: string; excludedQuestionIds?: ExcludedQuestionIds
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
@@ -49,6 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           location: trainingMode === 'physical' || trainingMode === 'hybrid' ? (location?.trim() || null) : null,
           meetingLink: trainingMode === 'virtual' || trainingMode === 'platform' || trainingMode === 'hybrid' ? (meetingLink?.trim() || null) : null,
         } : {}),
+        ...(excludedQuestionIds !== undefined ? { excludedQuestionIds: JSON.stringify(excludedQuestionIds) } : {}),
       },
     })
     return NextResponse.json(schedule)

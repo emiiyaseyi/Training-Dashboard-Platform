@@ -409,6 +409,7 @@ model TrainingSchedule {
   meetingLink     String? // join link — set when trainingMode is "virtual", "platform", or "hybrid"
   additionalCc     String? // comma/semicolon-separated email addresses Cc'd on top of the default line-manager/employee Cc and the global defaultCc — meaning depends on additionalCcMode
   additionalCcMode String  @default("all") // "all" = additionalCc applies to every attendee's emails; "individual" = each attendee has their own additionalCc (TrainingScheduleAttendee.additionalCc) instead, left blank = just the global defaultCc for that person
+  excludedQuestionIds String? // JSON: { pre: string[], post1: string[], post2: string[] } — SurveyQuestion ids to hide from THIS schedule's respondents only (the question bank itself is shared/global across all schedules); blank/missing stage key = show everything, as before this existed
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
