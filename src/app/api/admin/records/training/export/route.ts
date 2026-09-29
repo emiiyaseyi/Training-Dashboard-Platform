@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { MONTHS, resolveFilter, activeMonthIndices, type PeriodFilter } from '@/lib/filter-types'
+import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 
 // Flat, unpaginated, every-field pull of Training records for the "Download Report" panel — the
 // regular GET /api/admin/records/training endpoint is grouped-by-training-cohort and paginated
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     }
     const resolved = resolveFilter(filter)
 
-    const all = await prisma.trainingRecord.findMany({ orderBy: [{ year: 'desc' }, { createdAt: 'desc' }] })
+    const all = await prisma.trainingRecord.findMany()
 
     let rows = all
     if (resolved.mode !== 'all') {
@@ -32,12 +33,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Most recent year first, then calendar order (January -> December) within each year —
+    // matches how these reports actually get read, not upload/creation order.
+    rows.sort((a, b) => (b.year - a.year) || (MONTHS.indexOf(a.month as (typeof MONTHS)[number]) - MONTHS.indexOf(b.month as (typeof MONTHS)[number])))
+
+    // A record's `email` column is often blank — it was never part of every upload's columns —
+    // so resolve it fresh from the current roster by Staff ID wherever that's the case, rather
+    // than leaving the export column empty when the address is readily available.
+    const directory = await loadRosterDirectory()
+
     return NextResponse.json(
       rows.map((r) => ({
         serialNo: r.serialNo || '',
         staffName: r.staffName,
         staffId: r.staffId,
-        email: r.email || '',
+        email: r.email || resolveStaff(r.staffId, directory)?.email || '',
         businessUnit: r.businessUnit,
         training: r.training,
         month: r.month,

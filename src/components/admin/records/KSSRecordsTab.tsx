@@ -5,7 +5,7 @@ import { Search, Plus, Trash2, Save, Loader2, X, Pencil, Users, Download, Upload
 import { Pagination } from '@/components/ui/Pagination'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { filterToParams, filterLabel, type PeriodFilter } from '@/lib/filter-types'
-import { exportExcel, exportPdfTable } from '@/lib/export'
+import { exportExcel, exportPdfSections, buildBusinessUnitSections } from '@/lib/export'
 
 const REPORT_COLUMNS: { key: string; header: string }[] = [
   { key: 'staffName', header: 'Name' },
@@ -223,14 +223,17 @@ export function KSSRecordsTab() {
         .then((r) => r.json())
         .catch(() => [])
       const activeColumns = REPORT_COLUMNS.filter((c) => reportColumns[c.key])
-      const mappedRows = (Array.isArray(rows) ? rows : []).map((r) =>
-        Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
-      )
+      const mapRow = (r: Record<string, unknown>) => Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
+      const sections = buildBusinessUnitSections(Array.isArray(rows) ? rows : [], mapRow, 'All')
       const filename = `kss_records_${filterLabel(reportFilter).replace(/\s+/g, '_')}`
       if (format === 'xlsx') {
-        await exportExcel([{ name: 'KSS Records', rows: mappedRows }], filename)
+        await exportExcel(sections, filename)
       } else {
-        await exportPdfTable('KSS Records', activeColumns.map((c) => ({ header: c.header, key: c.header })), mappedRows, filename)
+        await exportPdfSections(
+          activeColumns.map((c) => ({ header: c.header, key: c.header })),
+          sections.map((s) => ({ title: `KSS Records — ${s.name}`, rows: s.rows })),
+          filename
+        )
       }
     } finally {
       setDownloadingReport(false)

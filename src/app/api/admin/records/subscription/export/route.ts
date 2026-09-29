@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
+import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 
 const CATEGORY_LABELS: Record<string, string> = { membership: 'Membership Subscription', certification: 'Certification Refund' }
 
@@ -31,14 +32,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const all = await prisma.subscriptionRecord.findMany({ orderBy: [{ createdAt: 'desc' }] })
-    const rows = monthSet ? all.filter((r) => r.month && monthSet!.has(r.month)) : all
+    const all = await prisma.subscriptionRecord.findMany()
+    let rows = monthSet ? all.filter((r) => r.month && monthSet!.has(r.month)) : all
+    rows = rows.slice().sort((a, b) => MONTHS.indexOf((a.month || '') as (typeof MONTHS)[number]) - MONTHS.indexOf((b.month || '') as (typeof MONTHS)[number]))
+
+    const directory = await loadRosterDirectory()
 
     return NextResponse.json(
       rows.map((r) => ({
         staffName: r.staffName,
         staffId: r.staffId,
-        email: r.email || '',
+        email: r.email || resolveStaff(r.staffId, directory)?.email || '',
         businessUnit: r.businessUnit,
         category: CATEGORY_LABELS[r.category] || r.category,
         membershipOrg: r.membershipOrg,

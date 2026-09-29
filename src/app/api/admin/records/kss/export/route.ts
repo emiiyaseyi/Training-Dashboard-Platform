@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { MONTHS, resolveFilter, activeMonthIndices, type PeriodFilter } from '@/lib/filter-types'
+import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 
 // Flat, unpaginated, every-field pull of KSS records for the "Download Report" panel — same
 // shape/purpose as the Training records export route.
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
     }
     const resolved = resolveFilter(filter)
 
-    const all = await prisma.kSSRecord.findMany({ orderBy: [{ year: 'desc' }, { createdAt: 'desc' }] })
+    const all = await prisma.kSSRecord.findMany()
 
     let rows = all
     if (resolved.mode !== 'all') {
@@ -31,11 +32,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    rows.sort((a, b) => ((b.year ?? 0) - (a.year ?? 0)) || (MONTHS.indexOf((a.month || '') as (typeof MONTHS)[number]) - MONTHS.indexOf((b.month || '') as (typeof MONTHS)[number])))
+
+    const directory = await loadRosterDirectory()
+
     return NextResponse.json(
       rows.map((r) => ({
         staffName: r.staffName,
         staffId: r.staffId,
-        email: r.email || '',
+        email: r.email || resolveStaff(r.staffId, directory)?.email || '',
         businessUnit: r.businessUnit,
         durationMinutes: r.durationMinutes,
         month: r.month || '',

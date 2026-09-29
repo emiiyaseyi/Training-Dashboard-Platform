@@ -6,7 +6,7 @@ import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { MONTHS, filterToParams, filterLabel, type PeriodFilter } from '@/lib/filter-types'
-import { exportExcel, exportPdfTable } from '@/lib/export'
+import { exportExcel, exportPdfSections, buildBusinessUnitSections } from '@/lib/export'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
 
 // Every field the Training Report export can include — all ticked by default (see
@@ -134,6 +134,20 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, true]))
   )
   const [downloadingReport, setDownloadingReport] = useState(false)
+
+  // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
+  // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
+  // for them one page of the main table at a time.
+  const [showMissingVendor, setShowMissingVendor] = useState(false)
+  const [loadingMissingVendor, setLoadingMissingVendor] = useState(false)
+  const [missingVendorGroups, setMissingVendorGroups] = useState<{
+    training: string; month: string; year: number; businessUnits: string[]; attendeeCount: number
+    records: { id: string; staffName: string; staffId: string; businessUnit: string }[]
+  }[]>([])
+  const [expandedMissingVendorKey, setExpandedMissingVendorKey] = useState<string | null>(null)
+  const [missingVendorPickerKey, setMissingVendorPickerKey] = useState<string | null>(null)
+  const [missingVendorInput, setMissingVendorInput] = useState('')
+  const [settingVendorKey, setSettingVendorKey] = useState<string | null>(null)
 
   // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
   // Schedule form: untick a question (from the shared, global bank) to hide it from THIS
@@ -451,17 +465,62 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         .then((r) => r.json())
         .catch(() => [])
       const activeColumns = REPORT_COLUMNS.filter((c) => reportColumns[c.key])
-      const mappedRows = (Array.isArray(rows) ? rows : []).map((r) =>
-        Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
-      )
+      const mapRow = (r: Record<string, unknown>) => Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
+      const sections = buildBusinessUnitSections(Array.isArray(rows) ? rows : [], mapRow, 'All')
       const filename = `training_records_${filterLabel(reportFilter).replace(/\s+/g, '_')}`
       if (format === 'xlsx') {
-        await exportExcel([{ name: 'Training Records', rows: mappedRows }], filename)
+        await exportExcel(sections, filename)
       } else {
-        await exportPdfTable('Training Records', activeColumns.map((c) => ({ header: c.header, key: c.header })), mappedRows, filename)
+        await exportPdfSections(
+          activeColumns.map((c) => ({ header: c.header, key: c.header })),
+          sections.map((s) => ({ title: `Training Records — ${s.name}`, rows: s.rows })),
+          filename
+        )
       }
     } finally {
       setDownloadingReport(false)
+    }
+  }
+
+  const openMissingVendor = async () => {
+    setShowMissingVendor(true)
+    setLoadingMissingVendor(true)
+    try {
+      const data = await fetch('/api/admin/records/training/missing-vendor').then((r) => r.json()).catch(() => [])
+      setMissingVendorGroups(Array.isArray(data) ? data : [])
+    } finally {
+      setLoadingMissingVendor(false)
+    }
+  }
+
+  // Shared by both the per-group bulk assign and a single attendee's individual override —
+  // registers a brand-new vendor name into the shared Vendor list too (same upsert-by-name
+  // convention as saveNewVendor above), so it shows up as a normal option everywhere else.
+  const setVendorFor = async (groupKey: string, recordIds: string[], vendorName: string) => {
+    const name = vendorName.trim()
+    if (!name) return
+    setSettingVendorKey(groupKey)
+    try {
+      if (!vendors.some((v) => v.name.trim().toLowerCase() === name.toLowerCase())) {
+        const nextOrder = vendors.length > 0 ? Math.max(...vendors.map((v) => v.order)) + 1 : 0
+        await fetch('/api/vendors', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, order: nextOrder }),
+        }).catch(() => {})
+        const fresh = await fetch('/api/vendors').then((r) => r.json()).catch(() => [])
+        if (Array.isArray(fresh)) setVendors(fresh)
+      }
+      const res = await fetch('/api/admin/records/training/missing-vendor/bulk-set', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordIds, vendor: name }),
+      })
+      if (res.ok) {
+        setMissingVendorPickerKey(null)
+        setMissingVendorInput('')
+        const fresh = await fetch('/api/admin/records/training/missing-vendor').then((r) => r.json()).catch(() => [])
+        setMissingVendorGroups(Array.isArray(fresh) ? fresh : [])
+        await load()
+      }
+    } finally {
+      setSettingVendorKey(null)
     }
   }
 
@@ -624,6 +683,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             <Download className="w-4 h-4" /> Download Report
           </button>
         )}
+        {!showMissingVendor && (
+          <button onClick={openMissingVendor} className="flex items-center gap-1.5 text-sm font-medium text-amber-700 border border-amber-300 rounded-lg px-3 py-2 hover:bg-amber-50">
+            <AlertTriangle className="w-4 h-4" /> Trainings Missing Vendor
+          </button>
+        )}
         {!addingNew && (
           <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
             <Plus className="w-4 h-4" /> Add Training Schedule
@@ -702,6 +766,115 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
               Download PDF
             </button>
           </div>
+        </div>
+      )}
+
+      {showMissingVendor && (
+        <div className="border border-amber-200 rounded-lg p-4 space-y-3 bg-amber-50/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Trainings Missing Vendor
+            </div>
+            <button onClick={() => setShowMissingVendor(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {loadingMissingVendor ? (
+            <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
+          ) : missingVendorGroups.length === 0 ? (
+            <p className="text-xs text-slate-400">Every training has a vendor on file. Nothing to fix.</p>
+          ) : (
+            <div className="space-y-2">
+              {missingVendorGroups.map((g) => {
+                const key = `${g.training}|${g.month}|${g.year}`
+                const expanded = expandedMissingVendorKey === key
+                const picking = missingVendorPickerKey === key
+                const recordIds = g.records.map((r) => r.id)
+                return (
+                  <div key={key} className="bg-white border border-slate-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <button onClick={() => setExpandedMissingVendorKey(expanded ? null : key)} className="flex-1 text-left">
+                        <p className="text-sm font-medium text-slate-800">{g.training}</p>
+                        <p className="text-xs text-slate-500">
+                          {g.month} {g.year} · {g.businessUnits.join(', ')} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
+                        </p>
+                      </button>
+                      {picking ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={missingVendorInput}
+                            onChange={(e) => setMissingVendorInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') setVendorFor(key, recordIds, missingVendorInput) }}
+                            placeholder="Vendor name"
+                            list={`vendor-options-${key}`}
+                            className="w-40 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                          />
+                          <datalist id={`vendor-options-${key}`}>
+                            {vendors.map((v) => <option key={v.id} value={v.name} />)}
+                          </datalist>
+                          <button
+                            onClick={() => setVendorFor(key, recordIds, missingVendorInput)}
+                            disabled={settingVendorKey === key || !missingVendorInput.trim()}
+                            className="p-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {settingVendorKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          </button>
+                          <button onClick={() => { setMissingVendorPickerKey(null); setMissingVendorInput('') }} className="p-1.5 rounded border border-slate-300 text-slate-500 hover:bg-slate-50">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setMissingVendorPickerKey(key); setMissingVendorInput('') }}
+                          className="text-xs font-medium text-white bg-amber-600 rounded-lg px-3 py-1.5 hover:bg-amber-700 whitespace-nowrap"
+                        >
+                          Set Vendor for All
+                        </button>
+                      )}
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
+                        {g.records.map((r) => (
+                          <div key={r.id} className="flex items-center justify-between text-xs text-slate-600">
+                            <span>{r.staffName} <span className="text-slate-400">({r.staffId}) · {r.businessUnit}</span></span>
+                            <button
+                              onClick={() => { setMissingVendorPickerKey(`${key}::${r.id}`); setMissingVendorInput('') }}
+                              className="text-navy-600 hover:text-navy-800 font-medium"
+                            >
+                              Set individually
+                            </button>
+                            {missingVendorPickerKey === `${key}::${r.id}` && (
+                              <div className="flex items-center gap-1 ml-2">
+                                <input
+                                  autoFocus
+                                  value={missingVendorInput}
+                                  onChange={(e) => setMissingVendorInput(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') setVendorFor(`${key}::${r.id}`, [r.id], missingVendorInput) }}
+                                  placeholder="Vendor name"
+                                  list={`vendor-options-${key}`}
+                                  className="w-32 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                />
+                                <button
+                                  onClick={() => setVendorFor(`${key}::${r.id}`, [r.id], missingVendorInput)}
+                                  disabled={settingVendorKey === `${key}::${r.id}` || !missingVendorInput.trim()}
+                                  className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                  <Save className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

@@ -34,14 +34,41 @@ export function nairaNum(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// Splits a flat rows array (each expected to carry a "businessUnit" field) into "All" plus one
+// section per distinct Business Unit, each already mapped through the caller's row-shaping —
+// shared by every Download Report panel (Training/KSS/Subscription) that adds a per-Business-Unit
+// breakdown: one Excel sheet per BU (plus "All"), or one PDF page-group per BU.
+export function buildBusinessUnitSections(
+  rawRows: Record<string, unknown>[],
+  mapRow: (r: Record<string, unknown>) => Record<string, unknown>,
+  allLabel = 'All'
+): { name: string; rows: Record<string, unknown>[] }[] {
+  const byBU = new Map<string, Record<string, unknown>[]>()
+  for (const r of rawRows) {
+    const bu = String(r.businessUnit || 'Unassigned')
+    if (!byBU.has(bu)) byBU.set(bu, [])
+    byBU.get(bu)!.push(mapRow(r))
+  }
+  const sections = [{ name: allLabel, rows: rawRows.map(mapRow) }]
+  ;[...byBU.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([bu, rows]) => sections.push({ name: bu, rows }))
+  return sections
+}
+
+export interface PdfSection {
+  title: string
+  rows: Record<string, unknown>[]
+}
+
 // Plain-grid table PDF — no autotable dependency (not installed), just jsPDF's own text/line
 // primitives. Columns are evenly split across the usable page width and each cell's text is
 // clipped to fit (with an ellipsis) rather than wrapped, keeping every row a fixed, predictable
-// height so page breaks are simple to compute.
-export async function exportPdfTable(
-  title: string,
+// height so page breaks are simple to compute. Each section (e.g. one per Business Unit) always
+// starts on its own fresh page — the PDF equivalent of the Excel export's one-sheet-per-section.
+export async function exportPdfSections(
   columns: { header: string; key: string }[],
-  rows: Record<string, unknown>[],
+  sections: PdfSection[],
   filename: string
 ) {
   const { jsPDF } = await import('jspdf')
@@ -57,14 +84,14 @@ export async function exportPdfTable(
   const charsPerCol = Math.max(4, Math.floor(colWidth / 4.3))
   const clip = (s: string) => (s.length > charsPerCol ? `${s.slice(0, charsPerCol - 1)}…` : s)
 
-  function drawHeader() {
+  function drawHeader(title: string, rowCount: number) {
     y = 40
     doc.setFontSize(12)
     doc.setFont('helvetica', 'bold')
     doc.text(title, marginX, y)
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Generated ${new Date().toLocaleString()} — ${rows.length} record${rows.length === 1 ? '' : 's'}`, marginX, y + 12)
+    doc.text(`Generated ${new Date().toLocaleString()} — ${rowCount} record${rowCount === 1 ? '' : 's'}`, marginX, y + 12)
     y += 30
     doc.setFont('helvetica', 'bold')
     columns.forEach((c, i) => doc.text(clip(c.header), marginX + i * colWidth + 2, y))
@@ -74,19 +101,32 @@ export async function exportPdfTable(
     doc.setFont('helvetica', 'normal')
   }
 
-  drawHeader()
-  for (const row of rows) {
-    if (y > pageHeight - 36) {
-      doc.addPage()
-      drawHeader()
+  sections.forEach((section, sectionIndex) => {
+    if (sectionIndex > 0) doc.addPage()
+    drawHeader(section.title, section.rows.length)
+    for (const row of section.rows) {
+      if (y > pageHeight - 36) {
+        doc.addPage()
+        drawHeader(section.title, section.rows.length)
+      }
+      columns.forEach((c, i) => {
+        const val = row[c.key]
+        const text = val === null || val === undefined ? '' : String(val)
+        doc.text(clip(text), marginX + i * colWidth + 2, y)
+      })
+      y += rowHeight
     }
-    columns.forEach((c, i) => {
-      const val = row[c.key]
-      const text = val === null || val === undefined ? '' : String(val)
-      doc.text(clip(text), marginX + i * colWidth + 2, y)
-    })
-    y += rowHeight
-  }
+  })
 
   doc.save(`${filename}_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+// Single-section convenience wrapper — kept for callers that only ever produce one table.
+export async function exportPdfTable(
+  title: string,
+  columns: { header: string; key: string }[],
+  rows: Record<string, unknown>[],
+  filename: string
+) {
+  await exportPdfSections(columns, [{ title, rows }], filename)
 }
