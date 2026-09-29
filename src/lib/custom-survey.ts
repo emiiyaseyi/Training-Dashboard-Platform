@@ -206,8 +206,7 @@ export interface ReminderResult {
 // nudges anyone sent this survey who hasn't responded yet, once per day, until they respond or
 // the survey's own expiryDays elapses since launch.
 export async function sendCustomSurveyReminders(
-  survey: CustomSurvey & { recipients: CustomSurveyRecipient[] },
-  skipDefaultCc = false
+  survey: CustomSurvey & { recipients: CustomSurveyRecipient[] }
 ): Promise<ReminderResult> {
   const result: ReminderResult = { sent: 0, skipped: [] }
   if (survey.status !== 'launched') return result
@@ -236,7 +235,10 @@ export async function sendCustomSurveyReminders(
       isReminder: true,
     })
     try {
-      await sendMail({ to: recipient.email, subject, html, skipDefaultCc })
+      // A reminder is, by definition, a resend — always skips the platform-wide Default Cc, the
+      // same as every other resend path, never conditional on a settings toggle that can be
+      // switched off (by accident or otherwise) and silently start copying it again.
+      await sendMail({ to: recipient.email, subject, html, skipDefaultCc: true })
       await prisma.customSurveyRecipient.update({ where: { id: recipient.id }, data: { reminderAt: new Date() } })
       result.sent++
     } catch (err) {

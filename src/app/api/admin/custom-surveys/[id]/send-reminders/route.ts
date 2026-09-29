@@ -19,7 +19,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Only a launched survey can send reminders.' }, { status: 400 })
   }
 
-  const settings = await prisma.surveySettings.findFirst()
-  const result = await sendCustomSurveyReminders(survey, settings?.excludeDefaultCcOnReminders ?? true)
+  const result = await sendCustomSurveyReminders(survey)
   return NextResponse.json(result)
 }

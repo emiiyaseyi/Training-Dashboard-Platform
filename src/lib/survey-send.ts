@@ -253,7 +253,7 @@ const DAY_MS = 86400000
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { expiryEnabled: boolean; expiryDays: number; excludeDefaultCcOnReminders?: boolean },
+  settings: { expiryEnabled: boolean; expiryDays: number },
   // Set by the admin's manual "Send Reminders to Everyone Outstanding" button — a deliberate,
   // one-off nudge that should reach EVERYONE still unresponded right now, including people the
   // daily sweep has stopped nudging because their survey expired, and regardless of whether
@@ -325,7 +325,11 @@ export async function sendSurveyReminders(
         isHistorical: schedule.sourcedFromHistoricalData,
       })
       try {
-        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: settings.excludeDefaultCcOnReminders })
+        // A reminder is, by definition, a resend — sentField is already set, that's the whole
+        // reason they're due one. Never Cc's the platform-wide Default Cc, full stop, the same as
+        // every other resend path (sendSurveyStage) — not conditional on a settings toggle that
+        // can be switched off (by accident or otherwise) and silently start copying it again.
+        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: true })
         const nowTs = new Date()
         await prisma.trainingScheduleAttendee.update({
           where: { id: attendee.id },

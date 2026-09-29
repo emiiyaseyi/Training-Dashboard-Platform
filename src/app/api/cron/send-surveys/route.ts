@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
   const reminderSettings = {
     expiryEnabled: settings?.expiryEnabled ?? true,
     expiryDays: settings?.expiryDays ?? 7,
-    excludeDefaultCcOnReminders: settings?.excludeDefaultCcOnReminders ?? true,
   }
 
   const results: { scheduleId: string; trainingName: string; stage: SurveyStage; sent: number; skipped: number; reminder?: boolean }[] = []
@@ -98,7 +97,7 @@ export async function GET(req: NextRequest) {
   const customErrors: { surveyId: string; title: string; message: string }[] = []
   for (const survey of customSurveys) {
     try {
-      const result = await sendCustomSurveyReminders(survey, reminderSettings.excludeDefaultCcOnReminders)
+      const result = await sendCustomSurveyReminders(survey)
       if (result.sent > 0 || result.skipped.length > 0) {
         customResults.push({ surveyId: survey.id, title: survey.title, sent: result.sent, skipped: result.skipped.length })
       }

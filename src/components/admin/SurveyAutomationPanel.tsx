@@ -851,14 +851,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                   />
                 </label>
               </div>
-              <label className="flex items-center gap-2 text-xs text-slate-600 mt-3">
-                <input
-                  type="checkbox"
-                  checked={settings.excludeDefaultCcOnReminders}
-                  onChange={(e) => setSettings({ ...settings, excludeDefaultCcOnReminders: e.target.checked })}
-                />
-                Exclude the platform-wide Default Cc from reminder emails (on by default — the original send still includes it; only the daily nudge skips it, so it doesn&apos;t clog inboxes)
-              </label>
+              <p className="text-[11px] text-slate-400 mt-3">
+                Reminder emails never Cc the platform-wide Default Cc — the original send still includes it, only the daily nudge skips it, so it doesn&apos;t clog inboxes. This isn&apos;t a setting; it&apos;s always on for every reminder.
+              </p>
             </div>
 
             <div>
