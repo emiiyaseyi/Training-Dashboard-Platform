@@ -184,32 +184,43 @@ export function SurveyInsightsPanel() {
 
       {expanded && (
         <div className="p-4 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={runImportManagerReviews}
-              disabled={importing}
-              className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
-            >
-              {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              Import Uploaded Manager Reviews
-            </button>
-            <button
-              onClick={runImportFeedback}
-              disabled={importing}
-              className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
-            >
-              {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              Import Uploaded Feedback (with Staff ID)
-            </button>
-            <button
-              onClick={runBackfill}
-              disabled={backfilling}
-              className="flex items-center gap-1.5 text-xs font-medium text-amber-700 border border-amber-200 bg-amber-50 rounded-lg px-3 py-1.5 hover:bg-amber-100 disabled:opacity-60"
-            >
-              {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
-              Fix Business Unit on all existing Manager Reviews
-            </button>
-          </div>
+          {/* Stage-specific — Pre-Training has no second data source to reconcile (its answers
+              never feed a separate structured record the way Post-1/Post-2 do), so it correctly
+              shows neither of these buttons. */}
+          {stage !== 'pre' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {stage === 'post2' && (
+                <>
+                  <button
+                    onClick={runImportManagerReviews}
+                    disabled={importing}
+                    className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
+                  >
+                    {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    Import Uploaded Manager Reviews
+                  </button>
+                  <button
+                    onClick={runBackfill}
+                    disabled={backfilling}
+                    className="flex items-center gap-1.5 text-xs font-medium text-amber-700 border border-amber-200 bg-amber-50 rounded-lg px-3 py-1.5 hover:bg-amber-100 disabled:opacity-60"
+                  >
+                    {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+                    Fix Business Unit on all existing Manager Reviews
+                  </button>
+                </>
+              )}
+              {stage === 'post1' && (
+                <button
+                  onClick={runImportFeedback}
+                  disabled={importing}
+                  className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
+                >
+                  {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  Import Uploaded Feedback (with Staff ID)
+                </button>
+              )}
+            </div>
+          )}
           {importResult && <p className="text-xs text-slate-500">{importResult}</p>}
           {backfillResult && <p className="text-xs text-slate-500">{backfillResult}</p>}
           <div className="flex flex-wrap items-center gap-2">

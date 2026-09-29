@@ -75,6 +75,25 @@ export async function importTrainingRows(rows: TrainingRow[], filename: string, 
   return { batchId: batch.id, recordCount: normalizedRows.length, warnings }
 }
 
+function feedbackRecordData(r: FeedbackRow, batchId: string) {
+  return {
+    staffId: r.staffId ? r.staffId.toUpperCase() : null,
+    businessUnit: r.businessUnit,
+    trainingTitle: r.trainingTitle,
+    role: r.role,
+    applicationResponse: r.applicationResponse,
+    impactAlignment: r.impactAlignment,
+    confidenceRating: r.confidenceRating > 0 ? r.confidenceRating : null,
+    roleRelevance: r.roleRelevance > 0 ? r.roleRelevance : null,
+    expectationsMet: r.expectationsMet > 0 ? r.expectationsMet : null,
+    vendorRating: r.vendorRating > 0 ? r.vendorRating : null,
+    vendorName: r.vendorName || null,
+    qualitativeResponse: r.qualitativeResponse,
+    month: r.month || null,
+    batchId,
+  }
+}
+
 export async function importFeedbackRows(rows: FeedbackRow[], filename: string, period: string | null, warnings: string[] = []): Promise<ImportResult> {
   const normalizedRows = rows.map((r) => ({ ...r, businessUnit: normalizeBUName(r.businessUnit) }))
   await ensureBusinessUnits(normalizedRows.map((r) => r.businessUnit))
@@ -82,25 +101,53 @@ export async function importFeedbackRows(rows: FeedbackRow[], filename: string, 
   const batch = await prisma.uploadBatch.create({
     data: { type: 'feedback', filename, recordCount: normalizedRows.length, period: period || null },
   })
-  await prisma.feedbackRecord.createMany({
-    data: normalizedRows.map((r) => ({
-      staffId: r.staffId ? r.staffId.toUpperCase() : null,
-      businessUnit: r.businessUnit,
-      trainingTitle: r.trainingTitle,
-      role: r.role,
-      applicationResponse: r.applicationResponse,
-      impactAlignment: r.impactAlignment,
-      confidenceRating: r.confidenceRating > 0 ? r.confidenceRating : null,
-      roleRelevance: r.roleRelevance > 0 ? r.roleRelevance : null,
-      expectationsMet: r.expectationsMet > 0 ? r.expectationsMet : null,
-      vendorRating: r.vendorRating > 0 ? r.vendorRating : null,
-      vendorName: r.vendorName || null,
-      qualitativeResponse: r.qualitativeResponse,
-      month: r.month || null,
-      batchId: batch.id,
-    })),
-  })
-  return { batchId: batch.id, recordCount: normalizedRows.length, warnings }
+
+  // FeedbackRecord has no name at all, only businessUnit/trainingTitle/ratings — so an old
+  // orphaned row (no staffId, uploaded before that column existed) can never have an identity
+  // assigned to it by an admin guessing; the only real fix is a RE-UPLOAD of the same data with a
+  // Staff ID column added. Without this, that re-upload would just create duplicate rows sitting
+  // next to the un-identified originals. Instead, a row that now carries a Staff ID is matched
+  // against an existing orphan sharing the same businessUnit + trainingTitle + month +
+  // confidenceRating fingerprint (same key dedupeFeedback in sheets-sync.ts uses) and, if found,
+  // that orphan's staffId is backfilled in place rather than a new row being created — so
+  // re-uploading a corrected sheet actually converges the data instead of doubling it.
+  const toCreate: typeof normalizedRows = []
+  const claimedOrphanIds = new Set<string>()
+  let backfilled = 0
+
+  for (const r of normalizedRows) {
+    if (!r.staffId) {
+      toCreate.push(r)
+      continue
+    }
+    const rating = r.confidenceRating > 0 ? r.confidenceRating : null
+    const orphan = await prisma.feedbackRecord.findFirst({
+      where: {
+        staffId: null,
+        businessUnit: r.businessUnit,
+        trainingTitle: r.trainingTitle,
+        month: r.month || null,
+        confidenceRating: rating,
+        id: { notIn: [...claimedOrphanIds] },
+      },
+    })
+    if (orphan) {
+      claimedOrphanIds.add(orphan.id)
+      await prisma.feedbackRecord.update({ where: { id: orphan.id }, data: { staffId: r.staffId.toUpperCase() } })
+      backfilled++
+    } else {
+      toCreate.push(r)
+    }
+  }
+
+  if (toCreate.length > 0) {
+    await prisma.feedbackRecord.createMany({ data: toCreate.map((r) => feedbackRecordData(r, batch.id)) })
+  }
+  if (backfilled > 0) {
+    warnings.push(`${backfilled} row(s) matched an existing un-identified Feedback record by Business Unit/Training/Month/Rating and had their Staff ID filled in, instead of creating a duplicate.`)
+  }
+
+  return { batchId: batch.id, recordCount: toCreate.length, warnings }
 }
 
 export async function importSubscriptionRows(rows: SubscriptionRow[], filename: string, period: string | null, warnings: string[] = []): Promise<ImportResult> {

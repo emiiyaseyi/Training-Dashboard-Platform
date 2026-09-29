@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, ChevronDown, ChevronUp, AlertTriangle, Trash2 } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronUp, AlertTriangle, Trash2, Layers } from 'lucide-react'
 
 interface Entry {
   responseId: string
@@ -30,6 +30,7 @@ export function DuplicateSurveyResponsesPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -69,6 +70,25 @@ export function DuplicateSurveyResponsesPanel() {
     }
   }
 
+  const bulkDeleteOlder = async () => {
+    if (!groups || groups.length === 0) return
+    const totalToRemove = groups.reduce((sum, g) => sum + (g.length - 1), 0)
+    if (!confirm(
+      `Delete the older entry in all ${groups.length} duplicate group(s)? This removes ${totalToRemove} response(s), keeping only the most recently submitted one in each group. If a duplicate fed a Manager Review/Feedback record, that record is un-linked (Legacy import) or deleted (native submission) the same as deleting one individually. This can't be undone in bulk — review the list above first if you're not sure every group here is a genuine duplicate.`
+    )) return
+    setBulkDeleting(true)
+    try {
+      const res = await fetch('/api/admin/training-schedule/duplicate-responses/bulk-delete-older', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Bulk delete failed.')
+      await load()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Bulk delete failed.')
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   return (
     <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
       <button
@@ -87,6 +107,16 @@ export function DuplicateSurveyResponsesPanel() {
 
       {expanded && (
         <div className="p-4 space-y-3">
+          {groups && groups.length > 0 && (
+            <button
+              onClick={bulkDeleteOlder}
+              disabled={bulkDeleting}
+              className="flex items-center gap-1.5 text-xs font-medium text-red-700 border border-red-200 bg-red-50 rounded-lg px-3 py-1.5 hover:bg-red-100 disabled:opacity-60"
+            >
+              {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+              Delete Older Duplicate in All {groups.length} Group{groups.length === 1 ? '' : 's'}
+            </button>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-navy-600" />
