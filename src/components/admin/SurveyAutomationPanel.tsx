@@ -7,6 +7,7 @@ import {
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
+import { TrainingScheduleSurveyView } from './TrainingScheduleSurveyView'
 
 const SCHEDULE_PAGE_SIZE = 10
 const ATTENDEE_PAGE_SIZE = 15
@@ -1398,6 +1399,13 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                         />
                         Cc line managers on this send
                       </label>
+                      <div className="space-y-2">
+                        {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const))
+                          .filter((stage) => (stage === 'pre' ? s.preEnabled : stage === 'post1' ? s.post1Enabled : s.post2Enabled))
+                          .map((stage) => (
+                            <TrainingScheduleSurveyView key={stage} scheduleId={s.id} stage={stage} stageLabel={STAGE_LABELS[stage]} />
+                          ))}
+                      </div>
                       {/* Bulk send buttons — Pre-Training never applies to a schedule sourced from Already Attended Trainings, since that training already happened; all three stages are further filtered per-schedule by preEnabled/post1Enabled/post2Enabled (set at creation, editable via Edit) */}
                       <div className="flex flex-wrap items-center gap-2">
                         {(s.sourcedFromHistoricalData ? (['post1', 'post2'] as const) : (['pre', 'post1', 'post2'] as const))

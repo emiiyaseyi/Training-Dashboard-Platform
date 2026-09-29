@@ -274,40 +274,52 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     } else {
       slide.addShape('roundRect', { x: x + 0.18, y: y + 0.18, w: 0.35, h: 0.35, rectRadius: 0.05, fill: { color: C.navyLight }, line: { type: 'none' } })
     }
-    slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.1, h: 0.4, fontFace: 'Calibri', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle' })
+    // Name box and the investment figure box are sized so their w's never overlap (name box ends
+    // at x+0.65+(cardW-2.7)=x+cardW-2.05, figure box starts at x+cardW-2.0), and the figure box is
+    // wide enough (2.0in) that a value like "₦163.75M" at 24pt bold never wraps to a 2nd line and
+    // bleeds into the row below — that wrap was the cause of the overlapping-text export bug.
+    slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.7, h: 0.4, fontFace: 'Calibri', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle', wrap: false })
     slide.addText([
       { text: 'Total Learning Investment\n', options: { fontSize: 11, color: C.gray } },
       { text: fmt(bu.totalInvestment), options: { fontSize: 24, bold: true, color: C.navy, breakLine: true } },
-    ], { x: x + cardW - 1.7, y: y + 0.1, w: 1.55, h: 0.6, align: 'right', fontFace: 'Calibri' })
+    ], { x: x + cardW - 2.0, y: y + 0.08, w: 2.0, h: 0.62, align: 'right', fontFace: 'Calibri', valign: 'top' })
 
+    const rowTop = y + 0.78
     const colW = cardW / 3
-    slide.addText([{ text: 'Formal Training\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + 0.2, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: y + 0.65, w: colW - 0.2, h: 0.55, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Formal Training\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + 0.2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
     slide.addText(
       bu.budget > 0 ? `${pct((bu.trainingCost / bu.budget) * 100)} of budget` : 'Budget not set',
-      { x: x + 0.2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
+      { x: x + 0.2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
     )
     slide.addText(
       `${bu.otherStaffTrained} staff`,
-      { x: x + colW, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
+      { x: x + colW, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
     )
     slide.addText(
       `${bu.subscriptionStaff} members`,
-      { x: x + colW * 2, y: y + 1.25, w: colW - 0.2, h: 0.28, fontFace: 'Calibri', fontSize: 10, color: C.gray }
+      { x: x + colW * 2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
     )
 
-    const statsY = y + 1.6
+    // Bottom row is 3 columns now (Coverage / Avg Impact / Post-Training Impact), matching the
+    // Executive Overview slide's naming so the same two scores are never merged into one line —
+    // "Avg Impact Score" (self-reported confidence) and "Post-Training Impact" (line-manager
+    // reviews) are distinct metrics from distinct data sources and read as such here too.
+    const statsY = rowTop + 0.82
+    const statColW = cardW / 3
     slide.addShape('line', { x: x + 0.2, y: statsY, w: cardW - 0.4, h: 0, line: { color: C.navyLight, width: 0.5 } })
-    slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 12, color: C.gray })
-    slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: cardW / 2 - 0.3, h: 0.32, fontFace: 'Calibri', fontSize: 24, bold: true, color: C.gold })
-    slide.addText(`${bu.staffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
-    slide.addText('Impact', { x: x + cardW / 2, y: statsY + 0.08, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 12, color: C.gray })
-    slide.addText(rating(bu.avgImpactScore), { x: x + cardW / 2, y: statsY + 0.3, w: cardW / 2 - 0.3, h: 0.32, fontFace: 'Calibri', fontSize: 24, bold: true, color: C.green })
-    slide.addText(
-      `confidence${bu.postTrainingImpactScore > 0 ? ` · Mgr ${rating(bu.postTrainingImpactScore)}` : ''}`,
-      { x: x + cardW / 2, y: statsY + 0.66, w: cardW / 2 - 0.3, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray }
-    )
+    slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
+    slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.gold })
+    slide.addText(`${bu.staffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+
+    slide.addText('Avg Impact Score', { x: x + statColW, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
+    slide.addText(rating(bu.avgImpactScore), { x: x + statColW, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.green })
+    slide.addText('Self-reported confidence', { x: x + statColW, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+
+    slide.addText('Post-Training Impact', { x: x + statColW * 2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
+    slide.addText(bu.postTrainingImpactScore > 0 ? rating(bu.postTrainingImpactScore) : '—', { x: x + statColW * 2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.navy })
+    slide.addText('From line manager reviews', { x: x + statColW * 2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
   })
 
   addFooter(slide, pageNumber, periodLabel)

@@ -1,4 +1,4 @@
-import { Building2, Users, TrendingUp } from 'lucide-react'
+import { Building2, Users, TrendingUp, ClipboardCheck } from 'lucide-react'
 import { fmt, pct, rating } from '@/lib/slide-format'
 import type { BUSummary } from '@/lib/analytics'
 
@@ -39,24 +39,30 @@ export function SlideBUProfileCard({ bu }: { bu: BUSummary }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-t border-navy-50" style={{ marginTop: 10, paddingTop: 10 }}>
+      <div className="grid grid-cols-3 gap-3 border-t border-navy-50" style={{ marginTop: 10, paddingTop: 10 }}>
         <div>
           <div className="flex items-center gap-1.5">
             <Users className="text-report-gray" style={{ width: 12, height: 12 }} />
-            <span className="text-report-gray" style={{ fontSize: 14 }}>Coverage</span>
+            <span className="text-report-gray" style={{ fontSize: 13 }}>Coverage</span>
           </div>
-          <p className="font-bold tabular-nums" style={{ fontSize: 26, lineHeight: '30px', color: '#C9A24B' }}>{bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>{bu.staffTrained} trained (1+ training)</p>
+          <p className="font-bold tabular-nums" style={{ fontSize: 22, lineHeight: '26px', color: '#C9A24B' }}>{bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'}</p>
+          <p className="text-report-gray" style={{ fontSize: 11, marginTop: 2 }}>{bu.staffTrained} trained (1+ training)</p>
         </div>
         <div>
           <div className="flex items-center gap-1.5">
             <TrendingUp className="text-report-gray" style={{ width: 12, height: 12 }} />
-            <span className="text-report-gray" style={{ fontSize: 14 }}>Impact</span>
+            <span className="text-report-gray" style={{ fontSize: 13 }}>Avg Impact Score</span>
           </div>
-          <p className="font-bold tabular-nums" style={{ fontSize: 26, lineHeight: '30px', color: '#1F9D6C' }}>{rating(bu.avgImpactScore)}</p>
-          <p className="text-report-gray" style={{ fontSize: 13, marginTop: 2 }}>
-            confidence{bu.postTrainingImpactScore > 0 ? ` · Mgr ${rating(bu.postTrainingImpactScore)}` : ''}
-          </p>
+          <p className="font-bold tabular-nums" style={{ fontSize: 22, lineHeight: '26px', color: '#1F9D6C' }}>{rating(bu.avgImpactScore)}</p>
+          <p className="text-report-gray" style={{ fontSize: 11, marginTop: 2 }}>Self-reported confidence</p>
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5">
+            <ClipboardCheck className="text-report-gray" style={{ width: 12, height: 12 }} />
+            <span className="text-report-gray" style={{ fontSize: 13 }}>Post-Training Impact</span>
+          </div>
+          <p className="font-bold tabular-nums" style={{ fontSize: 22, lineHeight: '26px', color: '#1E2761' }}>{bu.postTrainingImpactScore > 0 ? rating(bu.postTrainingImpactScore) : '—'}</p>
+          <p className="text-report-gray" style={{ fontSize: 11, marginTop: 2 }}>From line manager reviews</p>
         </div>
       </div>
     </div>
