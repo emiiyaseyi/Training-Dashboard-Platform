@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { FolderOpen, Search, Download, ChevronDown, ChevronUp, Loader2, Package, PenLine } from 'lucide-react'
+import { FolderOpen, Search, Download, ChevronDown, ChevronUp, Loader2, Package, PenLine, History, Trash2 } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
-import { bundleZip } from '@/lib/slide-export'
 
 interface UploadedFileRow {
   id: string
@@ -29,35 +28,15 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// Keeps every file's own name inside the zip, but disambiguates exact duplicates (the same
-// filename uploaded by different people for the same question — common, since attendees often
-// download the same template/certificate and re-upload it unchanged) by appending a counter.
-function uniqueZipPath(path: string, used: Map<string, number>): string {
-  const count = used.get(path) || 0
-  used.set(path, count + 1)
-  if (count === 0) return path
-  const dot = path.lastIndexOf('.')
-  return dot === -1 ? `${path} (${count})` : `${path.slice(0, dot)} (${count})${path.slice(dot)}`
-}
-
-// Windows' default extraction path limit (MAX_PATH, ~260 chars including the destination folder
-// the person extracts into) is easy to blow past once every file's own name already embeds Staff
-// Name - Training Name - Date (see uploaded-file-naming.ts), nested inside a Business
-// Unit/Training/Question folder structure that repeats a lot of the same text — a training with a
-// long title and a long filename can build a path well over 300 characters on its own, before the
-// extraction destination is even counted. Every path segment is capped, and the folder structure
-// drops the Training-name level entirely (it's already in the filename) to cut one more layer of
-// duplication rather than just truncating everything harder.
-function truncateSegment(s: string, maxLen: number): string {
-  const trimmed = s.trim()
-  return trimmed.length > maxLen ? trimmed.slice(0, maxLen).trim() : trimmed
-}
-function truncateFileName(name: string, maxLen: number): string {
-  if (name.length <= maxLen) return name
-  const dot = name.lastIndexOf('.')
-  const ext = dot > -1 ? name.slice(dot) : ''
-  const base = dot > -1 ? name.slice(0, dot) : name
-  return `${base.slice(0, Math.max(10, maxLen - ext.length))}${ext}`
+interface DownloadJob {
+  id: string
+  requestedBy: string | null
+  fileCount: number
+  status: 'processing' | 'completed' | 'failed'
+  zipFileName: string | null
+  errorMessage: string | null
+  createdAt: string
+  completedAt: string | null
 }
 
 // Lists every file uploaded through a "file"-type survey question (training or custom survey),
@@ -79,9 +58,12 @@ export function UploadedFilesPanel() {
   const [collapsedBUs, setCollapsedBUs] = useState<Set<string>>(new Set())
   const [collapsedTrainings, setCollapsedTrainings] = useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [zipping, setZipping] = useState<{ done: number; total: number } | null>(null)
+  const [startingDownload, setStartingDownload] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{ renamed: number; total: number } | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState<DownloadJob[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/survey-files')
@@ -93,6 +75,16 @@ export function UploadedFilesPanel() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const loadHistory = async () => {
+    setLoadingHistory(true)
+    try {
+      const data = await fetch('/api/admin/survey-files/download-jobs').then((r) => r.json()).catch(() => [])
+      setHistory(Array.isArray(data) ? data : [])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
 
   const trainingOptions = useMemo(
     () => [...new Set(files.map((f) => f.surveyName))].sort((a, b) => a.localeCompare(b)),
@@ -179,25 +171,43 @@ export function UploadedFilesPanel() {
 
   const selectedVisible = filtered.filter((f) => selectedIds.has(f.id))
 
+  // Built entirely server-side now (see FileDownloadJob in schema.prisma) — this request kicks it
+  // off and waits for the finished zip, but the actual work happens in the API route regardless of
+  // whether this tab stays open, so navigating away or closing it no longer loses the download.
+  // Whatever it produces also lands in Download History automatically, redownloadable later
+  // without rebuilding anything.
   const downloadSelected = async () => {
     if (selectedVisible.length === 0) return
-    setZipping({ done: 0, total: selectedVisible.length })
+    setStartingDownload(true)
     try {
-      const used = new Map<string, number>()
-      const zipEntries: { name: string; blob: Blob }[] = []
-      for (const f of selectedVisible) {
-        const blob = await fetch(`/api/admin/survey-files/${f.id}`).then((r) => r.blob())
-        const path = uniqueZipPath(
-          `${truncateSegment(f.businessUnit || UNASSIGNED_BU, 30)}/${truncateSegment(f.questionLabel, 30)}/${truncateFileName(f.fileName, 120)}`,
-          used
-        )
-        zipEntries.push({ name: path, blob })
-        setZipping((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
+      const res = await fetch('/api/admin/survey-files/download-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds: selectedVisible.map((f) => f.id) }),
+      })
+      const data: (Partial<DownloadJob> & { error?: string }) | null = await res.json().catch(() => null)
+      if (res.ok && data?.status) {
+        if (data.status === 'completed' && data.id) {
+          window.location.href = `/api/admin/survey-files/download-jobs/${data.id}`
+        } else {
+          alert(data.errorMessage || 'The download failed to build. Check Download History for details.')
+        }
+        if (showHistory) await loadHistory()
+      } else {
+        alert(data?.error || 'Failed to start the download.')
       }
-      await bundleZip(zipEntries, `uploaded-files-${new Date().toISOString().slice(0, 10)}.zip`)
     } finally {
-      setZipping(null)
+      setStartingDownload(false)
     }
+  }
+
+  const redownload = (jobId: string) => {
+    window.location.href = `/api/admin/survey-files/download-jobs/${jobId}`
+  }
+
+  const deleteHistoryEntry = async (jobId: string) => {
+    await fetch(`/api/admin/survey-files/download-jobs/${jobId}`, { method: 'DELETE' }).catch(() => {})
+    setHistory((prev) => prev.filter((j) => j.id !== jobId))
   }
 
   const renameExisting = async () => {
@@ -258,13 +268,65 @@ export function UploadedFilesPanel() {
             <span className="text-xs text-slate-400">({selectedVisible.length} of {filtered.length} selected)</span>
             <button
               onClick={downloadSelected}
-              disabled={selectedVisible.length === 0 || !!zipping}
-              className="ml-auto flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+              disabled={selectedVisible.length === 0 || startingDownload}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
             >
-              {zipping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />}
-              {zipping ? `Zipping… ${zipping.done}/${zipping.total}` : `Download Selected (${selectedVisible.length})`}
+              {startingDownload ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />}
+              {startingDownload ? 'Building…' : `Download Selected (${selectedVisible.length})`}
+            </button>
+            <button
+              onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadHistory() }}
+              className="ml-auto flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+            >
+              <History className="w-3.5 h-3.5" /> Download History
             </button>
           </div>
+
+          {showHistory && (
+            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 mb-3">
+              {loadingHistory ? (
+                <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
+              ) : history.length === 0 ? (
+                <p className="text-xs text-slate-400">No downloads yet.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-400 border-b border-slate-100">
+                      <th className="text-left font-medium py-1 pr-3">Started</th>
+                      <th className="text-left font-medium py-1 pr-3">By</th>
+                      <th className="text-right font-medium py-1 pr-3">Files</th>
+                      <th className="text-left font-medium py-1 pr-3">Status</th>
+                      <th className="py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((job) => (
+                      <tr key={job.id} className="border-b border-slate-50 last:border-0">
+                        <td className="py-1.5 pr-3 text-slate-600 whitespace-nowrap">{new Date(job.createdAt).toLocaleString()}</td>
+                        <td className="py-1.5 pr-3 text-slate-600">{job.requestedBy || '—'}</td>
+                        <td className="py-1.5 pr-3 text-slate-600 text-right">{job.fileCount}</td>
+                        <td className="py-1.5 pr-3">
+                          {job.status === 'completed' && <span className="text-emerald-700">Ready</span>}
+                          {job.status === 'processing' && <span className="text-amber-700">Still building — refresh to check</span>}
+                          {job.status === 'failed' && <span className="text-red-700" title={job.errorMessage || ''}>Failed</span>}
+                        </td>
+                        <td className="py-1.5 text-right whitespace-nowrap">
+                          {job.status === 'completed' && (
+                            <button onClick={() => redownload(job.id)} className="text-navy-600 hover:text-navy-800 font-medium inline-flex items-center gap-1 mr-2">
+                              <Download className="w-3 h-3" /> Redownload
+                            </button>
+                          )}
+                          <button onClick={() => deleteHistoryEntry(job.id)} className="text-slate-400 hover:text-red-600 inline-flex items-center">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <button

@@ -713,6 +713,26 @@ model UploadedFile {
   @@index([createdAt])
 }
 
+// A bulk "Download Selected" from Uploaded Files, built entirely server-side (one request reads
+// every selected UploadedFile's bytes straight from the database and zips them in memory — no
+// per-file round trip, unlike the old client-side loop) so the download survives the admin
+// navigating away or closing the tab mid-request: the server keeps working regardless of whether
+// anyone's still listening. The finished zip is stored here, not just streamed once, so "Download
+// History" can re-serve the exact same file later without re-zipping anything.
+model FileDownloadJob {
+  id           String    @id @default(cuid())
+  requestedBy  String?   // admin's email/identifier, best-effort — never blocks the job if unavailable
+  fileCount    Int
+  status       String    @default("processing") // "processing" | "completed" | "failed"
+  zipFileName  String?
+  zipData      Bytes?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([createdAt])
+}
+
 // Monthly report snapshots — generated per BU per month
 model MonthlyReport {
   id           String   @id @default(cuid())
