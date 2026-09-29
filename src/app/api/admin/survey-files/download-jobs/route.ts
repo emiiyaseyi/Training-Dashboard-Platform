@@ -18,18 +18,36 @@ async function buildZip(entries: ZipEntryLike[]): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' })
 }
 
+// Business Unit names and (especially) survey question labels routinely contain characters
+// Windows forbids in a file/folder name — a colon or question mark in something like "Rate your
+// experience: 1-5?" is completely ordinary text but breaks Explorer's built-in unzip with exactly
+// this "destination file could not be created" error, independent of path length. Replaced with a
+// space rather than dropped, so "Before: vs After:" doesn't collapse into "Before After" and stay
+// readable. Also strips a trailing dot/space, which Windows rejects on a folder name even though
+// it's otherwise legal — something truncation below can introduce by cutting mid-word.
+const WINDOWS_ILLEGAL_CHARS = /[<>:"/\\|?*\x00-\x1F]/g
+function sanitizeSegment(s: string): string {
+  return s.replace(WINDOWS_ILLEGAL_CHARS, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '') || 'Untitled'
+}
+
 // Windows' extractor refuses to unpack a path over ~260 characters (MAX_PATH) — same reasoning as
 // the client-side zip this replaces (see UploadedFilesPanel.tsx).
 function truncateSegment(s: string, maxLen: number): string {
-  const trimmed = s.trim()
-  return trimmed.length > maxLen ? trimmed.slice(0, maxLen).trim() : trimmed
+  const clean = sanitizeSegment(s)
+  const trimmed = clean.length > maxLen ? clean.slice(0, maxLen).trim().replace(/[. ]+$/, '') : clean
+  return trimmed || 'Untitled'
 }
 function truncateFileName(name: string, maxLen: number): string {
-  if (name.length <= maxLen) return name
   const dot = name.lastIndexOf('.')
-  const ext = dot > -1 ? name.slice(dot) : ''
-  const base = dot > -1 ? name.slice(0, dot) : name
-  return `${base.slice(0, Math.max(10, maxLen - ext.length))}${ext}`
+  const rawExt = dot > -1 ? name.slice(dot + 1) : '' // extension WITHOUT the leading dot
+  const rawBase = dot > -1 ? name.slice(0, dot) : name
+  const extClean = rawExt ? sanitizeSegment(rawExt) : ''
+  const ext = extClean && extClean !== 'Untitled' ? `.${extClean}` : ''
+  const base = sanitizeSegment(rawBase) || 'file'
+  const full = `${base}${ext}`
+  if (full.length <= maxLen) return full
+  const truncatedBase = base.slice(0, Math.max(10, maxLen - ext.length)).trim().replace(/[. ]+$/, '')
+  return `${truncatedBase || 'file'}${ext}`
 }
 function uniqueZipPath(path: string, used: Map<string, number>): string {
   const count = used.get(path) || 0
@@ -70,7 +88,7 @@ export async function POST(req: NextRequest) {
       const used = new Map<string, number>()
       const entries = files.map((f) => ({
         name: uniqueZipPath(
-          `${truncateSegment(f.businessUnit || 'Custom Surveys / No Business Unit', 30)}/${truncateSegment(f.questionLabel, 30)}/${truncateFileName(f.fileName, 120)}`,
+          `${truncateSegment(f.businessUnit || 'Custom Surveys - No Business Unit', 30)}/${truncateSegment(f.questionLabel, 30)}/${truncateFileName(f.fileName, 120)}`,
           used
         ),
         blob: new Blob([new Uint8Array(f.data)], { type: f.mimeType || 'application/octet-stream' }),
