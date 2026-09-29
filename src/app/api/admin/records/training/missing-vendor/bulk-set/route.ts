@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // succeeds; reported back so the admin knows if the sheet copy needs a manual look.
     const sheetPush = await pushTrainingRecordFieldsToSheet(
       targets.map((t) => ({ staffId: t.staffId, training: t.training, month: t.month, fields: data }))
-    ).catch((err) => ({ success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
+    ).catch((err) => ({ success: false, updated: 0, notFound: 0, notFoundRecords: [], error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
 
     return NextResponse.json({ updated: count, sheetPush })
   } catch (err) {

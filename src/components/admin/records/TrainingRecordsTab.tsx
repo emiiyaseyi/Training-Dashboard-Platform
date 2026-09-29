@@ -8,6 +8,7 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { MONTHS, filterToParams, filterLabel, type PeriodFilter } from '@/lib/filter-types'
 import { exportExcel, exportPdfSections, buildBusinessUnitSections } from '@/lib/export'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // Sentinel resyncingBUKey/resyncBUResult use for the "all trainings at once" button, distinct from
 // any real groupKey() value so the two loading/result states never collide.
@@ -721,9 +722,13 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const saveNewVendor = async (rowId: string) => {
     const name = newVendorInput.trim()
     if (!name) return
+    // A row id that isn't the current in-progress edit means this is the Fill Missing Fields
+    // list's own quick-fill picker, not the row-edit form — save straight to the database instead
+    // of into `draft` (which wouldn't even be showing for this record).
     const applyVendor = (vendorName: string) => {
       if (rowId === NEW_SCHEDULE_VENDOR_ID) setNewTraining((prev) => ({ ...prev, vendor: vendorName }))
-      else setDraft((d) => (d ? { ...d, vendor: vendorName } : d))
+      else if (editingId === rowId) setDraft((d) => (d ? { ...d, vendor: vendorName } : d))
+      else quickSetVendor(rowId, vendorName)
     }
     // Same name, different case/spacing — just select the existing one instead of creating a duplicate.
     const existing = vendors.find((v) => v.name.trim().toLowerCase() === name.toLowerCase())
@@ -750,6 +755,55 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       setSavingNewVendor(false)
       setAddingVendorForId(null)
       setNewVendorInput('')
+    }
+  }
+
+  // One-click Training Provider fill straight from the Fill Missing Fields list — no need to find
+  // and expand the record's own group first. Saves directly via the same PUT the row-edit form
+  // uses (so the sheet push, schedule-date sync, etc. all still happen), then removes the record
+  // from the list locally rather than re-running the whole scan again.
+  const [savingVendorFillId, setSavingVendorFillId] = useState<string | null>(null)
+  const quickSetVendor = async (recordId: string, vendorName: string, trainingName?: string) => {
+    setSavingVendorFillId(recordId)
+    try {
+      const res = await fetch(`/api/admin/records/training/${recordId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendor: vendorName }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to save Training Provider.')
+        return
+      }
+
+      // Same "apply this to every other record still filed under the same training name" offer
+      // the row-edit form gives — a Training Provider correction almost always applies to the
+      // whole programme, not just the one attendee who happened to be fixed first.
+      let appliedToTrainingName: string | null = null
+      if (trainingName && confirm(`Apply this Training Provider to every other record with the training name "${trainingName}" too (any month/year)?`)) {
+        const applyRes = await fetch('/api/admin/records/training/apply-to-similar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ originalTrainingName: trainingName, excludeId: recordId, changes: { vendor: vendorName } }),
+        })
+        const applyData = await applyRes.json().catch(() => ({}))
+        if (applyRes.ok) {
+          appliedToTrainingName = trainingName
+          alert(`Applied to ${applyData.updated} other record${applyData.updated === 1 ? '' : 's'}.`)
+        }
+      }
+
+      const appliedKey = appliedToTrainingName ? normalizeTrainingNameKey(appliedToTrainingName) : null
+      setFillResult((prev) => prev && {
+        ...prev,
+        missingVendorRecords: prev.missingVendorRecords.filter((r) =>
+          r.id !== recordId && (!appliedKey || normalizeTrainingNameKey(r.training) !== appliedKey)
+        ),
+      })
+      await load()
+    } finally {
+      setSavingVendorFillId(null)
     }
   }
 
@@ -1067,16 +1121,56 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
               </p>
               <ul className="space-y-1">
                 {fillResult.missingVendorRecords.map((r) => (
-                  <li key={r.id} className="text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+                  <li key={r.id} className="text-slate-600 flex items-center justify-between gap-2 flex-wrap bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
                     <span>
                       <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training}
                     </span>
-                    <button
-                      onClick={() => { setQuery(r.training); setExpandedKey(null) }}
-                      className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap"
-                    >
-                      Find this training ↓
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {savingVendorFillId === r.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-navy-600" />
+                      ) : addingVendorForId === r.id ? (
+                        <>
+                          <input
+                            autoFocus
+                            value={newVendorInput}
+                            onChange={(e) => setNewVendorInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveNewVendor(r.id) }}
+                            placeholder="New vendor name"
+                            className="w-32 border border-slate-200 rounded px-1.5 py-1"
+                          />
+                          <button
+                            onClick={() => saveNewVendor(r.id)}
+                            disabled={savingNewVendor || !newVendorInput.trim()}
+                            className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            {savingNewVendor ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                          </button>
+                          <button onClick={() => { setAddingVendorForId(null); setNewVendorInput('') }} className="p-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </>
+                      ) : (
+                        <select
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value === '__add_new__') { setNewVendorInput(''); setAddingVendorForId(r.id); return }
+                            if (e.target.value) quickSetVendor(r.id, e.target.value, r.training)
+                          }}
+                          className="border border-slate-200 rounded px-1.5 py-1"
+                        >
+                          <option value="" disabled>Set Training Provider…</option>
+                          {vendors.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                          <option value="__add_new__">+ Add new vendor…</option>
+                        </select>
+                      )}
+                      <button
+                        onClick={() => { setQuery(r.training); setExpandedKey(null) }}
+                        className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap"
+                        title="Find this training in the list instead"
+                      >
+                        Find ↓
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

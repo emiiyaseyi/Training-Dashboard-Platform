@@ -82,7 +82,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (monthChanged) sheetFields.month = record.month
     const sheetPush = existing && Object.keys(sheetFields).length > 0
       ? await pushTrainingRecordFieldsToSheet([{ staffId: existing.staffId, training: existing.training, month: existing.month, fields: sheetFields }])
-          .catch((err) => ({ success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
+          .catch((err) => ({ success: false, updated: 0, notFound: 0, notFoundRecords: [], error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
       : undefined
 
     return NextResponse.json({ ...record, sheetPush })
