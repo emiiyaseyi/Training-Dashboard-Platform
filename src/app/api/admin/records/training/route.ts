@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 const PAGE_SIZE = 20
 
@@ -20,14 +21,14 @@ export async function GET(req: NextRequest) {
       prisma.trainingRecord.findMany({ orderBy: { createdAt: 'desc' } }),
       prisma.trainingSchedule.findMany({ select: { trainingName: true } }),
     ])
-    const existingScheduleNames = new Set(schedules.map((s) => s.trainingName.trim().toLowerCase()))
+    const existingScheduleNames = new Set(schedules.map((s) => normalizeTrainingNameKey(s.trainingName)))
 
     const groups = new Map<string, {
       training: string; month: string; year: number
       records: typeof records
     }>()
     for (const r of records) {
-      const key = `${r.training.trim().toLowerCase()}|${r.month}|${r.year}`
+      const key = `${normalizeTrainingNameKey(r.training)}|${r.month}|${r.year}`
       if (!groups.has(key)) groups.set(key, { training: r.training.trim(), month: r.month, year: r.year, records: [] })
       groups.get(key)!.records.push(r)
     }
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
         businessUnits,
         attendeeCount: g.records.length,
         totalCost: g.records.reduce((s, r) => s + r.cost, 0),
-        hasExistingSchedule: existingScheduleNames.has(g.training.toLowerCase()),
+        hasExistingSchedule: existingScheduleNames.has(normalizeTrainingNameKey(g.training)),
         records: g.records
           .map((r) => ({
             id: r.id, staffId: r.staffId, staffName: r.staffName, businessUnit: r.businessUnit,

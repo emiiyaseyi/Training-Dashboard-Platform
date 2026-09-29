@@ -65,17 +65,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Best-effort push of whatever changed among Cost/Hours/Type/Capability/Vendor back to the
-    // live sheet, keyed by this record's identity as it was BEFORE this edit (in case
+    // Best-effort push of whatever changed among Cost/Hours/Type/Capability/Vendor/Month back to
+    // the live sheet, keyed by this record's identity as it was BEFORE this edit (in case
     // staffId/training/month were also changed just now — the sheet row is still filed under the
-    // old one). Never blocks or fails the response; the database write above is the source of
-    // truth either way.
-    const sheetFields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string } = {}
+    // old one; a changed Month is pushed as a corrected value on that still-findable row, not
+    // used as part of the lookup key itself). Never blocks or fails the response; the database
+    // write above is the source of truth either way.
+    const sheetFields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string; month?: string } = {}
     if (body.cost !== undefined) sheetFields.cost = record.cost
     if (body.hours !== undefined) sheetFields.hours = record.hours ?? 0
     if (body.trainingType !== undefined) sheetFields.trainingType = record.trainingType || ''
     if (body.capability !== undefined) sheetFields.capability = record.capability || ''
     if (body.vendor !== undefined) sheetFields.vendor = record.vendor || ''
+    if (monthChanged) sheetFields.month = record.month
     const sheetPush = existing && Object.keys(sheetFields).length > 0
       ? await pushTrainingRecordFieldsToSheet([{ staffId: existing.staffId, training: existing.training, month: existing.month, fields: sheetFields }])
           .catch((err) => ({ success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))

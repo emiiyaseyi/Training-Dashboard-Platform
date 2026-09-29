@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // Every training cohort (same training+month+year grouping as the main records list) where NOT A
 // SINGLE attendee has one or more of Vendor/Hours/Training Type/Capability on file — all four are
@@ -28,7 +29,7 @@ export async function GET() {
 
     const groups = new Map<string, typeof all>()
     for (const r of all) {
-      const key = `${r.training.trim().toLowerCase()}|${r.month}|${r.year}`
+      const key = `${normalizeTrainingNameKey(r.training)}|${r.month}|${r.year}`
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(r)
     }

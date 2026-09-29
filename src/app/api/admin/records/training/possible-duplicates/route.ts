@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // Same person, same training name, but filed under more than one Month/Year — almost always the
 // same real attendance recorded twice (a re-sync, a manual re-add, a typo'd month later
@@ -25,7 +26,7 @@ export async function GET() {
     const groups = new Map<string, typeof all>()
     for (const r of all) {
       const personKey = normalizeStaffIdKey(r.staffId) || r.staffName.trim().toLowerCase()
-      const key = `${personKey}|${r.training.trim().toLowerCase()}`
+      const key = `${personKey}|${normalizeTrainingNameKey(r.training)}`
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(r)
     }

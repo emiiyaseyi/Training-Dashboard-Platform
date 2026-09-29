@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // Groups already-uploaded Training Data (TrainingRecord) rows into training "instances" — same
 // training name + month/year cohort — so the admin can pick one and retroactively send
@@ -25,7 +26,7 @@ export async function GET() {
     ])
 
     const existingScheduleNames = new Set(
-      schedules.filter((s) => !s.sourcedFromHistoricalData).map((s) => s.trainingName.trim().toLowerCase())
+      schedules.filter((s) => !s.sourcedFromHistoricalData).map((s) => normalizeTrainingNameKey(s.trainingName))
     )
 
     const groups = new Map<string, {
@@ -35,7 +36,7 @@ export async function GET() {
 
     for (const r of records) {
       if (!r.training?.trim()) continue
-      const key = `${r.training.trim().toLowerCase()}|${r.month}|${r.year}`
+      const key = `${normalizeTrainingNameKey(r.training)}|${r.month}|${r.year}`
       if (!groups.has(key)) {
         groups.set(key, { training: r.training.trim(), month: r.month, year: r.year, attendees: new Map() })
       }
@@ -43,7 +44,7 @@ export async function GET() {
     }
 
     const result = [...groups.values()]
-      .filter((g) => !existingScheduleNames.has(g.training.toLowerCase()))
+      .filter((g) => !existingScheduleNames.has(normalizeTrainingNameKey(g.training)))
       .map((g) => {
         const attendees = [...g.attendees.values()].sort((a, b) => a.staffName.localeCompare(b.staffName))
         const businessUnits = [...new Set(attendees.map((a) => a.businessUnit))].sort()

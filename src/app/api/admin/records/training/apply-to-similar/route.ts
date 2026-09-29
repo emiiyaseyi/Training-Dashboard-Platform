@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // After editing one TrainingRecord's name/type/cost/vendor, the admin can choose to apply that
 // same change to every other record still filed under the training's ORIGINAL name — a
@@ -22,9 +23,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'originalTrainingName and changes are required.' }, { status: 400 })
     }
 
-    const key = originalTrainingName.trim().toLowerCase()
+    const key = normalizeTrainingNameKey(originalTrainingName)
     const candidates = await prisma.trainingRecord.findMany({ select: { id: true, training: true } })
-    const ids = candidates.filter((r) => r.id !== excludeId && r.training.trim().toLowerCase() === key).map((r) => r.id)
+    const ids = candidates.filter((r) => r.id !== excludeId && normalizeTrainingNameKey(r.training) === key).map((r) => r.id)
 
     if (ids.length === 0) return NextResponse.json({ updated: 0 })
 

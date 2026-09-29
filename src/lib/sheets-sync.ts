@@ -699,15 +699,18 @@ export interface PushTrainingFieldsResult {
 // here (no sheet configured, connection issue) is reported but never blocks or rolls back the
 // database write, which is the source of truth either way.
 //
-// Keyed by Staff ID + Training + Month, same convention as pushVendorUpdatesToSheet — pass the
-// record's identity as it was BEFORE this edit (in case the edit itself changed Training/Month),
-// since the sheet row is still filed under the old one.
+// Keyed by Staff ID + Training + Month, same convention as pushVendorUpdatesToSheet — `month`
+// is the record's identity as it was BEFORE this edit (in case the edit itself changed
+// Training/Month), since the sheet row is still filed under the old one. If the edit DID change
+// the month, pass the new value as fields.month too — the row is still found by the old month key,
+// but the Month cell itself gets corrected to the new one, so a corrected date actually reaches
+// the sheet instead of only Cost/Hours/Type/Capability/Vendor ever being pushed.
 export async function pushTrainingRecordFieldsToSheet(
   records: {
     staffId: string
     training: string
     month: string
-    fields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string }
+    fields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string; month?: string }
   }[]
 ): Promise<PushTrainingFieldsResult> {
   const toPush = records.filter((r) => Object.keys(r.fields).length > 0)
@@ -730,6 +733,7 @@ export async function pushTrainingRecordFieldsToSheet(
       hours: ['hoursoflearning', 'learningduration', 'traininghours', 'durationhours', 'hours'],
       trainingType: ['type', 'category', 'trainingtype'],
       capability: ['capability', 'competency'],
+      month: ['month', 'period', 'trainingmonth'],
     }
 
     const { found, notFound, error } = await batchUpdateRowsByCompoundKey(
