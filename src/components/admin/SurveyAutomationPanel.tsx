@@ -1333,6 +1333,18 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                 {creatingSchedule && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {editingScheduleId ? 'Save Changes' : 'Create Schedule'}
               </button>
+              {!creatingSchedule && (!newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate) && (
+                <p className="text-[11px] text-amber-600">
+                  Still needed: {[
+                    !newSchedule.trainingName && 'Training name',
+                    // Business Unit has no independent field to fill — the dropdown above only
+                    // auto-fills once an attendee is added below, or can be picked manually from it.
+                    !newSchedule.businessUnit && 'Business Unit (add an attendee below, or pick one from the dropdown above)',
+                    !newSchedule.startDate && 'Start date',
+                    !newSchedule.endDate && 'End date',
+                  ].filter(Boolean).join(', ')}
+                </p>
+              )}
               {editingScheduleId && (
                 <button onClick={resetScheduleForm} className="text-xs text-slate-500 hover:text-slate-700">
                   Cancel
