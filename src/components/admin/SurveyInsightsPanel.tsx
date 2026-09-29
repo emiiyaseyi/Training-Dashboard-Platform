@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2, Pencil } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2, Pencil, Wrench } from 'lucide-react'
 import { SurveyResponseEditModal } from './SurveyResponseEditModal'
 
 type Stage = 'pre' | 'post1' | 'post2'
@@ -71,6 +71,8 @@ export function SurveyInsightsPanel() {
   const [expanded, setExpanded] = useState(false)
   const [editingResponse, setEditingResponse] = useState<ResponseRow | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState('')
 
   useEffect(() => {
     if (!expanded) return
@@ -98,6 +100,25 @@ export function SurveyInsightsPanel() {
     setReloadTick((t) => t + 1)
   }
 
+  const runBackfill = async () => {
+    if (!confirm(
+      "This corrects every existing Manager Review's Business Unit to match each reviewer's CURRENT roster BU (fixing 'Post-Training Impact' scores that were grouped under a stale/wrong BU). It does not touch Post-1 feedback (Avg Impact Score) — those have no staff identifier to safely re-match. Continue?"
+    )) return
+    setBackfilling(true)
+    setBackfillResult('')
+    try {
+      const res = await fetch('/api/admin/training-schedule/backfill-manager-review-bu', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Backfill failed.')
+      setBackfillResult(`Checked ${json.totalRecords} manager reviews — corrected ${json.updated}${json.unresolved > 0 ? `, ${json.unresolved} staff ID(s) not found in the roster` : ''}.`)
+      setReloadTick((t) => t + 1)
+    } catch (err) {
+      setBackfillResult(err instanceof Error ? err.message : 'Backfill failed.')
+    } finally {
+      setBackfilling(false)
+    }
+  }
+
   return (
     <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
       <button
@@ -113,6 +134,17 @@ export function SurveyInsightsPanel() {
 
       {expanded && (
         <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <button
+              onClick={runBackfill}
+              disabled={backfilling}
+              className="flex items-center gap-1.5 text-xs font-medium text-amber-700 border border-amber-200 bg-amber-50 rounded-lg px-3 py-1.5 hover:bg-amber-100 disabled:opacity-60"
+            >
+              {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+              Fix Business Unit on all existing Manager Reviews
+            </button>
+            {backfillResult && <p className="text-xs text-slate-500">{backfillResult}</p>}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
               {(['pre', 'post1', 'post2'] as const).map((s) => (
