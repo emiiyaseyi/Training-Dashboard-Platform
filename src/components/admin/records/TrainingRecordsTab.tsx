@@ -9,6 +9,10 @@ import { MONTHS, filterToParams, filterLabel, type PeriodFilter } from '@/lib/fi
 import { exportExcel, exportPdfSections, buildBusinessUnitSections } from '@/lib/export'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
 
+// Sentinel resyncingBUKey/resyncBUResult use for the "all trainings at once" button, distinct from
+// any real groupKey() value so the two loading/result states never collide.
+const ALL_TRAININGS_KEY = '__all_trainings__'
+
 // Every field the Training Report export can include — all ticked by default (see
 // reportColumns), the admin unticks whichever they don't want in that download.
 const REPORT_COLUMNS: { key: string; header: string }[] = [
@@ -818,6 +822,13 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     }
   }
 
+  const sheetPushSuffix = (sheetPush: { success: boolean; updated: number; notFound: number; error?: string } | null): string => {
+    if (!sheetPush) return ''
+    if (!sheetPush.success) return ` Sheet not updated: ${sheetPush.error || 'unknown reason'}.`
+    if (sheetPush.notFound > 0) return ` Sheet: ${sheetPush.updated} row(s) updated, ${sheetPush.notFound} couldn't be matched there.`
+    return ` Sheet: ${sheetPush.updated} row(s) updated too.`
+  }
+
   const resyncBusinessUnit = async (g: TrainingGroup) => {
     const key = groupKey(g)
     if (!confirm(`Reset Business Unit for every attendee of "${g.training}" (${g.month} ${g.year}) to their CURRENT one on the Staff Roster? This overwrites whatever is stored now, even if it isn't blank.`)) return
@@ -833,7 +844,32 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       if (res.ok) {
         setResyncBUResult({
           key,
-          message: `${data.updated} of ${data.totalChecked} corrected${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.`,
+          message: `${data.updated} of ${data.totalChecked} corrected${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.${sheetPushSuffix(data.sheetPush)}`,
+        })
+        await load()
+      } else {
+        alert(data.error || 'Failed to resync Business Unit.')
+      }
+    } finally {
+      setResyncingBUKey(null)
+    }
+  }
+
+  const resyncAllBusinessUnits = async () => {
+    if (!confirm('Reset Business Unit for EVERY training record, across every training, to each attendee\'s CURRENT one on the Staff Roster? This overwrites whatever is stored now, even where it isn\'t blank. Records whose Staff ID doesn\'t resolve on the roster are left untouched and reported.')) return
+    setResyncingBUKey(ALL_TRAININGS_KEY)
+    setResyncBUResult(null)
+    try {
+      const res = await fetch('/api/admin/records/training/resync-business-unit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResyncBUResult({
+          key: ALL_TRAININGS_KEY,
+          message: `${data.updated} of ${data.totalChecked} corrected across all trainings${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.${sheetPushSuffix(data.sheetPush)}`,
         })
         await load()
       } else {
@@ -880,12 +916,25 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           {fillingMissingFields ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
           Fill Missing Fields
         </button>
+        <button
+          onClick={() => resyncAllBusinessUnits()}
+          disabled={resyncingBUKey === ALL_TRAININGS_KEY}
+          title="Overwrites Business Unit on EVERY training record with each attendee's CURRENT one from the Staff Roster, even where it isn't blank — for cleaning up more than one training at once, not just an obviously-missing value."
+          className="flex items-center gap-1.5 text-sm font-medium text-navy-600 border border-navy-300 rounded-lg px-3 py-2 hover:bg-navy-50 disabled:opacity-50"
+        >
+          {resyncingBUKey === ALL_TRAININGS_KEY ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Fix Business Unit from Roster (All Trainings)
+        </button>
         {!addingNew && (
           <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
             <Plus className="w-4 h-4" /> Add Training Schedule
           </button>
         )}
       </div>
+
+      {resyncBUResult?.key === ALL_TRAININGS_KEY && (
+        <p className="text-xs text-slate-500 -mt-2">{resyncBUResult.message}</p>
+      )}
 
       {fillResult && (
         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">

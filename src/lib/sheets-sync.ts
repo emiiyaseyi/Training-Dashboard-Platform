@@ -710,7 +710,7 @@ export async function pushTrainingRecordFieldsToSheet(
     staffId: string
     training: string
     month: string
-    fields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string; month?: string }
+    fields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string; month?: string; businessUnit?: string }
   }[]
 ): Promise<PushTrainingFieldsResult> {
   const toPush = records.filter((r) => Object.keys(r.fields).length > 0)
@@ -734,6 +734,7 @@ export async function pushTrainingRecordFieldsToSheet(
       trainingType: ['type', 'category', 'trainingtype'],
       capability: ['capability', 'competency'],
       month: ['month', 'period', 'trainingmonth'],
+      businessUnit: ['businessunit', 'businessunits', 'department', 'unit', 'bu'],
     }
 
     const { found, notFound, error } = await batchUpdateRowsByCompoundKey(

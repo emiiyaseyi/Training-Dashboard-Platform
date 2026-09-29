@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 import { normalizeTrainingNameKey } from '@/lib/training-name'
+import { pushTrainingRecordFieldsToSheet } from '@/lib/sheets-sync'
 
 export const maxDuration = 60
 
@@ -15,9 +16,10 @@ export const maxDuration = 60
 // staffId is the only safe key to resolve from — a record with an UNKNOWN_-prefixed or blank
 // staffId is skipped and reported, not guessed at.
 //
-// Database only — the Google Sheet mirror's push helper (pushTrainingRecordFieldsToSheet) doesn't
-// support a businessUnit field yet, so a corrected row here doesn't propagate back to the sheet
-// the way a Vendor/Cost/Hours/Type/Capability/Month edit does.
+// The database write is the source of truth and always happens regardless of the sheet; the sheet
+// push (pushTrainingRecordFieldsToSheet, keyed by Staff ID + Training + the record's PRE-fix
+// Month) is best-effort on top of it, same as every other in-app Training Record edit — its
+// outcome is folded into the response, not silently swallowed.
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
   // Filtered in JS (via normalizeTrainingNameKey) rather than a DB where clause, so curly-quote/
   // whitespace variants of the same training name are all matched, not just an exact string.
   const allRecords = await prisma.trainingRecord.findMany({
-    select: { id: true, staffId: true, businessUnit: true, training: true },
+    select: { id: true, staffId: true, businessUnit: true, training: true, month: true },
   })
   const scoped = trainingName?.trim()
     ? allRecords.filter((r) => normalizeTrainingNameKey(r.training) === normalizeTrainingNameKey(trainingName))
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
   let unchanged = 0
   let unresolved = 0
   const unresolvedStaffIds: string[] = []
+  const toPushToSheet: { staffId: string; training: string; month: string; fields: { businessUnit: string } }[] = []
 
   for (const r of scoped) {
     if (!r.staffId || r.staffId.startsWith('UNKNOWN_')) {
@@ -54,10 +57,13 @@ export async function POST(req: NextRequest) {
     if (staff.businessUnit && staff.businessUnit !== r.businessUnit) {
       await prisma.trainingRecord.update({ where: { id: r.id }, data: { businessUnit: staff.businessUnit } })
       updated++
+      toPushToSheet.push({ staffId: r.staffId, training: r.training, month: r.month, fields: { businessUnit: staff.businessUnit } })
     } else {
       unchanged++
     }
   }
+
+  const sheetPush = toPushToSheet.length > 0 ? await pushTrainingRecordFieldsToSheet(toPushToSheet) : null
 
   return NextResponse.json({
     scopedTo: trainingName?.trim() || 'all trainings',
@@ -66,5 +72,6 @@ export async function POST(req: NextRequest) {
     unchanged,
     unresolved,
     unresolvedStaffIds: [...new Set(unresolvedStaffIds)].slice(0, 20),
+    sheetPush,
   })
 }
