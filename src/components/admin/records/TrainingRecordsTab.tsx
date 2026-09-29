@@ -1447,8 +1447,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             </button>
           </div>
           <p className="text-[11px] text-slate-400">
-            Same person, same training name, filed under more than one Month/Year — almost always the same attendance
-            recorded twice. Pick which record to keep; the other(s) are deleted (any linked schedule keeps pointing to the one you keep).
+            Same person (by Staff ID, or by first + last name when there&apos;s no Staff ID — a missing/extra middle name doesn&apos;t
+            stop a match), same training name — whether or not the records share a Month/Year. Pick which record to keep; the
+            other(s) are deleted (any linked schedule keeps pointing to the one you keep).
           </p>
 
           {loadingDuplicates ? (
