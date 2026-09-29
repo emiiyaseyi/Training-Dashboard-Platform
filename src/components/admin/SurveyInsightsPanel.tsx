@@ -152,7 +152,7 @@ export function SurveyInsightsPanel() {
 
   const runImportFeedback = async () => {
     if (!confirm(
-      "This brings every Post-1 Feedback record that has a Staff ID on file (either uploaded that way, or already native) into Survey Automation, the same way as Manager Reviews. Feedback rows with NO Staff ID at all can't be included — they need a Staff ID added to their source sheet and re-uploaded, or the record edited directly, first. Continue?"
+      "This brings every un-imported Post-1 Feedback record into Survey Automation: ones with a Staff ID are matched to the current roster, the same as Manager Reviews; ones with NO Staff ID at all (most historical Feedback data, which never captured one) are imported anonymously as \"Unknown (Legacy Feedback)\" so they still become real, editable entries. Continue?"
     )) return
     setImporting(true)
     setImportResult('')
@@ -160,7 +160,7 @@ export function SurveyInsightsPanel() {
       const res = await fetch('/api/admin/training-schedule/import-legacy-feedback', { method: 'POST' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Import failed.')
-      setImportResult(`Feedback — found ${json.totalCandidates} with a Staff ID, imported ${json.imported} into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}${json.noStaffId > 0 ? `. ${json.noStaffId} more have no Staff ID at all and can't be imported yet.` : '.'}`)
+      setImportResult(`Feedback — found ${json.totalFound} un-imported, imported ${json.imported} (${json.anonymousImported} anonymously) into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}.`)
       setReloadTick((t) => t + 1)
     } catch (err) {
       setImportResult(err instanceof Error ? err.message : 'Import failed.')
