@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { isCustomSurveyExpired } from '@/lib/custom-survey'
 import { rateLimit } from '@/lib/rate-limit'
 import { isAllowedSurveyFileType, ALLOWED_SURVEY_FILE_TYPES_LABEL } from '@/lib/survey-file-validation'
+import { buildUploadedFileName } from '@/lib/uploaded-file-naming'
 
 // Public, unauthenticated (token-based access, same as the training surveys' upload route).
 // Called as soon as a file question's picker is used, ahead of the final submit.
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         source: 'custom-survey',
         surveyName: recipient.survey.title,
         questionLabel: question.label,
-        fileName: file.name,
+        fileName: buildUploadedFileName(recipient.staffName, recipient.survey.title, null, file.name),
         mimeType: file.type || 'application/octet-stream',
         fileSize: file.size,
         data: buffer,

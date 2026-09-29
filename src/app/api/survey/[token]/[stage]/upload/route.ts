@@ -4,6 +4,7 @@ import { isSurveyExpired } from '@/lib/survey-expiry'
 import type { SurveyStageKey } from '@/lib/survey-questions'
 import { rateLimit } from '@/lib/rate-limit'
 import { isAllowedSurveyFileType, ALLOWED_SURVEY_FILE_TYPES_LABEL } from '@/lib/survey-file-validation'
+import { buildUploadedFileName } from '@/lib/uploaded-file-naming'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         businessUnit: attendee.schedule.businessUnit,
         stage: stageKey,
         questionLabel: question.label,
-        fileName: file.name,
+        fileName: buildUploadedFileName(attendee.staffName, attendee.schedule.trainingName, attendee.schedule.startDate, file.name),
         mimeType: file.type || 'application/octet-stream',
         fileSize: file.size,
         data: buffer,
