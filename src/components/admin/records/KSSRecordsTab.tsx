@@ -3,6 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Plus, Trash2, Save, Loader2, X, Pencil, Users, Download, Upload } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
+import { FilterBar } from '@/components/ui/FilterBar'
+import { filterToParams, filterLabel, type PeriodFilter } from '@/lib/filter-types'
+import { exportExcel, exportPdfTable } from '@/lib/export'
+
+const REPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: 'staffName', header: 'Name' },
+  { key: 'staffId', header: 'Staff ID' },
+  { key: 'email', header: 'Email' },
+  { key: 'businessUnit', header: 'Business Unit' },
+  { key: 'durationMinutes', header: 'Duration (min)' },
+  { key: 'month', header: 'Month' },
+  { key: 'year', header: 'Year' },
+  { key: 'dateAdded', header: 'Date Added' },
+]
 
 interface KSSRow {
   id: string
@@ -34,6 +48,13 @@ export function KSSRecordsTab() {
   const [draft, setDraft] = useState<{ staffName: string; businessUnit: string; durationMinutes: string; month: string; year: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const [showDownloadReport, setShowDownloadReport] = useState(false)
+  const [reportFilter, setReportFilter] = useState<PeriodFilter>({ mode: 'all' })
+  const [reportColumns, setReportColumns] = useState<Record<string, boolean>>(
+    Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, true]))
+  )
+  const [downloadingReport, setDownloadingReport] = useState(false)
 
   const [addingNew, setAddingNew] = useState(false)
   const [directory, setDirectory] = useState<RosterStaff[]>([])
@@ -194,6 +215,28 @@ export function KSSRecordsTab() {
     }
   }
 
+  const downloadReport = async (format: 'xlsx' | 'pdf') => {
+    setDownloadingReport(true)
+    try {
+      const params = new URLSearchParams(filterToParams(reportFilter))
+      const rows: Record<string, unknown>[] = await fetch(`/api/admin/records/kss/export?${params.toString()}`)
+        .then((r) => r.json())
+        .catch(() => [])
+      const activeColumns = REPORT_COLUMNS.filter((c) => reportColumns[c.key])
+      const mappedRows = (Array.isArray(rows) ? rows : []).map((r) =>
+        Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
+      )
+      const filename = `kss_records_${filterLabel(reportFilter).replace(/\s+/g, '_')}`
+      if (format === 'xlsx') {
+        await exportExcel([{ name: 'KSS Records', rows: mappedRows }], filename)
+      } else {
+        await exportPdfTable('KSS Records', activeColumns.map((c) => ({ header: c.header, key: c.header })), mappedRows, filename)
+      }
+    } finally {
+      setDownloadingReport(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -214,9 +257,86 @@ export function KSSRecordsTab() {
             <button onClick={() => setBulkMode(true)} className="flex items-center gap-1.5 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg px-3 py-2 hover:bg-blue-50">
               <Users className="w-4 h-4" /> Bulk Add
             </button>
+            <button onClick={() => setShowDownloadReport(true)} className="flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-2 hover:bg-slate-50">
+              <Download className="w-4 h-4" /> Download Report
+            </button>
           </>
         )}
       </div>
+
+      {showDownloadReport && (
+        <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <Download className="w-4 h-4 text-slate-400" /> Download KSS Report
+            </div>
+            <button onClick={() => setShowDownloadReport(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Period</p>
+            <FilterBar
+              availableYears={[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2, new Date().getFullYear() - 3]}
+              value={reportFilter}
+              onChange={setReportFilter}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-slate-600">Columns to include</p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  onClick={() => setReportColumns(Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, true])))}
+                  className="text-navy-600 hover:text-navy-800 font-medium"
+                >
+                  Select All
+                </button>
+                <span className="text-slate-300">·</span>
+                <button
+                  onClick={() => setReportColumns(Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, false])))}
+                  className="text-navy-600 hover:text-navy-800 font-medium"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5 bg-white border border-slate-200 rounded-lg p-3">
+              {REPORT_COLUMNS.map((c) => (
+                <label key={c.key} className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={!!reportColumns[c.key]}
+                    onChange={(e) => setReportColumns({ ...reportColumns, [c.key]: e.target.checked })}
+                  />
+                  {c.header}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadReport('xlsx')}
+              disabled={downloadingReport || Object.values(reportColumns).every((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg px-3 py-1.5 hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {downloadingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              Download Excel
+            </button>
+            <button
+              onClick={() => downloadReport('pdf')}
+              disabled={downloadingReport || Object.values(reportColumns).every((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+            >
+              {downloadingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              Download PDF
+            </button>
+          </div>
+        </div>
+      )}
 
       {bulkMode && (
         <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50/30">
