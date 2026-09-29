@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2 } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2, Pencil } from 'lucide-react'
+import { SurveyResponseEditModal } from './SurveyResponseEditModal'
 
 type Stage = 'pre' | 'post1' | 'post2'
 type Tab = 'insights' | 'responses'
@@ -13,6 +14,7 @@ const STAGE_LABELS: Record<Stage, string> = {
 }
 
 interface ResponseRow {
+  id: string
   attendeeId: string
   staffId: string
   staffName: string
@@ -36,6 +38,8 @@ interface Question {
   section: string | null
   label: string
   type: string
+  options?: string[] | null
+  ratingMax?: number
 }
 
 interface InsightsData {
@@ -65,6 +69,8 @@ export function SurveyInsightsPanel() {
   const [error, setError] = useState('')
   const [openResponseId, setOpenResponseId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [editingResponse, setEditingResponse] = useState<ResponseRow | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
 
   useEffect(() => {
     if (!expanded) return
@@ -78,7 +84,19 @@ export function SurveyInsightsPanel() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load survey insights.'))
       .finally(() => setLoading(false))
-  }, [expanded, stage, businessUnit])
+  }, [expanded, stage, businessUnit, reloadTick])
+
+  const saveEdit = async (answers: Record<string, string | string[]>) => {
+    if (!editingResponse) return
+    const res = await fetch(`/api/admin/training-schedule/survey-responses/${editingResponse.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error || 'Failed to save.')
+    setReloadTick((t) => t + 1)
+  }
 
   return (
     <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
@@ -183,7 +201,7 @@ export function SurveyInsightsPanel() {
                     data.responses.map((r) => {
                       const isOpen = openResponseId === r.attendeeId
                       return (
-                        <div key={r.attendeeId} className="bg-white border border-slate-200 rounded-lg">
+                        <div key={r.id} className="bg-white border border-slate-200 rounded-lg">
                           <button
                             onClick={() => setOpenResponseId(isOpen ? null : r.attendeeId)}
                             className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
@@ -206,6 +224,12 @@ export function SurveyInsightsPanel() {
                                   <p className="text-xs text-slate-700">{answerText(r.answers[q.id])}</p>
                                 </div>
                               ))}
+                              <button
+                                onClick={() => setEditingResponse(r)}
+                                className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 mt-1"
+                              >
+                                <Pencil className="w-3.5 h-3.5" /> Edit Response
+                              </button>
                             </div>
                           )}
                         </div>
@@ -217,6 +241,16 @@ export function SurveyInsightsPanel() {
             </>
           ) : null}
         </div>
+      )}
+
+      {editingResponse && data && (
+        <SurveyResponseEditModal
+          title={`${editingResponse.staffName} — ${STAGE_LABELS[stage]}`}
+          questions={data.questions.filter((q) => q.type !== 'file')}
+          initialAnswers={editingResponse.answers}
+          onSave={saveEdit}
+          onClose={() => setEditingResponse(null)}
+        />
       )}
     </div>
   )

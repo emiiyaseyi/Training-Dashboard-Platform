@@ -48,6 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     let parsed: Record<string, string | string[]> = {}
     try { parsed = JSON.parse(r.answers) } catch { /* corrupted row, treat as no answers */ }
     return {
+      id: r.id,
       attendeeId: r.attendeeId,
       staffId: attendee?.staffId ?? '',
       staffName: attendee?.staffName ?? 'Unknown',
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }).filter((i) => i.type === 'rating' || i.type === 'select' || i.type === 'yesno' || i.type === 'multiselect')
 
   return NextResponse.json({
-    questions: questions.map((q) => ({ id: q.id, section: q.section, label: q.label, type: q.type, options: q.options ? JSON.parse(q.options) : null })),
+    questions: questions.map((q) => ({ id: q.id, section: q.section, label: q.label, type: q.type, options: q.options ? JSON.parse(q.options) : null, ratingMax: q.ratingMax })),
     responses,
     insights,
     respondentCount: responses.length,

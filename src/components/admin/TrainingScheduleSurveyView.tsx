@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, Loader2, ChevronDown, ChevronUp, ExternalLink, BarChart2, MessageSquare } from 'lucide-react'
+import { Eye, Loader2, ChevronDown, ChevronUp, ExternalLink, BarChart2, MessageSquare, Pencil } from 'lucide-react'
+import { SurveyResponseEditModal } from './SurveyResponseEditModal'
 
 type Stage = 'pre' | 'post1' | 'post2'
 type Tab = 'responses' | 'insights'
@@ -12,9 +13,11 @@ interface Question {
   label: string
   type: string
   options: string[] | null
+  ratingMax?: number
 }
 
 interface ResponseRow {
+  id: string
   attendeeId: string
   staffId: string
   staffName: string
@@ -56,9 +59,9 @@ export function TrainingScheduleSurveyView({ scheduleId, stage, stageLabel }: { 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [openResponseId, setOpenResponseId] = useState<string | null>(null)
+  const [editingResponse, setEditingResponse] = useState<ResponseRow | null>(null)
 
   const load = async () => {
-    if (data || loading) return
     setLoading(true)
     setError('')
     try {
@@ -71,6 +74,18 @@ export function TrainingScheduleSurveyView({ scheduleId, stage, stageLabel }: { 
     } finally {
       setLoading(false)
     }
+  }
+
+  const saveEdit = async (answers: Record<string, string | string[]>) => {
+    if (!editingResponse) return
+    const res = await fetch(`/api/admin/training-schedule/survey-responses/${editingResponse.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json.error || 'Failed to save.')
+    await load()
   }
 
   const toggle = () => {
@@ -136,7 +151,7 @@ export function TrainingScheduleSurveyView({ scheduleId, stage, stageLabel }: { 
                   data.responses.map((r) => {
                     const isOpen = openResponseId === r.attendeeId
                     return (
-                      <div key={r.attendeeId} className="bg-white border border-slate-200 rounded-lg">
+                      <div key={r.id} className="bg-white border border-slate-200 rounded-lg">
                         <button
                           onClick={() => setOpenResponseId(isOpen ? null : r.attendeeId)}
                           className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
@@ -155,6 +170,12 @@ export function TrainingScheduleSurveyView({ scheduleId, stage, stageLabel }: { 
                                 <p className="text-xs text-slate-700">{answerText(r.answers[q.id])}</p>
                               </div>
                             ))}
+                            <button
+                              onClick={() => setEditingResponse(r)}
+                              className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 mt-1"
+                            >
+                              <Pencil className="w-3.5 h-3.5" /> Edit Response
+                            </button>
                           </div>
                         )}
                       </div>
@@ -193,6 +214,16 @@ export function TrainingScheduleSurveyView({ scheduleId, stage, stageLabel }: { 
             )
           ) : null}
         </div>
+      )}
+
+      {editingResponse && data && (
+        <SurveyResponseEditModal
+          title={`${editingResponse.staffName} — ${stageLabel}`}
+          questions={data.questions.filter((q) => q.type !== 'file')}
+          initialAnswers={editingResponse.answers}
+          onSave={saveEdit}
+          onClose={() => setEditingResponse(null)}
+        />
       )}
     </div>
   )

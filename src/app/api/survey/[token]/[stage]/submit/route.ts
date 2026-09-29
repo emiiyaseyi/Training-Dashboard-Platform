@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { MONTHS } from '@/lib/filter-types'
 import { excludeQuestions, parseExcludedQuestionIds, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { mirrorSurveyResponse } from '@/lib/survey-mirror'
 import { rateLimit } from '@/lib/rate-limit'
-import { getOrCreateNativeBatch } from '@/lib/import-records'
+import { upsertStructuredRecordForResponse } from '@/lib/survey-structured-sync'
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -20,10 +19,6 @@ const SENT_FIELD = {
   post1: 'post1SurveySentAt',
   post2: 'post2SurveySentAt',
 } as const
-
-function currentMonthName(): string {
-  return MONTHS[new Date().getMonth()]
-}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string; stage: string }> }) {
   const limited = rateLimit(req, 'survey-submit', 20, 60_000)
@@ -60,16 +55,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       return NextResponse.json({ error: `Please answer: ${missing.map((q) => q.label).join(', ')}` }, { status: 400 })
     }
 
-    const asText = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(', ') : v || '')
-    const asNumber = (v: string | string[] | undefined) => {
-      const n = parseFloat(Array.isArray(v) ? '' : v || '')
-      return isNaN(n) ? 0 : n
-    }
-    const fieldAnswer = (fieldKey: string) => {
-      const q = questions.find((q) => q.fieldKey === fieldKey)
-      return q ? answers[q.id] : undefined
-    }
-
     // Save the raw, full-fidelity answer set regardless of stage.
     const response = await prisma.surveyResponse.create({
       data: { attendeeId: attendee.id, stage: stageKey, answers: JSON.stringify(answers) },
@@ -79,43 +64,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       data: { [RESPONDED_FIELD[stageKey]]: new Date() },
     })
 
-    // Feed the structured metric this stage maps to.
-    if (stageKey === 'post1') {
-      const batch = await getOrCreateNativeBatch('feedback', 'Native Survey Responses (Post-1)')
-      await prisma.feedbackRecord.create({
-        data: {
-          businessUnit: attendee.schedule.businessUnit,
-          trainingTitle: attendee.schedule.trainingName,
-          role: null,
-          applicationResponse: asText(fieldAnswer('applicationResponse')),
-          impactAlignment: asText(fieldAnswer('impactAlignment')),
-          confidenceRating: asNumber(fieldAnswer('confidenceRating')),
-          roleRelevance: asNumber(fieldAnswer('roleRelevance')),
-          expectationsMet: asNumber(fieldAnswer('expectationsMet')),
-          vendorRating: asNumber(fieldAnswer('vendorRating')),
-          vendorName: asText(fieldAnswer('vendorName')),
-          qualitativeResponse: asText(fieldAnswer('qualitativeResponse')),
-          month: currentMonthName(),
-          batchId: batch.id,
-        },
-      })
-      await prisma.uploadBatch.update({ where: { id: batch.id }, data: { recordCount: { increment: 1 } } })
-    } else if (stageKey === 'post2') {
-      const batch = await getOrCreateNativeBatch('manager-review', 'Native Survey Responses (Post-2)')
-      await prisma.managerReviewRecord.create({
-        data: {
-          staffId: attendee.staffId,
-          staffName: attendee.staffName,
-          businessUnit: attendee.schedule.businessUnit,
-          training: attendee.schedule.trainingName,
-          managerName: attendee.lineManagerName,
-          impactScore: asNumber(fieldAnswer('impactScore')),
-          comments: asText(fieldAnswer('comments')) || null,
-          month: currentMonthName(),
-          batchId: batch.id,
-        },
-      })
-      await prisma.uploadBatch.update({ where: { id: batch.id }, data: { recordCount: { increment: 1 } } })
+    // Feed the structured metric this stage maps to (FeedbackRecord for post1, ManagerReviewRecord
+    // for post2) — shared with the admin response editor so a later correction recomputes the same
+    // way a fresh submission does.
+    if (stageKey === 'post1' || stageKey === 'post2') {
+      await upsertStructuredRecordForResponse(stageKey, attendee, answers, questions, response.id)
     }
 
     // Best-effort: mirror into the Google Sheet tab. Outcome is persisted on the response itself

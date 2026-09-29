@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
     let parsed: Record<string, string | string[]> = {}
     try { parsed = JSON.parse(r.answers) } catch { /* corrupted row, treat as no answers */ }
     return {
+      id: r.id,
       attendeeId: attendee.id,
       staffId: attendee.staffId,
       staffName: attendee.staffName,
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
   for (const r of enriched) businessUnitCounts.set(r.businessUnit, (businessUnitCounts.get(r.businessUnit) || 0) + 1)
 
   return NextResponse.json({
-    questions: questions.map((q) => ({ id: q.id, section: q.section, label: q.label, type: q.type })),
+    questions: questions.map((q) => ({ id: q.id, section: q.section, label: q.label, type: q.type, options: q.options ? JSON.parse(q.options) : null, ratingMax: q.ratingMax })),
     responses: scoped,
     insights,
     respondentCount: scoped.length,

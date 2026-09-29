@@ -240,6 +240,9 @@ model ManagerReviewRecord {
   month        String?
   batchId      String
   createdAt    DateTime @default(now())
+  // Set only for a record created from a native Post-2 SurveyResponse — see FeedbackRecord.
+  // sourceResponseId for why this exists.
+  sourceResponseId String? @unique
 
   batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
@@ -531,6 +534,12 @@ model FeedbackRecord {
   month               String?
   batchId             String
   createdAt           DateTime @default(now())
+  // Set only for a record created from a native Post-1 SurveyResponse (uploaded-spreadsheet
+  // feedback rows have no such response, so this stays null for those) — lets an admin edit of
+  // that response's answers (see /api/admin/training-schedule/survey-responses/[id]) recompute
+  // this same record's structured fields instead of only updating the raw answers JSON and
+  // silently leaving the number that actually feeds the dashboard stale.
+  sourceResponseId    String?  @unique
 
   batch UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 

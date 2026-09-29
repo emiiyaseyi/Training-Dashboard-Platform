@@ -8,6 +8,7 @@ import { BarChart } from '@/components/charts/BarChart'
 import { DataTable } from '@/components/ui/DataTable'
 import { SectionExport } from '@/components/ui/SectionExport'
 import { exportSurveyInsightsExcel } from '@/lib/custom-survey-insights-export'
+import { SurveyResponseEditModal } from './SurveyResponseEditModal'
 
 type QuestionType = 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'date' | 'yesno' | 'file' | 'ranking'
 type AudienceType = 'all' | 'department' | 'role' | 'businessUnit' | 'selected'
@@ -329,6 +330,7 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
   const [addParticipantQuery, setAddParticipantQuery] = useState('')
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [viewingResponse, setViewingResponse] = useState<string | null>(null)
+  const [editingResponse, setEditingResponse] = useState<{ id: string; staffName: string; answers: Record<string, string | string[]> } | null>(null)
   const [activeTab, setActiveTab] = useState<'responses' | 'insights' | 'questions'>('responses')
   const [insightsTool, setInsightsTool] = useState<string | null>(null)
   const [showRawBreakdown, setShowRawBreakdown] = useState(false)
@@ -776,6 +778,18 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
     } finally {
       setExportingInsights(false)
     }
+  }
+
+  const saveResponseEdit = async (answers: Record<string, string | string[]>) => {
+    if (!editingResponse) return
+    const res = await fetch(`/api/admin/custom-surveys/${summary.id}/responses/${editingResponse.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Failed to save.')
+    await loadDetail()
   }
 
   const resend = async (recipientId: string) => {
@@ -1599,7 +1613,18 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
                                   {r.businessUnit ? `${r.businessUnit}` : ''}{r.department ? ` · ${r.department}` : ''}{' · Submitted '}{fmtDate(resp.submittedAt)}
                                 </p>
                               </div>
-                              <button onClick={() => setViewingResponse(null)} className="text-slate-400 hover:text-slate-700 shrink-0"><X className="w-4 h-4" /></button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setEditingResponse({ id: resp.id, staffName: r.staffName, answers })
+                                    setViewingResponse(null)
+                                  }}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-2.5 py-1.5 hover:bg-navy-50"
+                                >
+                                  <PenLine className="w-3.5 h-3.5" /> Edit
+                                </button>
+                                <button onClick={() => setViewingResponse(null)} className="text-slate-400 hover:text-slate-700 p-1.5"><X className="w-4 h-4" /></button>
+                              </div>
                             </div>
                             <div className="px-5 py-4 space-y-5 overflow-y-auto">
                               {sections.map((sec, i) => (
@@ -1628,6 +1653,16 @@ function SurveyRow({ summary, roster, onChanged }: { summary: SurveySummary; ros
             </>
           )}
         </div>
+      )}
+
+      {editingResponse && detail && (
+        <SurveyResponseEditModal
+          title={editingResponse.staffName}
+          questions={detail.questions.filter((q) => q.type !== 'file')}
+          initialAnswers={editingResponse.answers}
+          onSave={saveResponseEdit}
+          onClose={() => setEditingResponse(null)}
+        />
       )}
     </div>
   )
