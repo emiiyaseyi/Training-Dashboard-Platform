@@ -33,7 +33,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { responseId } = await params
   const response = await prisma.surveyResponse.findUnique({
     where: { id: responseId },
-    include: { attendee: { include: { schedule: { select: { sourcedFromHistoricalData: true } } }, responses: { select: { id: true, stage: true } } } },
+    include: { attendee: { include: { schedule: { select: { sourcedFromHistoricalData: true } }, responses: { select: { id: true, stage: true } } } } },
   })
   if (!response) return NextResponse.json({ error: 'Response not found.' }, { status: 404 })
 
