@@ -4,8 +4,29 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
-import { MONTHS } from '@/lib/filter-types'
+import { FilterBar } from '@/components/ui/FilterBar'
+import { MONTHS, filterToParams, filterLabel, type PeriodFilter } from '@/lib/filter-types'
+import { exportExcel, exportPdfTable } from '@/lib/export'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
+
+// Every field the Training Report export can include — all ticked by default (see
+// reportColumns), the admin unticks whichever they don't want in that download.
+const REPORT_COLUMNS: { key: string; header: string }[] = [
+  { key: 'serialNo', header: 'Serial No' },
+  { key: 'staffName', header: 'Name' },
+  { key: 'staffId', header: 'Staff ID' },
+  { key: 'email', header: 'Email' },
+  { key: 'businessUnit', header: 'Business Unit' },
+  { key: 'training', header: 'Training' },
+  { key: 'month', header: 'Month' },
+  { key: 'year', header: 'Year' },
+  { key: 'cost', header: 'Cost (₦)' },
+  { key: 'hours', header: 'Hours' },
+  { key: 'trainingType', header: 'Training Type' },
+  { key: 'capability', header: 'Capability' },
+  { key: 'vendor', header: 'Vendor' },
+  { key: 'dateAdded', header: 'Date Added' },
+]
 
 interface TrainingRecordRow {
   id: string
@@ -103,6 +124,16 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [pendingAttendees, setPendingAttendees] = useState<RosterStaff[]>([])
   const [creatingSchedule, setCreatingSchedule] = useState(false)
   const [createError, setCreateError] = useState('')
+
+  // "Download Report" — a full, unpaginated period export (All Time / Year to Date / Full Year /
+  // Month Range), independent of the on-screen search+pagination above. All columns ticked by
+  // default; unticking one just leaves it out of the download, nothing server-side changes.
+  const [showDownloadReport, setShowDownloadReport] = useState(false)
+  const [reportFilter, setReportFilter] = useState<PeriodFilter>({ mode: 'all' })
+  const [reportColumns, setReportColumns] = useState<Record<string, boolean>>(
+    Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, true]))
+  )
+  const [downloadingReport, setDownloadingReport] = useState(false)
 
   // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
   // Schedule form: untick a question (from the shared, global bank) to hide it from THIS
@@ -412,6 +443,28 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setConfirmingGroupKey(null)
   }
 
+  const downloadReport = async (format: 'xlsx' | 'pdf') => {
+    setDownloadingReport(true)
+    try {
+      const params = new URLSearchParams(filterToParams(reportFilter))
+      const rows: Record<string, unknown>[] = await fetch(`/api/admin/records/training/export?${params.toString()}`)
+        .then((r) => r.json())
+        .catch(() => [])
+      const activeColumns = REPORT_COLUMNS.filter((c) => reportColumns[c.key])
+      const mappedRows = (Array.isArray(rows) ? rows : []).map((r) =>
+        Object.fromEntries(activeColumns.map((c) => [c.header, r[c.key]]))
+      )
+      const filename = `training_records_${filterLabel(reportFilter).replace(/\s+/g, '_')}`
+      if (format === 'xlsx') {
+        await exportExcel([{ name: 'Training Records', rows: mappedRows }], filename)
+      } else {
+        await exportPdfTable('Training Records', activeColumns.map((c) => ({ header: c.header, key: c.header })), mappedRows, filename)
+      }
+    } finally {
+      setDownloadingReport(false)
+    }
+  }
+
   // addingVendorForId doubles as which target gets the new vendor once saved: a real row id for
   // the inline row-edit picker, or this sentinel for the New Training Schedule form's own picker.
   const NEW_SCHEDULE_VENDOR_ID = '__new_schedule__'
@@ -566,12 +619,91 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
           />
         </div>
+        {!showDownloadReport && (
+          <button onClick={() => setShowDownloadReport(true)} className="flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-2 hover:bg-slate-50">
+            <Download className="w-4 h-4" /> Download Report
+          </button>
+        )}
         {!addingNew && (
           <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
             <Plus className="w-4 h-4" /> Add Training Schedule
           </button>
         )}
       </div>
+
+      {showDownloadReport && (
+        <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <Download className="w-4 h-4 text-slate-400" /> Download Training Report
+            </div>
+            <button onClick={() => setShowDownloadReport(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-1.5">Period</p>
+            <FilterBar
+              availableYears={[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2, new Date().getFullYear() - 3]}
+              value={reportFilter}
+              onChange={setReportFilter}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-slate-600">Columns to include</p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  onClick={() => setReportColumns(Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, true])))}
+                  className="text-navy-600 hover:text-navy-800 font-medium"
+                >
+                  Select All
+                </button>
+                <span className="text-slate-300">·</span>
+                <button
+                  onClick={() => setReportColumns(Object.fromEntries(REPORT_COLUMNS.map((c) => [c.key, false])))}
+                  className="text-navy-600 hover:text-navy-800 font-medium"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1.5 bg-white border border-slate-200 rounded-lg p-3">
+              {REPORT_COLUMNS.map((c) => (
+                <label key={c.key} className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={!!reportColumns[c.key]}
+                    onChange={(e) => setReportColumns({ ...reportColumns, [c.key]: e.target.checked })}
+                  />
+                  {c.header}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadReport('xlsx')}
+              disabled={downloadingReport || Object.values(reportColumns).every((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg px-3 py-1.5 hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {downloadingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              Download Excel
+            </button>
+            <button
+              onClick={() => downloadReport('pdf')}
+              disabled={downloadingReport || Object.values(reportColumns).every((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+            >
+              {downloadingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              Download PDF
+            </button>
+          </div>
+        </div>
+      )}
 
       {addingNew && (
         <div className="border border-blue-200 rounded-lg p-4 space-y-3 bg-blue-50/30">
