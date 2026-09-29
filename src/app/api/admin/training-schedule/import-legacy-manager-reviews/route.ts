@@ -1,8 +1,18 @@
+import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
 import { getStageQuestions } from '@/lib/survey-questions'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
+
+// Headroom for a large legacy batch — see the batching notes below for why this is now fast enough
+// that it rarely matters, but a very large one-off import could still take a while. Either way,
+// this is a server-side request: once it starts, Vercel keeps the function running to completion
+// regardless of whether the admin navigates away or closes the tab — they just won't see the
+// result message for that run. Re-running is always safe, since already-imported records
+// (sourceResponseId already set) are skipped.
+export const maxDuration = 60
 
 // One-time import of pre-existing ManagerReviewRecord rows that came from the spreadsheet upload
 // at /api/upload/manager-review (i.e. entirely outside Survey Automation, with no SurveyResponse
@@ -15,6 +25,13 @@ import { getStageQuestions } from '@/lib/survey-questions'
 // and the ORIGINAL ManagerReviewRecord row is kept (not duplicated) and just linked via
 // sourceResponseId — so it's the same row the dashboard already reads, now with provenance.
 // Safe to re-run: only rows with sourceResponseId still null are touched.
+//
+// Per training group, this is 2 createMany calls (attendees, then responses) plus one batched
+// transaction for the ManagerReviewRecord updates, instead of the original one-record-at-a-time
+// loop (3 sequential awaited round trips per record). createMany can't hand back the rows it just
+// inserted, so attendee/response ids are generated client-side (any unique string works — the
+// schema's cuid() is only ever a *default* for when no id is supplied) rather than looked up with
+// a follow-up query.
 export async function POST() {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
@@ -26,14 +43,12 @@ export async function POST() {
   ])
 
   if (orphans.length === 0) {
-    return NextResponse.json({ totalFound: 0, imported: 0, unresolved: 0, schedulesCreated: 0 })
+    return NextResponse.json({ totalFound: 0, imported: 0, unresolved: 0, duplicatesSkipped: 0, schedulesCreated: 0 })
   }
 
   const impactQ = post2Questions.find((q) => q.fieldKey === 'impactScore')
   const commentsQ = post2Questions.find((q) => q.fieldKey === 'comments')
 
-  // Group by training name so every legacy review for the same programme lands under one shared
-  // schedule, rather than one schedule per row.
   const byTraining = new Map<string, typeof orphans>()
   for (const r of orphans) {
     const key = r.training.trim() || 'Untitled Training'
@@ -45,14 +60,39 @@ export async function POST() {
   let imported = 0
   let unresolved = 0
   let schedulesCreated = 0
+  let duplicatesSkipped = 0
 
   for (const [trainingName, records] of byTraining) {
-    const resolvedRecords = records
+    const resolvedAll = records
       .map((r) => ({ record: r, staff: resolveStaff(r.staffId, directory) }))
       .filter((x) => {
         if (!x.staff) unresolved++
         return !!x.staff
       })
+
+    // The uploaded source data itself can contain duplicate rows for the same person + training
+    // (e.g. an accidental double-paste in the spreadsheet) — importing each one as its own
+    // response would multiply, not just carry forward, the problem. Keep only the most recently
+    // created row per (staffId, training); the rest are left un-imported (sourceResponseId stays
+    // null) rather than deleted, since they're still real database rows an admin may want to
+    // review before removing.
+    const byStaff = new Map<string, typeof resolvedAll>()
+    for (const x of resolvedAll) {
+      const key = normalizeStaffIdKey(x.record.staffId)
+      const list = byStaff.get(key) || []
+      list.push(x)
+      byStaff.set(key, list)
+    }
+    const resolvedRecords: typeof resolvedAll = []
+    for (const group of byStaff.values()) {
+      if (group.length === 1) {
+        resolvedRecords.push(group[0])
+        continue
+      }
+      const newest = group.reduce((latest, x) => (x.record.createdAt > latest.record.createdAt ? x : latest), group[0])
+      resolvedRecords.push(newest)
+      duplicatesSkipped += group.length - 1
+    }
     if (resolvedRecords.length === 0) continue
 
     const earliest = records.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), records[0].createdAt)
@@ -74,34 +114,45 @@ export async function POST() {
     })
     if (!existingLegacySchedule) schedulesCreated++
 
-    for (const { record, staff } of resolvedRecords) {
-      const attendee = await prisma.trainingScheduleAttendee.create({
-        data: {
-          scheduleId: schedule.id,
-          staffId: record.staffId,
-          staffName: staff!.name,
-          email: staff!.email,
-          lineManagerName: null,
-          post2SurveySentAt: record.createdAt,
-          post2SurveyRespondedAt: record.createdAt,
-        },
-      })
+    const plan = resolvedRecords.map(({ record, staff }) => ({
+      attendeeId: randomUUID(),
+      responseId: randomUUID(),
+      record,
+      staff: staff!,
+    }))
 
-      const answers: Record<string, string> = {}
-      if (impactQ) answers[impactQ.id] = String(record.impactScore)
-      if (commentsQ && record.comments) answers[commentsQ.id] = record.comments
+    await prisma.trainingScheduleAttendee.createMany({
+      data: plan.map((p) => ({
+        id: p.attendeeId,
+        scheduleId: schedule.id,
+        staffId: p.record.staffId,
+        staffName: p.staff.name,
+        email: p.staff.email,
+        post2SurveySentAt: p.record.createdAt,
+        post2SurveyRespondedAt: p.record.createdAt,
+      })),
+    })
 
-      const response = await prisma.surveyResponse.create({
-        data: { attendeeId: attendee.id, stage: 'post2', answers: JSON.stringify(answers), submittedAt: record.createdAt },
-      })
+    await prisma.surveyResponse.createMany({
+      data: plan.map((p) => {
+        const answers: Record<string, string> = {}
+        if (impactQ) answers[impactQ.id] = String(p.record.impactScore)
+        if (commentsQ && p.record.comments) answers[commentsQ.id] = p.record.comments
+        return { id: p.responseId, attendeeId: p.attendeeId, stage: 'post2', answers: JSON.stringify(answers), submittedAt: p.record.createdAt }
+      }),
+    })
 
-      await prisma.managerReviewRecord.update({
-        where: { id: record.id },
-        data: { sourceResponseId: response.id, businessUnit: staff!.businessUnit, staffName: staff!.name },
-      })
-      imported++
-    }
+    await prisma.$transaction(
+      plan.map((p) =>
+        prisma.managerReviewRecord.update({
+          where: { id: p.record.id },
+          data: { sourceResponseId: p.responseId, businessUnit: p.staff.businessUnit, staffName: p.staff.name },
+        })
+      )
+    )
+
+    imported += plan.length
   }
 
-  return NextResponse.json({ totalFound: orphans.length, imported, unresolved, schedulesCreated })
+  return NextResponse.json({ totalFound: orphans.length, imported, unresolved, duplicatesSkipped, schedulesCreated })
 }

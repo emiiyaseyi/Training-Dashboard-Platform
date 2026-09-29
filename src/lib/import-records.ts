@@ -84,6 +84,7 @@ export async function importFeedbackRows(rows: FeedbackRow[], filename: string, 
   })
   await prisma.feedbackRecord.createMany({
     data: normalizedRows.map((r) => ({
+      staffId: r.staffId ? r.staffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
       trainingTitle: r.trainingTitle,
       role: r.role,

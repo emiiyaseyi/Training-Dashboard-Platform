@@ -131,7 +131,7 @@ export function SurveyInsightsPanel() {
     }
   }
 
-  const runImport = async () => {
+  const runImportManagerReviews = async () => {
     if (!confirm(
       "This brings every Manager Review that was uploaded via spreadsheet (not filled through a survey) into Survey Automation: a \"Legacy Manager Reviews\" schedule is created per training, and each review becomes individually viewable and editable here, per Business Unit. The dashboard keeps reading the same records — this just gives them provenance and an edit path. Continue?"
     )) return
@@ -141,7 +141,26 @@ export function SurveyInsightsPanel() {
       const res = await fetch('/api/admin/training-schedule/import-legacy-manager-reviews', { method: 'POST' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Import failed.')
-      setImportResult(`Found ${json.totalFound} uploaded-only reviews — imported ${json.imported} into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}.`)
+      setImportResult(`Manager Reviews — found ${json.totalFound} uploaded-only, imported ${json.imported} into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}.`)
+      setReloadTick((t) => t + 1)
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const runImportFeedback = async () => {
+    if (!confirm(
+      "This brings every Post-1 Feedback record that has a Staff ID on file (either uploaded that way, or already native) into Survey Automation, the same way as Manager Reviews. Feedback rows with NO Staff ID at all can't be included — they need a Staff ID added to their source sheet and re-uploaded, or the record edited directly, first. Continue?"
+    )) return
+    setImporting(true)
+    setImportResult('')
+    try {
+      const res = await fetch('/api/admin/training-schedule/import-legacy-feedback', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Import failed.')
+      setImportResult(`Feedback — found ${json.totalCandidates} with a Staff ID, imported ${json.imported} into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}${json.noStaffId > 0 ? `. ${json.noStaffId} more have no Staff ID at all and can't be imported yet.` : '.'}`)
       setReloadTick((t) => t + 1)
     } catch (err) {
       setImportResult(err instanceof Error ? err.message : 'Import failed.')
@@ -167,12 +186,20 @@ export function SurveyInsightsPanel() {
         <div className="p-4 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={runImport}
+              onClick={runImportManagerReviews}
               disabled={importing}
               className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
             >
               {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              Import Uploaded Manager Reviews into Survey Automation
+              Import Uploaded Manager Reviews
+            </button>
+            <button
+              onClick={runImportFeedback}
+              disabled={importing}
+              className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
+            >
+              {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              Import Uploaded Feedback (with Staff ID)
             </button>
             <button
               onClick={runBackfill}

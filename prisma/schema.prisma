@@ -520,6 +520,12 @@ model TrainingRecordChange {
 
 model FeedbackRecord {
   id                  String   @id @default(cuid())
+  // Optional because the Feedback Excel template historically never captured one — only added so
+  // Business Unit reconciliation (see sourceResponseId below, and the Manager Review equivalent)
+  // has something reliable to match an uploaded row to a real person. Populated automatically for
+  // every native Post-1 submission; an uploaded row only has it if its own sheet included a Staff
+  // ID/Staff Email column.
+  staffId             String?
   businessUnit        String
   trainingTitle       String
   role                String?

@@ -25,6 +25,7 @@ export interface KSSRow {
 }
 
 export interface FeedbackRow {
+  staffId: string // optional — blank when the sheet has no Staff ID/Staff Email column, which most historical Feedback uploads don't
   businessUnit: string
   trainingTitle: string
   role: string
@@ -258,6 +259,7 @@ export function parseFeedbackExcel(buffer: Buffer): ParseResult<FeedbackRow> {
 
   const headers = Object.keys(raw[0])
   const col = {
+    staffId:    findHeader(headers, ['staffid', 'staffno', 'employeeid', 'employeeno', 'id', 'staffemail', 'email', 'emailaddress']),
     bu:         findHeader(headers, ['businessunit', 'businessunits', 'department', 'unit', 'bu']),
     title:      findHeader(headers, ['trainingtitle', 'training', 'course', 'programme']),
     role:       findHeader(headers, ['role', 'jobtitle', 'position']),
@@ -291,6 +293,7 @@ export function parseFeedbackExcel(buffer: Buffer): ParseResult<FeedbackRow> {
     if (vendorRat > 5)   warnings.push(`Row ${lineNo}: Vendor rating ${vendorRat} > 5.`)
 
     rows.push({
+      staffId:            normalise(r[col.staffId ?? ''] ?? ''),
       businessUnit:       bu,
       trainingTitle:      normalise(r[col.title!]),
       role:               normalise(r[col.role ?? ''] ?? ''),

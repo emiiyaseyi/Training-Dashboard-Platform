@@ -46,6 +46,7 @@ export async function upsertStructuredRecordForResponse(
 
   if (stageKey === 'post1') {
     const data = {
+      staffId: attendee.staffId,
       businessUnit,
       trainingTitle: attendee.schedule.trainingName,
       applicationResponse: asText(fieldAnswer('applicationResponse')),

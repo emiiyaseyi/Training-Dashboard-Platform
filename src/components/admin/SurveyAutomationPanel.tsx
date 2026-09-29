@@ -9,6 +9,7 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
 import { TrainingScheduleSurveyView } from './TrainingScheduleSurveyView'
 import { SurveyInsightsPanel } from './SurveyInsightsPanel'
+import { DuplicateSurveyResponsesPanel } from './DuplicateSurveyResponsesPanel'
 
 const SCHEDULE_PAGE_SIZE = 10
 const ATTENDEE_PAGE_SIZE = 15
@@ -957,6 +958,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           </div>
         )}
 
+        <DuplicateSurveyResponsesPanel />
         <SurveyInsightsPanel />
 
         <div className="flex items-center gap-1.5 mb-4">
