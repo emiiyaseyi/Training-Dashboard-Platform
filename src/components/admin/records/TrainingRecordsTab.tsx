@@ -602,11 +602,16 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       if (res.ok) {
         setMissingVendorPickerKey(null)
         setMissingDetailsDraft({})
-        setSheetPushNote(
-          resData?.sheetPush?.success
-            ? `Also updated ${resData.sheetPush.updated} row${resData.sheetPush.updated === 1 ? '' : 's'} in the Excel sheet.`
-            : `Saved here, but the Excel sheet wasn't updated: ${resData?.sheetPush?.error || 'unknown reason'}.`
-        )
+        setSheetPushNote((() => {
+          const push = resData?.sheetPush
+          if (!push) return null
+          if (!push.success) return `Saved here, but the Excel sheet wasn't updated: ${push.error || 'unknown reason'}.`
+          const parts = [`Also updated ${push.updated} row${push.updated === 1 ? '' : 's'} in the Excel sheet.`]
+          if (push.notFound > 0) {
+            parts.push(`${push.notFound} record${push.notFound === 1 ? '' : 's'} couldn't be matched to a row there (Staff ID + Training + Month didn't line up with anything in the sheet) — check those manually.`)
+          }
+          return parts.join(' ')
+        })())
         // Updates local state directly from what was just submitted, instead of refetching the
         // whole list from the server — one less round trip, and avoids ever depending on a
         // server-side re-check to confirm what the admin just did (the exact pattern that caused
