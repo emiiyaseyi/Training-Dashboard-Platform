@@ -135,6 +135,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   )
   const [downloadingReport, setDownloadingReport] = useState(false)
 
+  const [fillingMissingFields, setFillingMissingFields] = useState(false)
+  const [fillResult, setFillResult] = useState<{ scanned: number; filled: number; unmatched: number } | null>(null)
+
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
   // for them one page of the main table at a time.
@@ -482,6 +485,21 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     }
   }
 
+  const fillMissingFields = async () => {
+    setFillingMissingFields(true)
+    setFillResult(null)
+    try {
+      const res = await fetch('/api/admin/records/training/fill-missing-fields', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data) {
+        setFillResult(data)
+        await load()
+      }
+    } finally {
+      setFillingMissingFields(false)
+    }
+  }
+
   const openMissingVendor = async () => {
     setShowMissingVendor(true)
     setLoadingMissingVendor(true)
@@ -688,12 +706,28 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             <AlertTriangle className="w-4 h-4" /> Trainings Missing Vendor
           </button>
         )}
+        <button
+          onClick={fillMissingFields}
+          disabled={fillingMissingFields}
+          title="Fills blank Staff ID, Business Unit, or Email on any training record from the matching Employee record — never overwrites a value that's already there."
+          className="flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-2 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {fillingMissingFields ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+          Fill Missing Fields
+        </button>
         {!addingNew && (
           <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
             <Plus className="w-4 h-4" /> Add Training Schedule
           </button>
         )}
       </div>
+
+      {fillResult && (
+        <p className="text-xs text-slate-500">
+          Scanned {fillResult.scanned} record{fillResult.scanned === 1 ? '' : 's'} with a blank field — filled {fillResult.filled}
+          {fillResult.unmatched > 0 ? `, couldn't match ${fillResult.unmatched} to anyone in the roster.` : '.'}
+        </p>
+      )}
 
       {showDownloadReport && (
         <div className="border border-slate-200 rounded-lg p-4 space-y-3 bg-slate-50/50">
