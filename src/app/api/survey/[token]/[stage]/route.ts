@@ -54,10 +54,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     const directory = await loadRosterDirectory()
     const staff = resolveStaff(attendee.staffId, directory)
+    // The schedule's own businessUnit is one shared value for the WHOLE training — fine for
+    // scheduling, wrong to show a specific attendee whenever the training has attendees from more
+    // than one Business Unit. Prefer the attendee's own current roster BU; only fall back to the
+    // schedule's if they no longer resolve (e.g. deactivated) at all.
+    const attendeeBusinessUnit = staff?.businessUnit || attendee.schedule.businessUnit
 
     const autoFillValues: Record<string, string> = {
       trainingName: attendee.schedule.trainingName,
-      businessUnit: attendee.schedule.businessUnit,
+      businessUnit: attendeeBusinessUnit,
       employeeName: attendee.staffName,
       role: staff?.role || '',
       trainingType: attendee.schedule.trainingType || '',
@@ -72,7 +77,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       recipientName: recipientRole === 'manager' ? attendee.lineManagerName : attendee.staffName,
       employeeName: attendee.staffName,
       trainingName: attendee.schedule.trainingName,
-      businessUnit: attendee.schedule.businessUnit,
+      businessUnit: attendeeBusinessUnit,
       alreadyResponded,
       expired,
       questions: questions.map((q) => ({

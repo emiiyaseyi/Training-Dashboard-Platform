@@ -140,16 +140,25 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
 
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
-  // for them one page of the main table at a time.
+  // for them one page of the main table at a time. Broadened beyond just Vendor — any of
+  // Vendor/Cost/Hours/Type/Capability missing for a WHOLE cohort shows up here.
+  const MISSING_DETAIL_FIELDS: { key: 'vendor' | 'cost' | 'hours' | 'trainingType' | 'capability'; label: string }[] = [
+    { key: 'vendor', label: 'Vendor' },
+    { key: 'cost', label: 'Cost' },
+    { key: 'hours', label: 'Hours' },
+    { key: 'trainingType', label: 'Type' },
+    { key: 'capability', label: 'Capability' },
+  ]
   const [showMissingVendor, setShowMissingVendor] = useState(false)
   const [loadingMissingVendor, setLoadingMissingVendor] = useState(false)
   const [missingVendorGroups, setMissingVendorGroups] = useState<{
     training: string; month: string; year: number; businessUnits: string[]; attendeeCount: number
+    missingFields: string[]
     records: { id: string; staffName: string; staffId: string; businessUnit: string }[]
   }[]>([])
   const [expandedMissingVendorKey, setExpandedMissingVendorKey] = useState<string | null>(null)
   const [missingVendorPickerKey, setMissingVendorPickerKey] = useState<string | null>(null)
-  const [missingVendorInput, setMissingVendorInput] = useState('')
+  const [missingDetailsDraft, setMissingDetailsDraft] = useState<Record<string, string>>({})
   const [settingVendorKey, setSettingVendorKey] = useState<string | null>(null)
 
   // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
@@ -514,25 +523,34 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   // Shared by both the per-group bulk assign and a single attendee's individual override —
   // registers a brand-new vendor name into the shared Vendor list too (same upsert-by-name
   // convention as saveNewVendor above), so it shows up as a normal option everywhere else.
-  const setVendorFor = async (groupKey: string, recordIds: string[], vendorName: string) => {
-    const name = vendorName.trim()
-    if (!name) return
+  // Sets whichever of Vendor/Cost/Hours/Type/Capability the admin actually filled in the draft
+  // form — empty fields in the draft are simply left out of the request, so they stay untouched.
+  const setDetailsFor = async (groupKey: string, recordIds: string[], draft: Record<string, string>) => {
+    const vendorName = draft.vendor?.trim()
+    if (Object.values(draft).every((v) => !v?.trim())) return
     setSettingVendorKey(groupKey)
     try {
-      if (!vendors.some((v) => v.name.trim().toLowerCase() === name.toLowerCase())) {
+      if (vendorName && !vendors.some((v) => v.name.trim().toLowerCase() === vendorName.toLowerCase())) {
         const nextOrder = vendors.length > 0 ? Math.max(...vendors.map((v) => v.order)) + 1 : 0
         await fetch('/api/vendors', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, order: nextOrder }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: vendorName, order: nextOrder }),
         }).catch(() => {})
         const fresh = await fetch('/api/vendors').then((r) => r.json()).catch(() => [])
         if (Array.isArray(fresh)) setVendors(fresh)
       }
+      const body: Record<string, string | number> = {}
+      if (vendorName) body.vendor = vendorName
+      if (draft.cost?.trim()) body.cost = parseFloat(draft.cost)
+      if (draft.hours?.trim()) body.hours = parseFloat(draft.hours)
+      if (draft.trainingType?.trim()) body.trainingType = draft.trainingType.trim()
+      if (draft.capability?.trim()) body.capability = draft.capability.trim()
+
       const res = await fetch('/api/admin/records/training/missing-vendor/bulk-set', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordIds, vendor: name }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordIds, ...body }),
       })
       if (res.ok) {
         setMissingVendorPickerKey(null)
-        setMissingVendorInput('')
+        setMissingDetailsDraft({})
         const fresh = await fetch('/api/admin/records/training/missing-vendor').then((r) => r.json()).catch(() => [])
         setMissingVendorGroups(Array.isArray(fresh) ? fresh : [])
         await load()
@@ -703,7 +721,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         )}
         {!showMissingVendor && (
           <button onClick={openMissingVendor} className="flex items-center gap-1.5 text-sm font-medium text-amber-700 border border-amber-300 rounded-lg px-3 py-2 hover:bg-amber-50">
-            <AlertTriangle className="w-4 h-4" /> Trainings Missing Vendor
+            <AlertTriangle className="w-4 h-4" /> Trainings Missing Details
           </button>
         )}
         <button
@@ -807,17 +825,21 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         <div className="border border-amber-200 rounded-lg p-4 space-y-3 bg-amber-50/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              <AlertTriangle className="w-4 h-4 text-amber-500" /> Trainings Missing Vendor
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Trainings Missing Details
             </div>
             <button onClick={() => setShowMissingVendor(false)} className="text-slate-400 hover:text-slate-600">
               <X className="w-4 h-4" />
             </button>
           </div>
+          <p className="text-[11px] text-slate-400">
+            Only flags a field when NOT A SINGLE attendee in that training has it — a stray record missing just one field
+            while the rest of its cohort is filled in won&apos;t show up here; edit that one directly in the table below instead.
+          </p>
 
           {loadingMissingVendor ? (
             <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
           ) : missingVendorGroups.length === 0 ? (
-            <p className="text-xs text-slate-400">Every training has a vendor on file. Nothing to fix.</p>
+            <p className="text-xs text-slate-400">Every training has Vendor, Cost, Hours, Type, and Capability on file. Nothing to fix.</p>
           ) : (
             <div className="space-y-2">
               {missingVendorGroups.map((g) => {
@@ -825,83 +847,152 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                 const expanded = expandedMissingVendorKey === key
                 const picking = missingVendorPickerKey === key
                 const recordIds = g.records.map((r) => r.id)
+                const fieldsForGroup = MISSING_DETAIL_FIELDS.filter((f) => g.missingFields.includes(f.key))
                 return (
                   <div key={key} className="bg-white border border-slate-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <button onClick={() => setExpandedMissingVendorKey(expanded ? null : key)} className="flex-1 text-left">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <button onClick={() => setExpandedMissingVendorKey(expanded ? null : key)} className="flex-1 text-left min-w-[12rem]">
                         <p className="text-sm font-medium text-slate-800">{g.training}</p>
                         <p className="text-xs text-slate-500">
                           {g.month} {g.year} · {g.businessUnits.join(', ')} · {g.attendeeCount} attendee{g.attendeeCount === 1 ? '' : 's'}
                         </p>
+                        <p className="text-[11px] text-amber-700 mt-0.5">Missing: {fieldsForGroup.map((f) => f.label).join(', ')}</p>
                       </button>
                       {picking ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            autoFocus
-                            value={missingVendorInput}
-                            onChange={(e) => setMissingVendorInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') setVendorFor(key, recordIds, missingVendorInput) }}
-                            placeholder="Vendor name"
-                            list={`vendor-options-${key}`}
-                            className="w-40 border border-slate-300 rounded-md px-2 py-1 text-xs"
-                          />
-                          <datalist id={`vendor-options-${key}`}>
-                            {vendors.map((v) => <option key={v.id} value={v.name} />)}
-                          </datalist>
+                        <div className="flex items-end gap-1.5 flex-wrap">
+                          {fieldsForGroup.map((f) => (
+                            <div key={f.key} className="flex flex-col">
+                              <label className="text-[10px] text-slate-400">{f.label}</label>
+                              {f.key === 'trainingType' ? (
+                                <select
+                                  value={missingDetailsDraft[f.key] || ''}
+                                  onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                  className="w-28 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                >
+                                  <option value="">—</option>
+                                  {trainingTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                </select>
+                              ) : f.key === 'capability' ? (
+                                <select
+                                  value={missingDetailsDraft[f.key] || ''}
+                                  onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                  className="w-28 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                >
+                                  <option value="">—</option>
+                                  {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                              ) : f.key === 'vendor' ? (
+                                <>
+                                  <input
+                                    value={missingDetailsDraft[f.key] || ''}
+                                    onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                    placeholder="Vendor name"
+                                    list={`vendor-options-${key}`}
+                                    className="w-32 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                  />
+                                  <datalist id={`vendor-options-${key}`}>
+                                    {vendors.map((v) => <option key={v.id} value={v.name} />)}
+                                  </datalist>
+                                </>
+                              ) : (
+                                <input
+                                  type="number"
+                                  value={missingDetailsDraft[f.key] || ''}
+                                  onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                  className="w-20 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                />
+                              )}
+                            </div>
+                          ))}
                           <button
-                            onClick={() => setVendorFor(key, recordIds, missingVendorInput)}
-                            disabled={settingVendorKey === key || !missingVendorInput.trim()}
+                            onClick={() => setDetailsFor(key, recordIds, missingDetailsDraft)}
+                            disabled={settingVendorKey === key}
                             className="p-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                           >
                             {settingVendorKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                           </button>
-                          <button onClick={() => { setMissingVendorPickerKey(null); setMissingVendorInput('') }} className="p-1.5 rounded border border-slate-300 text-slate-500 hover:bg-slate-50">
+                          <button onClick={() => { setMissingVendorPickerKey(null); setMissingDetailsDraft({}) }} className="p-1.5 rounded border border-slate-300 text-slate-500 hover:bg-slate-50">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
                         <button
-                          onClick={() => { setMissingVendorPickerKey(key); setMissingVendorInput('') }}
+                          onClick={() => { setMissingVendorPickerKey(key); setMissingDetailsDraft({}) }}
                           className="text-xs font-medium text-white bg-amber-600 rounded-lg px-3 py-1.5 hover:bg-amber-700 whitespace-nowrap"
                         >
-                          Set Vendor for All
+                          Set for All
                         </button>
                       )}
                     </div>
 
                     {expanded && (
                       <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
-                        {g.records.map((r) => (
-                          <div key={r.id} className="flex items-center justify-between text-xs text-slate-600">
-                            <span>{r.staffName} <span className="text-slate-400">({r.staffId}) · {r.businessUnit}</span></span>
-                            <button
-                              onClick={() => { setMissingVendorPickerKey(`${key}::${r.id}`); setMissingVendorInput('') }}
-                              className="text-navy-600 hover:text-navy-800 font-medium"
-                            >
-                              Set individually
-                            </button>
-                            {missingVendorPickerKey === `${key}::${r.id}` && (
-                              <div className="flex items-center gap-1 ml-2">
-                                <input
-                                  autoFocus
-                                  value={missingVendorInput}
-                                  onChange={(e) => setMissingVendorInput(e.target.value)}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') setVendorFor(`${key}::${r.id}`, [r.id], missingVendorInput) }}
-                                  placeholder="Vendor name"
-                                  list={`vendor-options-${key}`}
-                                  className="w-32 border border-slate-300 rounded-md px-2 py-1 text-xs"
-                                />
+                        {g.records.map((r) => {
+                          const individualKey = `${key}::${r.id}`
+                          const individualPicking = missingVendorPickerKey === individualKey
+                          return (
+                            <div key={r.id} className="flex items-center justify-between text-xs text-slate-600 flex-wrap gap-1">
+                              <span>{r.staffName} <span className="text-slate-400">({r.staffId}) · {r.businessUnit}</span></span>
+                              {individualPicking ? (
+                                <div className="flex items-end gap-1.5 flex-wrap">
+                                  {fieldsForGroup.map((f) => (
+                                    <div key={f.key} className="flex flex-col">
+                                      <label className="text-[10px] text-slate-400">{f.label}</label>
+                                      {f.key === 'trainingType' ? (
+                                        <select
+                                          value={missingDetailsDraft[f.key] || ''}
+                                          onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                          className="w-24 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                        >
+                                          <option value="">—</option>
+                                          {trainingTypes.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                        </select>
+                                      ) : f.key === 'capability' ? (
+                                        <select
+                                          value={missingDetailsDraft[f.key] || ''}
+                                          onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                          className="w-24 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                        >
+                                          <option value="">—</option>
+                                          {capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        </select>
+                                      ) : f.key === 'vendor' ? (
+                                        <input
+                                          value={missingDetailsDraft[f.key] || ''}
+                                          onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                          placeholder="Vendor name"
+                                          list={`vendor-options-${key}`}
+                                          className="w-28 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                        />
+                                      ) : (
+                                        <input
+                                          type="number"
+                                          value={missingDetailsDraft[f.key] || ''}
+                                          onChange={(e) => setMissingDetailsDraft({ ...missingDetailsDraft, [f.key]: e.target.value })}
+                                          className="w-16 border border-slate-300 rounded-md px-2 py-1 text-xs"
+                                        />
+                                      )}
+                                    </div>
+                                  ))}
+                                  <button
+                                    onClick={() => setDetailsFor(individualKey, [r.id], missingDetailsDraft)}
+                                    disabled={settingVendorKey === individualKey}
+                                    className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    <Save className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
                                 <button
-                                  onClick={() => setVendorFor(`${key}::${r.id}`, [r.id], missingVendorInput)}
-                                  disabled={settingVendorKey === `${key}::${r.id}` || !missingVendorInput.trim()}
-                                  className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  onClick={() => { setMissingVendorPickerKey(individualKey); setMissingDetailsDraft({}) }}
+                                  className="text-navy-600 hover:text-navy-800 font-medium"
                                 >
-                                  <Save className="w-3 h-3" />
+                                  Set individually
                                 </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

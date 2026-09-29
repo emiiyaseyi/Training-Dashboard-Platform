@@ -43,7 +43,8 @@ function buildMirrorFields(
   answers: Record<string, string | string[]>,
   questions: SurveyQuestion[],
   submittedAt: Date,
-  role: string
+  role: string,
+  businessUnit: string
 ): MirrorField[] {
   const fieldAnswer = (fieldKey: string) => {
     const q = questions.find((q) => q.fieldKey === fieldKey)
@@ -59,7 +60,7 @@ function buildMirrorFields(
   if (stageKey === 'post1') {
     return [
       { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
-      { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
+      { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: businessUnit },
       { label: 'Training Title', candidates: ['trainingtitle', 'training', 'course', 'programme'], value: attendee.schedule.trainingName },
       { label: 'Role', candidates: ['role', 'jobtitle', 'position'], value: role },
       { label: 'Application response', candidates: ['applicationresponse', 'application', 'applied'], value: asText(fieldAnswer('applicationResponse')) },
@@ -80,7 +81,7 @@ function buildMirrorFields(
     return [
       { label: 'Staff ID', candidates: ['staffid', 'staffno', 'employeeid', 'employeeno'], value: attendee.staffId },
       { label: 'Name', candidates: ['name', 'staffname', 'employeename', 'fullname'], value: attendee.staffName },
-      { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
+      { label: 'Business Unit', candidates: ['businessunit', 'businessunits', 'department', 'unit', 'bu'], value: businessUnit },
       { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: attendee.schedule.trainingName },
       { label: 'Manager Name', candidates: ['linemanager', 'reviewedby', 'manager', 'supervisor'], value: attendee.lineManagerName || '' },
       { label: 'Impact Score', candidates: ['posttrainingimpactscore', 'impactscore', 'impactrating', 'managerrating'], value: asNumber(fieldAnswer('impactScore')) },
@@ -93,7 +94,7 @@ function buildMirrorFields(
     { label: 'Submitted At', candidates: [], value: submittedAtText },
     { label: 'Employee Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
     { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: attendee.schedule.trainingName },
-    { label: 'Business Unit', candidates: ['businessunits', 'department', 'unit', 'bu'], value: attendee.schedule.businessUnit },
+    { label: 'Business Unit', candidates: ['businessunits', 'department', 'unit', 'bu'], value: businessUnit },
     ...questions.filter((q) => !q.autoFill).map((q) => ({ label: q.label, candidates: [] as string[], value: asText(answers[q.id]) })),
   ]
 }
@@ -130,9 +131,11 @@ export async function mirrorSurveyResponse(
 
   try {
     const directory = await loadRosterDirectory()
-    const role = resolveStaff(attendee.staffId, directory)?.role || ''
+    const staff = resolveStaff(attendee.staffId, directory)
+    const role = staff?.role || ''
+    const businessUnit = staff?.businessUnit || attendee.schedule.businessUnit
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-    const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt, role)
+    const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt, role, businessUnit)
     await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
     await recordStatus(true, `Synced to "${sheetName}".`)
     return { attempted: true, success: true, message: `Synced to "${sheetName}".` }
@@ -180,10 +183,16 @@ export async function mirrorSurveyResponses(items: MirrorBatchItem[]): Promise<M
       continue
     }
 
-    const withFields = stageItems.map((it) => ({
-      item: it,
-      fields: buildMirrorFields(stageKey, it.attendee, it.answers, it.questions, it.submittedAt, resolveStaff(it.attendee.staffId, directory)?.role || ''),
-    }))
+    const withFields = stageItems.map((it) => {
+      const staff = resolveStaff(it.attendee.staffId, directory)
+      return {
+        item: it,
+        fields: buildMirrorFields(
+          stageKey, it.attendee, it.answers, it.questions, it.submittedAt,
+          staff?.role || '', staff?.businessUnit || it.attendee.schedule.businessUnit
+        ),
+      }
+    })
     const shapeKey = (fields: MirrorField[]) => fields.map((f) => f.label).join('|')
 
     const shapeGroups = new Map<string, typeof withFields>()
