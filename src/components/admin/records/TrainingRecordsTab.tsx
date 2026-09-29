@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users, RefreshCw } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -90,6 +90,8 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [alsoDeleteSchedule, setAlsoDeleteSchedule] = useState(false)
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [applyingToSimilar, setApplyingToSimilar] = useState(false)
+  const [resyncingBUKey, setResyncingBUKey] = useState<string | null>(null)
+  const [resyncBUResult, setResyncBUResult] = useState<{ key: string; message: string } | null>(null)
 
   // Add New Training (creates a real TrainingSchedule + attendees — same endpoints Survey
   // Automation uses — rather than a bare TrainingRecord, so it's immediately eligible for
@@ -813,6 +815,32 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       }
     } finally {
       setDeletingGroup(false)
+    }
+  }
+
+  const resyncBusinessUnit = async (g: TrainingGroup) => {
+    const key = groupKey(g)
+    if (!confirm(`Reset Business Unit for every attendee of "${g.training}" (${g.month} ${g.year}) to their CURRENT one on the Staff Roster? This overwrites whatever is stored now, even if it isn't blank.`)) return
+    setResyncingBUKey(key)
+    setResyncBUResult(null)
+    try {
+      const res = await fetch('/api/admin/records/training/resync-business-unit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trainingName: g.training }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResyncBUResult({
+          key,
+          message: `${data.updated} of ${data.totalChecked} corrected${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.`,
+        })
+        await load()
+      } else {
+        alert(data.error || 'Failed to resync Business Unit.')
+      }
+    } finally {
+      setResyncingBUKey(null)
     }
   }
 
@@ -1895,13 +1923,25 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => setConfirmingGroupKey(key)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Delete This Training
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => resyncBusinessUnit(g)}
+                          disabled={resyncingBUKey === key}
+                          title="Overwrites every attendee's Business Unit here with their CURRENT one from the Staff Roster, even if it isn't blank — use when a training was recorded under the wrong Business Unit for everyone."
+                          className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-50"
+                        >
+                          {resyncingBUKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                          Fix Business Unit from Roster
+                        </button>
+                        {resyncBUResult?.key === key && <p className="text-xs text-slate-500">{resyncBUResult.message}</p>}
+                        <button
+                          onClick={() => setConfirmingGroupKey(key)}
+                          className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 ml-auto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete This Training
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
