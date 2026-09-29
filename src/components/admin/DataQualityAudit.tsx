@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2, Search, X, DownloadCloud } from 'lucide-react'
+import { ClipboardCheck, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Wand2, Search, X, DownloadCloud, GitMerge } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
 
@@ -223,6 +223,15 @@ export function DataQualityAudit() {
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState<{ table: string; label: string; staffIdFixed: number; businessUnitFixed: number; ambiguousNameSkipped: number; noMatch: number; emailFixed: number }[] | null>(null)
 
+  // Values that don't match any real BusinessUnit.name and aren't in the hardcoded alias list
+  // either — see business-unit-mismatches/route.ts. Reviewed and fixed here directly, rather than
+  // needing a code change (a new alias) for every new typo/variant that shows up.
+  const [buMismatches, setBuMismatches] = useState<{ value: string; byTable: Record<string, number>; total: number }[] | null>(null)
+  const [loadingMismatches, setLoadingMismatches] = useState(true)
+  const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({})
+  const [mergingValue, setMergingValue] = useState<string | null>(null)
+  const [mergeResult, setMergeResult] = useState<string | null>(null)
+
   const load = async () => {
     setLoading(true)
     try {
@@ -233,10 +242,46 @@ export function DataQualityAudit() {
     }
   }
 
+  const loadMismatches = async () => {
+    setLoadingMismatches(true)
+    try {
+      const res = await fetch('/api/admin/business-unit-mismatches')
+      const data = await res.json()
+      setBuMismatches(data.mismatches ?? [])
+    } finally {
+      setLoadingMismatches(false)
+    }
+  }
+
   useEffect(() => {
     load()
+    loadMismatches()
     fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : []))
   }, [])
+
+  const mergeBusinessUnit = async (value: string) => {
+    const to = mergeTargets[value]
+    if (!to) return
+    if (!confirm(`Change every record currently using "${value}" as its Business Unit to "${to}"? This updates Training, Feedback, Subscription, KSS, Manager Review, Staff Roster, and Training Schedule rows.`)) return
+    setMergingValue(value)
+    setMergeResult(null)
+    try {
+      const res = await fetch('/api/admin/business-unit-mismatches/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: value, to }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setMergeResult(`"${value}" → "${to}": ${data.totalUpdated} record(s) updated.`)
+        await Promise.all([loadMismatches(), load()])
+      } else {
+        alert(data.error || 'Merge failed.')
+      }
+    } finally {
+      setMergingValue(null)
+    }
+  }
 
   const normalizeBusinessUnits = async () => {
     setNormalizing(true)
@@ -334,6 +379,47 @@ export function DataQualityAudit() {
               Fixed: {normalizeResult.map((r) => `${r.table} (${r.updated})`).join(', ')}
             </p>
           )}
+        </div>
+      )}
+
+      {!loadingMismatches && buMismatches && buMismatches.length > 0 && (
+        <div className="mb-4 border border-amber-200 bg-amber-50/50 rounded-lg p-3">
+          <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5 mb-1">
+            <GitMerge className="w-3.5 h-3.5" />
+            {buMismatches.length} Business Unit value{buMismatches.length === 1 ? '' : 's'} not recognized anywhere
+          </p>
+          <p className="text-[11px] text-amber-700 mb-2.5">
+            These don&apos;t match a real Business Unit and aren&apos;t in the built-in alias list either — a value like this can&apos;t be picked from any dropdown (e.g. it won&apos;t auto-fill on a new Training Schedule). Pick the correct one and merge to fix every record using it in one go.
+          </p>
+          {mergeResult && <p className="text-[11px] text-emerald-700 mb-2">{mergeResult}</p>}
+          <div className="space-y-2">
+            {buMismatches.map((m) => (
+              <div key={m.value} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 flex-wrap">
+                <div className="flex-1 min-w-[180px]">
+                  <p className="text-xs font-medium text-slate-700">&quot;{m.value}&quot;</p>
+                  <p className="text-[11px] text-slate-400">
+                    {m.total} record{m.total === 1 ? '' : 's'} — {Object.entries(m.byTable).map(([table, count]) => `${table} (${count})`).join(', ')}
+                  </p>
+                </div>
+                <select
+                  value={mergeTargets[m.value] ?? ''}
+                  onChange={(e) => setMergeTargets((prev) => ({ ...prev, [m.value]: e.target.value }))}
+                  className="text-xs border border-slate-300 rounded-md px-2 py-1.5"
+                >
+                  <option value="">Merge into…</option>
+                  {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+                </select>
+                <button
+                  onClick={() => mergeBusinessUnit(m.value)}
+                  disabled={!mergeTargets[m.value] || mergingValue === m.value}
+                  className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
+                >
+                  {mergingValue === m.value ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitMerge className="w-3.5 h-3.5" />}
+                  Merge
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
