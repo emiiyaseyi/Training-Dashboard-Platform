@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       data: {
         source: 'survey',
         surveyName: attendee.schedule.trainingName,
+        businessUnit: attendee.schedule.businessUnit,
         stage: stageKey,
         questionLabel: question.label,
         fileName: file.name,

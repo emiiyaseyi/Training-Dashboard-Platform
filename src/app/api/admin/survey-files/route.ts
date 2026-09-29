@@ -14,6 +14,7 @@ export async function GET() {
       id: true,
       source: true,
       surveyName: true,
+      businessUnit: true,
       stage: true,
       questionLabel: true,
       fileName: true,

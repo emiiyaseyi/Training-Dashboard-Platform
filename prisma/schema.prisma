@@ -699,6 +699,7 @@ model UploadedFile {
   id              String   @id @default(cuid())
   source          String   // "survey" | "custom-survey"
   surveyName      String   // TrainingSchedule.trainingName or CustomSurvey.title, denormalized
+  businessUnit    String?  // TrainingSchedule.businessUnit, denormalized — null for custom surveys, which aren't reliably single-BU (audience can be "all")
   stage           String?  // "pre" | "post1" | "post2" for training surveys; null for custom surveys
   questionLabel   String   // denormalized — readable even if the question is later edited/deleted
   fileName        String
