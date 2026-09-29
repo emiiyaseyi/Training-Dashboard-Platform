@@ -141,10 +141,12 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
   // for them one page of the main table at a time. Broadened beyond just Vendor — any of
-  // Vendor/Cost/Hours/Type/Capability missing for a WHOLE cohort shows up here.
-  const MISSING_DETAIL_FIELDS: { key: 'vendor' | 'cost' | 'hours' | 'trainingType' | 'capability'; label: string }[] = [
+  // Vendor/Hours/Type/Capability missing for a WHOLE cohort shows up here. Cost is deliberately
+  // excluded (see the missing-vendor GET route) — 0 is ambiguous between "unset" and "genuinely
+  // free", so checking it caused already-fixed trainings to keep reappearing here forever. Fix
+  // Cost the normal way, via the row edit in the table below.
+  const MISSING_DETAIL_FIELDS: { key: 'vendor' | 'hours' | 'trainingType' | 'capability'; label: string }[] = [
     { key: 'vendor', label: 'Vendor' },
-    { key: 'cost', label: 'Cost' },
     { key: 'hours', label: 'Hours' },
     { key: 'trainingType', label: 'Type' },
     { key: 'capability', label: 'Capability' },
@@ -569,8 +571,10 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   // Shared by both the per-group bulk assign and a single attendee's individual override —
   // registers a brand-new vendor name into the shared Vendor list too (same upsert-by-name
   // convention as saveNewVendor above), so it shows up as a normal option everywhere else.
-  // Sets whichever of Vendor/Cost/Hours/Type/Capability the admin actually filled in the draft
-  // form — empty fields in the draft are simply left out of the request, so they stay untouched.
+  // Sets whichever of Vendor/Hours/Type/Capability the admin actually filled in the draft form —
+  // empty fields in the draft are simply left out of the request, so they stay untouched. (The
+  // bulk-set API still accepts a cost field for the regular row-edit path; this panel just never
+  // sends one, since Cost isn't offered here — see the missing-vendor GET route for why.)
   const setDetailsFor = async (groupKey: string, recordIds: string[], draft: Record<string, string>) => {
     const vendorName = draft.vendor?.trim()
     if (Object.values(draft).every((v) => !v?.trim())) return
@@ -603,11 +607,10 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             ? `Also updated ${resData.sheetPush.updated} row${resData.sheetPush.updated === 1 ? '' : 's'} in the Excel sheet.`
             : `Saved here, but the Excel sheet wasn't updated: ${resData?.sheetPush?.error || 'unknown reason'}.`
         )
-        // Not a refetch: Cost = 0 is ambiguous ("never set" and "genuinely free" store the same
-        // value), so the server-side missing-details check would immediately re-flag a training
-        // the admin just deliberately set to ₦0 — an unresolvable loop. Trusting what was just
-        // submitted instead means it actually leaves this list once acted on, matching the
-        // person's own intent rather than a heuristic that can't read it.
+        // Updates local state directly from what was just submitted, instead of refetching the
+        // whole list from the server — one less round trip, and avoids ever depending on a
+        // server-side re-check to confirm what the admin just did (the exact pattern that caused
+        // the old Cost-ambiguity loop this panel used to have).
         const setFieldKeys = Object.keys(body)
         const isIndividual = groupKey.includes('::')
         setMissingVendorGroups((prev) => prev
@@ -916,7 +919,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           {loadingMissingVendor ? (
             <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
           ) : missingVendorGroups.length === 0 ? (
-            <p className="text-xs text-slate-400">Every training has Vendor, Cost, Hours, Type, and Capability on file. Nothing to fix.</p>
+            <p className="text-xs text-slate-400">Every training has Vendor, Hours, Type, and Capability on file. Nothing to fix.</p>
           ) : (
             <div className="space-y-2">
               {missingVendorGroups.map((g) => {

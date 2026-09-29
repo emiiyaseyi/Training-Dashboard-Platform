@@ -3,12 +3,16 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
 // Every training cohort (same training+month+year grouping as the main records list) where NOT A
-// SINGLE attendee has one or more of Vendor/Cost/Hours/Training Type/Capability on file — all five
-// are normally set once per schedule and apply to everyone in it, so "missing for the whole
-// cohort" is the actual gap to fix, not one stray record diverging from the rest of its group.
-// Cost is treated as missing when it's exactly 0 — the field itself has no way to distinguish "a
-// genuinely free training" from "never set" (both store 0), and in practice an unset cost is far
-// more common than a real ₦0 training.
+// SINGLE attendee has one or more of Vendor/Hours/Training Type/Capability on file — all four are
+// normally set once per schedule and apply to everyone in it, so "missing for the whole cohort" is
+// the actual gap to fix, not one stray record diverging from the rest of its group.
+//
+// Cost is deliberately NOT checked here (it used to be, flagged whenever it was exactly 0) — the
+// field has no way to distinguish "a genuinely free training" from "never set", both store 0, and
+// that ambiguity meant a training an admin had correctly confirmed as free kept getting re-flagged
+// forever, no matter how many times they "fixed" it. Better to miss a genuinely-unset ₦0 than to
+// force the same already-resolved trainings back onto this list every time it's reopened. Cost
+// still gets fixed the normal way, via the row edit in the table below.
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
   if (gate instanceof NextResponse) return gate
@@ -29,9 +33,8 @@ export async function GET() {
       groups.get(key)!.push(r)
     }
 
-    const FIELD_CHECKS: { key: 'vendor' | 'cost' | 'hours' | 'trainingType' | 'capability'; label: string; isMissing: (r: (typeof all)[number]) => boolean }[] = [
+    const FIELD_CHECKS: { key: 'vendor' | 'hours' | 'trainingType' | 'capability'; label: string; isMissing: (r: (typeof all)[number]) => boolean }[] = [
       { key: 'vendor', label: 'Vendor', isMissing: (r) => !r.vendor?.trim() },
-      { key: 'cost', label: 'Cost', isMissing: (r) => !r.cost },
       { key: 'hours', label: 'Hours', isMissing: (r) => r.hours == null },
       { key: 'trainingType', label: 'Type', isMissing: (r) => !r.trainingType?.trim() },
       { key: 'capability', label: 'Capability', isMissing: (r) => !r.capability?.trim() },
