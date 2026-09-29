@@ -190,9 +190,26 @@ export function resolveStaff(identifier: string, directory: Map<string, Resolved
   return null
 }
 
-// Like resolveStaff, but also falls back to an exact (case-insensitive) name match — used where
-// the admin enters a bare identifier that could be a Staff ID, email, or full name (Talent Member
-// roster entries, TM exemptions), rather than a form field that's known to be one or the other.
+// A name-matching key, not for display — some rosters were originally uploaded from a single
+// "First - Last" formatted column, and depending on how that got split, the literal " - " (or
+// "-") sometimes ended up baked into firstName/lastName itself (e.g. a stored name of
+// "Onyekachi - Duru", not just "Onyekachi Duru"). An admin typing a name into the Talent Member
+// roster, an exemption, or any other free-text name field naturally leaves the dash out, so an
+// exact-string match silently fails even though it's obviously the same person. Strips
+// hyphens/dashes used as word separators and collapses whitespace before comparing.
+function normalizeNameKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[-‐-―]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Like resolveStaff, but also falls back to a name match — used where the admin enters a bare
+// identifier that could be a Staff ID, email, or full name (Talent Member roster entries, TM
+// exemptions), rather than a form field that's known to be one or the other. Tries an exact
+// (case-insensitive) match first, then a dash/whitespace-normalized one (see normalizeNameKey).
 export function resolveStaffLoose(identifier: string, directory: Map<string, ResolvedStaff>): ResolvedStaff | null {
   const byIdOrEmail = resolveStaff(identifier, directory)
   if (byIdOrEmail) return byIdOrEmail
@@ -200,6 +217,11 @@ export function resolveStaffLoose(identifier: string, directory: Map<string, Res
   if (!lower) return null
   for (const staff of directory.values()) {
     if (staff.name.toLowerCase() === lower) return staff
+  }
+  const normalizedQuery = normalizeNameKey(identifier)
+  if (!normalizedQuery) return null
+  for (const staff of directory.values()) {
+    if (normalizeNameKey(staff.name) === normalizedQuery) return staff
   }
   return null
 }

@@ -121,6 +121,18 @@ function resolveAgainstRoster(
   return null
 }
 
+// Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
+// postgres (production) connectors — sqlite has no case-insensitive `mode` filter. Whitespace is
+// stripped entirely (not just trimmed) so a stray non-breaking space or double space from manual
+// data entry in the Training Type column still matches. Recognizes both "TM" (the original Training
+// Type taxonomy name) and "Talent Member" (what it was later renamed to) — the taxonomy entry can
+// be renamed freely from Admin → Training Types, but that only changes the label going forward; old
+// TrainingRecord/TrainingSchedule rows keep whatever string was stored on them at the time, so both
+// spellings can genuinely coexist in the data indefinitely.
+const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
+const TM_TRAINING_TYPE_ALIASES = new Set(['tm', 'talentmember'])
+const isTMTrainingType = (v: string | null) => TM_TRAINING_TYPE_ALIASES.has(normTM(v))
+
 export async function computeTalentMemberReport(filter: PeriodFilter): Promise<TalentMemberFullReport> {
   const year = filter.mode === 'all' ? new Date().getFullYear() : (filter.year ?? new Date().getFullYear())
   // null = no month restriction within the year (All Time / Full Year both mean the whole year
@@ -128,22 +140,20 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // doesn't span multiple years the way it does on other pages; see activeMonthIndices).
   const monthIndices = activeMonthIndices(filter)
 
-  const [directory, rosterEntries, exemptions, tmSchedules, yearTrainingRecords] = await Promise.all([
+  const [directory, rosterEntries, exemptions, allSchedules, yearTrainingRecords] = await Promise.all([
     loadRosterDirectory(),
     prisma.talentMemberRosterEntry.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
     prisma.trainingSchedule.findMany({
-      where: { trainingType: 'TM' },
       include: { attendees: true },
       orderBy: { startDate: 'asc' },
     }),
     prisma.trainingRecord.findMany({ where: { year } }),
   ])
-  // Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
-  // postgres (production) connectors — sqlite has no case-insensitive `mode` filter. Whitespace
-  // is stripped entirely (not just trimmed) so a stray non-breaking space or double space from
-  // manual data entry in the Training Type column still matches.
-  const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
+  // Filtered here (not in the query above) for the same reason everything else in this file is
+  // matched in JS — a raw `where: { trainingType: 'TM' }` only ever matches that one exact string,
+  // silently missing every schedule tagged "Talent Member" instead.
+  const tmSchedules = allSchedules.filter((s) => isTMTrainingType(s.trainingType))
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
   // Whenever a schedule already exists for a person+training, the schedule is the source of
   // truth for its dates — the TrainingRecord side is either an auto-written mirror (linked via
@@ -159,7 +169,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     tmSchedules.flatMap((s) => s.attendees.map((a) => scheduleAttendeeKey(a.staffId, s.trainingName)))
   )
   const tmTrainingRecords = yearTrainingRecords.filter((r) =>
-    normTM(r.trainingType) === 'tm' && inSelectedPeriod(r.month) && !scheduledPersonTrainingKeys.has(scheduleAttendeeKey(r.staffId, r.training))
+    isTMTrainingType(r.trainingType) && inSelectedPeriod(r.month) && !scheduledPersonTrainingKeys.has(scheduleAttendeeKey(r.staffId, r.training))
   )
 
   const rosterMap = new Map<string, ResolvedStaff>()
@@ -200,7 +210,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   const isOverriddenAwayFromTM = (linkedTrainingRecordId: string | null) => {
     if (!linkedTrainingRecordId) return false
     const rt = recordTypeById.get(linkedTrainingRecordId)
-    return !!rt && normTM(rt) !== 'tm'
+    return !!rt && !isTMTrainingType(rt)
   }
   const attended: TMAttendedRecord[] = []
   const attendedKeys = new Set<string>()
