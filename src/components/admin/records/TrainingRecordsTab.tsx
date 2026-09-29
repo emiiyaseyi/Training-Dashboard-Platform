@@ -551,8 +551,27 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       if (res.ok) {
         setMissingVendorPickerKey(null)
         setMissingDetailsDraft({})
-        const fresh = await fetch('/api/admin/records/training/missing-vendor').then((r) => r.json()).catch(() => [])
-        setMissingVendorGroups(Array.isArray(fresh) ? fresh : [])
+        // Not a refetch: Cost = 0 is ambiguous ("never set" and "genuinely free" store the same
+        // value), so the server-side missing-details check would immediately re-flag a training
+        // the admin just deliberately set to ₦0 — an unresolvable loop. Trusting what was just
+        // submitted instead means it actually leaves this list once acted on, matching the
+        // person's own intent rather than a heuristic that can't read it.
+        const setFieldKeys = Object.keys(body)
+        const isIndividual = groupKey.includes('::')
+        setMissingVendorGroups((prev) => prev
+          .map((g) => {
+            const gKey = `${g.training}|${g.month}|${g.year}`
+            if (isIndividual) {
+              if (!groupKey.startsWith(`${gKey}::`)) return g
+              const recordId = groupKey.slice(gKey.length + 2)
+              const records = g.records.filter((r) => r.id !== recordId)
+              return { ...g, records, attendeeCount: records.length }
+            }
+            if (gKey !== groupKey) return g
+            return { ...g, missingFields: g.missingFields.filter((f) => !setFieldKeys.includes(f)) }
+          })
+          .filter((g) => g.records.length > 0 && g.missingFields.length > 0)
+        )
         await load()
       }
     } finally {
