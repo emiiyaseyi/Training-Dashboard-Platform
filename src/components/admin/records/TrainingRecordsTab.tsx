@@ -13,6 +13,36 @@ import { sendStageInBatches } from '@/lib/survey-send-batches'
 // any real groupKey() value so the two loading/result states never collide.
 const ALL_TRAININGS_KEY = '__all_trainings__'
 
+// Records a Business Unit fix corrected in the database but couldn't find a matching row for in
+// the Google Sheet (see pushTrainingRecordFieldsToSheet's notFoundRecords) — listed individually,
+// not just as a count, so each one can actually be located and fixed by hand in the sheet.
+function SheetNotFoundList({
+  records,
+  onFind,
+}: {
+  records?: { staffId: string; training: string; month: string }[]
+  onFind: (training: string) => void
+}) {
+  if (!records || records.length === 0) return null
+  return (
+    <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      <p className="font-medium text-amber-700 mb-1">
+        {records.length} record{records.length === 1 ? '' : 's'} updated here, but couldn&apos;t be matched in the sheet (Staff ID + Training + Month didn&apos;t line up with any row there) — fix these manually in the sheet:
+      </p>
+      <ul className="space-y-0.5">
+        {records.map((r, i) => (
+          <li key={i} className="text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+            <span>{r.staffId} — {r.training} — {r.month}</span>
+            <button onClick={() => onFind(r.training)} className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap">
+              Find this training ↓
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // Every field the Training Report export can include — all ticked by default (see
 // reportColumns), the admin unticks whichever they don't want in that download.
 const REPORT_COLUMNS: { key: string; header: string }[] = [
@@ -95,7 +125,10 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [applyingToSimilar, setApplyingToSimilar] = useState(false)
   const [resyncingBUKey, setResyncingBUKey] = useState<string | null>(null)
-  const [resyncBUResult, setResyncBUResult] = useState<{ key: string; message: string } | null>(null)
+  const [resyncBUResult, setResyncBUResult] = useState<{
+    key: string; message: string
+    sheetNotFoundRecords?: { staffId: string; training: string; month: string }[]
+  } | null>(null)
 
   // Add New Training (creates a real TrainingSchedule + attendees — same endpoints Survey
   // Automation uses — rather than a bare TrainingRecord, so it's immediately eligible for
@@ -146,6 +179,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     scanned: number; filled: number; unmatched: number
     unmatchedRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
     noNewDataRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
+    missingVendorRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
   } | null>(null)
   // Manual fix for a record Fill Missing Fields couldn't match by name on its own — search the
   // same roster directly and pick the right person.
@@ -845,6 +879,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         setResyncBUResult({
           key,
           message: `${data.updated} of ${data.totalChecked} corrected${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.${sheetPushSuffix(data.sheetPush)}`,
+          sheetNotFoundRecords: data.sheetPush?.notFoundRecords,
         })
         await load()
       } else {
@@ -870,6 +905,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         setResyncBUResult({
           key: ALL_TRAININGS_KEY,
           message: `${data.updated} of ${data.totalChecked} corrected across all trainings${data.unresolved > 0 ? `, ${data.unresolved} skipped (Staff ID not found on the roster)` : ''}.${sheetPushSuffix(data.sheetPush)}`,
+          sheetNotFoundRecords: data.sheetPush?.notFoundRecords,
         })
         await load()
       } else {
@@ -933,7 +969,10 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       </div>
 
       {resyncBUResult?.key === ALL_TRAININGS_KEY && (
-        <p className="text-xs text-slate-500 -mt-2">{resyncBUResult.message}</p>
+        <div className="-mt-2">
+          <p className="text-xs text-slate-500">{resyncBUResult.message}</p>
+          <SheetNotFoundList records={resyncBUResult.sheetNotFoundRecords} onFind={(training) => { setQuery(training); setExpandedKey(null) }} />
+        </div>
       )}
 
       {fillResult && (
@@ -1016,6 +1055,28 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                     >
                       Fix in Employees →
                     </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {fillResult.missingVendorRecords.length > 0 && (
+            <div className="text-xs">
+              <p className="font-medium text-amber-700 mb-1">
+                No Training Provider on file for {fillResult.missingVendorRecords.length} record{fillResult.missingVendorRecords.length === 1 ? '' : 's'} — this can&apos;t be auto-filled from anywhere, fill it in manually:
+              </p>
+              <ul className="space-y-1">
+                {fillResult.missingVendorRecords.map((r) => (
+                  <li key={r.id} className="text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+                    <span>
+                      <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training}
+                    </span>
+                    <button
+                      onClick={() => { setQuery(r.training); setExpandedKey(null) }}
+                      className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap"
+                    >
+                      Find this training ↓
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -1972,24 +2033,29 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          onClick={() => resyncBusinessUnit(g)}
-                          disabled={resyncingBUKey === key}
-                          title="Overwrites every attendee's Business Unit here with their CURRENT one from the Staff Roster, even if it isn't blank — use when a training was recorded under the wrong Business Unit for everyone."
-                          className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-50"
-                        >
-                          {resyncingBUKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                          Fix Business Unit from Roster
-                        </button>
-                        {resyncBUResult?.key === key && <p className="text-xs text-slate-500">{resyncBUResult.message}</p>}
-                        <button
-                          onClick={() => setConfirmingGroupKey(key)}
-                          className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 ml-auto"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete This Training
-                        </button>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => resyncBusinessUnit(g)}
+                            disabled={resyncingBUKey === key}
+                            title="Overwrites every attendee's Business Unit here with their CURRENT one from the Staff Roster, even if it isn't blank — use when a training was recorded under the wrong Business Unit for everyone."
+                            className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-50"
+                          >
+                            {resyncingBUKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                            Fix Business Unit from Roster
+                          </button>
+                          {resyncBUResult?.key === key && <p className="text-xs text-slate-500">{resyncBUResult.message}</p>}
+                          <button
+                            onClick={() => setConfirmingGroupKey(key)}
+                            className="flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 ml-auto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete This Training
+                          </button>
+                        </div>
+                        {resyncBUResult?.key === key && (
+                          <SheetNotFoundList records={resyncBUResult.sheetNotFoundRecords} onFind={(training) => { setQuery(training); setExpandedKey(null) }} />
+                        )}
                       </div>
                     )}
                   </div>

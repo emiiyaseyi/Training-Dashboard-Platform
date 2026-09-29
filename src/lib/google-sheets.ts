@@ -412,9 +412,9 @@ export async function batchUpdateRowsByCompoundKey(
   accessToken: string,
   keyPartsCandidates: string[][],
   rows_: { keyParts: string[]; updates: { columnCandidates: string[]; value: string }[] }[]
-): Promise<{ found: number; notFound: number; error?: string }> {
+): Promise<{ found: number; notFound: number; notFoundKeys: string[][]; error?: string }> {
   const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
-  if (rows.length === 0) return { found: 0, notFound: rows_.length, error: 'The tab has no rows.' }
+  if (rows.length === 0) return { found: 0, notFound: rows_.length, notFoundKeys: rows_.map((r) => r.keyParts), error: 'The tab has no rows.' }
 
   const headers = rows[0]
   // findHeader() tries an exact match across ALL headers before ever falling back to substring
@@ -433,6 +433,7 @@ export async function batchUpdateRowsByCompoundKey(
     return {
       found: 0,
       notFound: rows_.length,
+      notFoundKeys: rows_.map((r) => r.keyParts),
       error: `Could not find a column in the sheet matching any of: ${keyPartsCandidates[missingIdx].join(', ')}. Sheet columns found: ${headers.join(', ')}.`,
     }
   }
@@ -458,10 +459,11 @@ export async function batchUpdateRowsByCompoundKey(
   const data: { range: string; values: string[][] }[] = []
   let found = 0
   let notFound = 0
+  const notFoundKeys: string[][] = []
 
   for (const { keyParts, updates } of rows_) {
     const sheetRowNumber = rowIndexByKey.get(compoundKey(keyParts))
-    if (!sheetRowNumber) { notFound++; continue }
+    if (!sheetRowNumber) { notFound++; notFoundKeys.push(keyParts); continue }
     found++
     for (const update of updates) {
       const colIdx = colIdxFor(update.columnCandidates)
@@ -496,7 +498,7 @@ export async function batchUpdateRowsByCompoundKey(
     }
   }
 
-  return { found, notFound, error }
+  return { found, notFound, notFoundKeys, error }
 }
 
 // Overwrites a specific range (e.g. new header cells) rather than appending — used to extend the

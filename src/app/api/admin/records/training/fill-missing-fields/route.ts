@@ -38,7 +38,7 @@ export async function POST() {
     const directory = await loadRosterDirectory()
     const records = await prisma.trainingRecord.findMany({
       where: {
-        OR: [{ staffId: '' }, { staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { email: null }, { email: '' }],
+        OR: [{ staffId: '' }, { staffId: { startsWith: 'UNKNOWN_' } }, { businessUnit: '' }, { email: null }, { email: '' }, { vendor: null }, { vendor: '' }],
       },
     })
 
@@ -46,13 +46,27 @@ export async function POST() {
     const ops: ReturnType<typeof prisma.trainingRecord.update>[] = []
     const unmatchedRecords: RecordIssue[] = []
     const noNewDataRecords: RecordIssue[] = []
+    // Training Provider (Vendor) has no roster/Employee-record source to carry over the way
+    // Staff ID/Business Unit/Email do — it's specific to the training, not the person — so it can
+    // only ever be flagged for manual entry, never auto-filled. Tracked separately from
+    // unmatchedRecords/noNewDataRecords so a record that DID get its other fields auto-filled
+    // still surfaces here instead of silently counting as fully "filled" while Vendor stays blank.
+    const missingVendorRecords: RecordIssue[] = []
 
     for (const r of records) {
       const missingFields = [
         isPlaceholderStaffId(r.staffId) && 'Staff ID',
         !r.businessUnit.trim() && 'Business Unit',
         !r.email?.trim() && 'Email',
+        !r.vendor?.trim() && 'Training Provider',
       ].filter(Boolean) as string[]
+
+      if (!r.vendor?.trim()) {
+        missingVendorRecords.push({
+          id: r.id, staffId: r.staffId, staffName: r.staffName, training: r.training, missingFields,
+          reason: `No Training Provider on file — this has to be entered manually, there's nowhere to carry it over from.`,
+        })
+      }
 
       const staffIdIsPlaceholder = isPlaceholderStaffId(r.staffId)
       const staff = staffIdIsPlaceholder
@@ -93,6 +107,7 @@ export async function POST() {
       unmatched: unmatchedRecords.length,
       unmatchedRecords,
       noNewDataRecords,
+      missingVendorRecords,
     })
   } catch (err) {
     console.error('[admin/records/training/fill-missing-fields POST]', err)

@@ -688,6 +688,7 @@ export interface PushTrainingFieldsResult {
   success: boolean
   updated: number
   notFound: number
+  notFoundRecords: { staffId: string; training: string; month: string }[]
   error?: string
 }
 
@@ -714,17 +715,17 @@ export async function pushTrainingRecordFieldsToSheet(
   }[]
 ): Promise<PushTrainingFieldsResult> {
   const toPush = records.filter((r) => Object.keys(r.fields).length > 0)
-  if (toPush.length === 0) return { success: true, updated: 0, notFound: 0 }
+  if (toPush.length === 0) return { success: true, updated: 0, notFound: 0, notFoundRecords: [] }
 
   const config = await prisma.googleSheetsConfig.findFirst()
-  if (!config?.spreadsheetUrl) return { success: false, updated: 0, notFound: 0, error: 'No Google Sheet configured yet.' }
-  if (!config.trainingSheetName?.trim()) return { success: false, updated: 0, notFound: 0, error: 'No Training Cost tab name configured.' }
+  if (!config?.spreadsheetUrl) return { success: false, updated: 0, notFound: 0, notFoundRecords: [], error: 'No Google Sheet configured yet.' }
+  if (!config.trainingSheetName?.trim()) return { success: false, updated: 0, notFound: 0, notFoundRecords: [], error: 'No Training Cost tab name configured.' }
 
   const sheetName = config.trainingSheetName.trim()
   try {
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
     if (!connection.tabTitles.includes(sheetName)) {
-      return { success: false, updated: 0, notFound: 0, error: `Tab "${sheetName}" not found in the spreadsheet.` }
+      return { success: false, updated: 0, notFound: 0, notFoundRecords: [], error: `Tab "${sheetName}" not found in the spreadsheet.` }
     }
 
     const FIELD_COLUMNS: Record<string, string[]> = {
@@ -737,7 +738,7 @@ export async function pushTrainingRecordFieldsToSheet(
       businessUnit: ['businessunit', 'businessunits', 'department', 'unit', 'bu'],
     }
 
-    const { found, notFound, error } = await batchUpdateRowsByCompoundKey(
+    const { found, notFound, notFoundKeys, error } = await batchUpdateRowsByCompoundKey(
       connection.spreadsheetId,
       sheetName,
       connection.accessToken,
@@ -754,9 +755,10 @@ export async function pushTrainingRecordFieldsToSheet(
         })),
       }))
     )
-    return { success: !error, updated: found, notFound, error }
+    const notFoundRecords = notFoundKeys.map(([staffId, training, month]) => ({ staffId, training, month }))
+    return { success: !error, updated: found, notFound, notFoundRecords, error }
   } catch (err) {
-    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
+    return { success: false, updated: 0, notFound: 0, notFoundRecords: [], error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
   }
 }
 
