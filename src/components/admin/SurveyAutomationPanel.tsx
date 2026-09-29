@@ -139,7 +139,44 @@ function parseCSV(text: string): string[] {
   return values
 }
 
+// A schedule being typed in survives a refresh the same way an in-progress survey response does
+// (see the draft-saving in src/app/survey/[token]/[stage]/page.tsx) — saved to this browser's
+// localStorage as it's typed, restored on load, and cleared once the schedule is actually created
+// or the form is explicitly collapsed/cancelled. Deliberately scoped to the CREATE flow only (an
+// edit always overwrites this state from the real schedule via startEditSchedule, so there's
+// nothing to protect there) and never reaches the server — it only ever lives in this browser.
+const NEW_SCHEDULE_DRAFT_KEY = 'training-schedule-new-draft'
+
+interface NewScheduleDraft {
+  newSchedule: {
+    trainingName: string; businessUnit: string; startDate: string; endDate: string; hours: string
+    costPerAttendee: string; trainingType: string; capability: string; vendor: string
+    preEnabled: boolean; post1Enabled: boolean; post2Enabled: boolean; additionalCc: string
+    additionalCcMode: 'all' | 'individual'; isHistorical: boolean
+    trainingMode: 'physical' | 'virtual' | 'platform' | 'hybrid'; location: string; meetingLink: string
+  }
+  newSchedulePending: RosterStaff[]
+  excludedQuestionIds: Partial<Record<'pre' | 'post1' | 'post2', string[]>>
+  newScheduleIncludeDefaultCc: boolean
+  newScheduleIncludeLineManagerCc: boolean
+}
+
+function loadNewScheduleDraft(): NewScheduleDraft | null {
+  try {
+    const raw = localStorage.getItem(NEW_SCHEDULE_DRAFT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    // A blank/never-touched draft (nothing typed, nobody added) isn't worth restoring or
+    // auto-expanding the form for.
+    if (!parsed?.newSchedule?.trainingName && (!parsed?.newSchedulePending || parsed.newSchedulePending.length === 0)) return null
+    return parsed
+  } catch {
+    return null // private browsing, blocked storage, or corrupted JSON — just start with a blank form
+  }
+}
+
 export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditScheduleId?: string } = {}) {
+  const [scheduleDraft] = useState(() => (typeof window !== 'undefined' ? loadNewScheduleDraft() : null))
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
     preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
@@ -152,9 +189,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
-  const [showAddSchedule, setShowAddSchedule] = useState(false)
+  const [showAddSchedule, setShowAddSchedule] = useState(() => !!scheduleDraft)
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
-  const [newSchedule, setNewSchedule] = useState({
+  const [newSchedule, setNewSchedule] = useState(() => scheduleDraft?.newSchedule ?? {
     trainingName: '', businessUnit: '', startDate: '', endDate: '', hours: '',
     costPerAttendee: '', trainingType: '', capability: '', vendor: '',
     preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
@@ -166,7 +203,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   // plain form field. Question lists are loaded lazily (only once the form is actually open) so
   // every panel load doesn't pay for three extra fetches nobody asked for.
   type StageKey = 'pre' | 'post1' | 'post2'
-  const [excludedQuestionIds, setExcludedQuestionIds] = useState<Partial<Record<StageKey, string[]>>>({})
+  const [excludedQuestionIds, setExcludedQuestionIds] = useState<Partial<Record<StageKey, string[]>>>(() => scheduleDraft?.excludedQuestionIds ?? {})
   const [stageQuestions, setStageQuestions] = useState<Record<StageKey, { id: string; label: string; section: string | null }[]>>({
     pre: [], post1: [], post2: [],
   })
@@ -216,7 +253,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   // Attendees picked before the schedule even exists yet — added right after creation succeeds.
   const [newScheduleSearchQuery, setNewScheduleSearchQuery] = useState('')
-  const [newSchedulePending, setNewSchedulePending] = useState<RosterStaff[]>([])
+  const [newSchedulePending, setNewSchedulePending] = useState<RosterStaff[]>(() => scheduleDraft?.newSchedulePending ?? [])
 
   const [sendingKey, setSendingKey] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ key: string; sent: number; skipped: { staffName: string; reason: string }[]; inProgress?: boolean; total?: number } | null>(null)
@@ -231,8 +268,22 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   // Same "include Default Cc" choice, but for the NEW-schedule creation form specifically —
   // creating a schedule for a training that's already due sends immediately (see saveSchedule
   // below), so this is "when about to send the mail" too, not just the expanded-schedule buttons.
-  const [newScheduleIncludeDefaultCc, setNewScheduleIncludeDefaultCc] = useState(true)
-  const [newScheduleIncludeLineManagerCc, setNewScheduleIncludeLineManagerCc] = useState(true)
+  const [newScheduleIncludeDefaultCc, setNewScheduleIncludeDefaultCc] = useState(() => scheduleDraft?.newScheduleIncludeDefaultCc ?? true)
+  const [newScheduleIncludeLineManagerCc, setNewScheduleIncludeLineManagerCc] = useState(() => scheduleDraft?.newScheduleIncludeLineManagerCc ?? true)
+
+  // Keep the draft current as the CREATE form is typed into — never while editing an existing
+  // schedule, since that state is the real schedule's data, not a draft. See
+  // loadNewScheduleDraft/NEW_SCHEDULE_DRAFT_KEY above for the restore side.
+  useEffect(() => {
+    if (editingScheduleId) return
+    try {
+      localStorage.setItem(NEW_SCHEDULE_DRAFT_KEY, JSON.stringify({
+        newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc,
+      }))
+    } catch {
+      // Storage full/blocked — the form still works, it just won't survive a refresh this time.
+    }
+  }, [editingScheduleId, newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc])
   // Progress feedback while the immediate send-on-create is running in batches (see saveSchedule)
   // — replaces a single long spinner with a live count, since a large participant list can take
   // a while (the mailer sends one at a time over one pooled SMTP connection).
@@ -384,6 +435,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     setNewScheduleIncludeDefaultCc(true)
     setNewScheduleIncludeLineManagerCc(true)
     setCreateSendProgress(null)
+    try { localStorage.removeItem(NEW_SCHEDULE_DRAFT_KEY) } catch { /* nothing to clean up */ }
   }
 
   const startEditSchedule = (s: Schedule) => {
