@@ -182,15 +182,21 @@ function buildSlide3(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
     chartColors: [C.navy, C.gold, C.green],
     showLegend: false, dataLabelFontSize: 10, dataLabelColor: 'FFFFFF', showValue: false, showPercent: true, dataLabelPosition: 'ctr',
   })
+  // 3 side-by-side columns (no visible dividers) instead of one stacked text block — the stacked
+  // version's fixed lineSpacing ran the three value/label pairs close enough together in the
+  // exported PPT to read as jumbled together rather than as 3 distinct entries.
   const legendY = CONTENT_TOP + 3.3
-  slide.addText([
-    { text: `${fmt(data.totalTrainingCost)}  `, options: { bold: true, color: C.navy } },
-    { text: `Formal Training (${pct(data.trainingSharePct)})\n`, options: { color: C.gray } },
-    { text: `${fmt(data.totalOtherTrainingCost)}  `, options: { bold: true, color: C.gold } },
-    { text: `Strategic Learnings (${pct(data.otherSharePct)})\n`, options: { color: C.gray } },
-    { text: `${fmt(data.totalSubscriptionCost)}  `, options: { bold: true, color: C.green } },
-    { text: `Subscriptions (${pct(data.subscriptionSharePct)})`, options: { color: C.gray } },
-  ], { x: MARGIN + 0.2, y: legendY, w: leftW - 0.4, h: 1.0, fontFace: 'Calibri', fontSize: 9, lineSpacing: 16 })
+  const legendColW = (leftW - 0.4) / 3
+  const legendCols: { value: string; label: string; color: string }[] = [
+    { value: fmt(data.totalTrainingCost), label: `Formal Training (${pct(data.trainingSharePct)})`, color: C.navy },
+    { value: fmt(data.totalOtherTrainingCost), label: `Strategic Learnings (${pct(data.otherSharePct)})`, color: C.gold },
+    { value: fmt(data.totalSubscriptionCost), label: `Subscriptions (${pct(data.subscriptionSharePct)})`, color: C.green },
+  ]
+  legendCols.forEach((col, i) => {
+    const x = MARGIN + 0.2 + i * legendColW
+    slide.addText(col.value, { x, y: legendY, w: legendColW - 0.1, h: 0.28, fontFace: 'Calibri', fontSize: 11, bold: true, color: col.color })
+    slide.addText(col.label, { x, y: legendY + 0.3, w: legendColW - 0.1, h: 0.6, fontFace: 'Calibri', fontSize: 9, color: C.gray, valign: 'top' })
+  })
 
   const rightX = MARGIN + leftW + 0.25
   const rightW = PAGE_W - MARGIN - rightX
@@ -372,7 +378,36 @@ function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     { iconKey: 'calendarClock', title: 'Training Coming Soon', value: tm.staffWithUpcomingTraining.toLocaleString(), subtitle: 'TMs on a scheduled, not-yet-happened training' },
     { iconKey: 'graduationCap', title: 'Trainings Delivered', value: tm.distinctTrainingsDelivered.toLocaleString(), subtitle: `Distinct TM programmes run, ${periodLabel}` },
   ]
-  addTileGrid(slide, tiles, icons, 4)
+  // Unlike the other tile-grid slides, this one has a panel below the tiles (added next) — so,
+  // same as buildSlide2, the grid is given an explicit bottom instead of the default full-height
+  // one, leaving room for it.
+  const tilesBottom = CONTENT_TOP + 3.4
+  addTileGrid(slide, tiles, icons, 4, CONTENT_TOP, tilesBottom)
+
+  // "TM Training Coverage" panel — was missing entirely from the export (present on the on-screen
+  // slide as the Trained/Yet-to-be-Trained progress bars), so a downloaded deck under-represented
+  // this slide relative to what's shown in the app.
+  const panelTop = tilesBottom + 0.18
+  const panelH = FOOTER_Y - 0.25 - panelTop
+  if (panelH > 0.5) {
+    const trainedPct = tm.totalHeadcount > 0 ? (tm.staffTrained / tm.totalHeadcount) * 100 : 0
+    const notTrainedPct = tm.totalHeadcount > 0 ? (tm.staffNotTrained / tm.totalHeadcount) * 100 : 0
+    const barX = MARGIN + 0.2
+    const barW = PAGE_W - MARGIN * 2 - 0.4
+
+    slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: PAGE_W - MARGIN * 2, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
+    slide.addText('TM Training Coverage', { x: barX, y: panelTop + 0.15, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+
+    slide.addText(`Trained          ${tm.staffTrained.toLocaleString()} (${trainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 0.6, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addShape('rect', { x: barX, y: panelTop + 0.95, w: barW * Math.min(1, trainedPct / 100), h: 0.1, fill: { color: C.green }, line: { type: 'none' } })
+
+    slide.addText(`Yet to be Trained          ${tm.staffNotTrained.toLocaleString()} (${notTrainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 1.25, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addShape('rect', { x: barX, y: panelTop + 1.6, w: barW * Math.min(1, notTrainedPct / 100), h: 0.1, fill: { color: C.red }, line: { type: 'none' } })
+
+    if (tm.totalHeadcount === 0) {
+      slide.addText('Set the Total TM Headcount in Admin Settings to see coverage percentages.', { x: barX, y: panelTop + 1.95, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+    }
+  }
 
   addFooter(slide, 8, periodLabel)
   return slide
