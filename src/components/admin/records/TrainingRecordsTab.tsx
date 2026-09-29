@@ -136,7 +136,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [downloadingReport, setDownloadingReport] = useState(false)
 
   const [fillingMissingFields, setFillingMissingFields] = useState(false)
-  const [fillResult, setFillResult] = useState<{ scanned: number; filled: number; unmatched: number } | null>(null)
+  const [fillResult, setFillResult] = useState<{
+    scanned: number; filled: number; unmatched: number
+    unmatchedRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
+    noNewDataRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
+  } | null>(null)
 
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
@@ -825,10 +829,36 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       </div>
 
       {fillResult && (
-        <p className="text-xs text-slate-500">
-          Scanned {fillResult.scanned} record{fillResult.scanned === 1 ? '' : 's'} with a blank field — filled {fillResult.filled}
-          {fillResult.unmatched > 0 ? `, couldn't match ${fillResult.unmatched} to anyone in the roster.` : '.'}
-        </p>
+        <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-2">
+          <p className="text-xs text-slate-600">
+            Scanned {fillResult.scanned} record{fillResult.scanned === 1 ? '' : 's'} with a blank field — filled {fillResult.filled}.
+          </p>
+          {fillResult.unmatchedRecords.length > 0 && (
+            <div className="text-xs">
+              <p className="font-medium text-red-700 mb-1">Couldn&apos;t match {fillResult.unmatchedRecords.length} to anyone in the roster:</p>
+              <ul className="space-y-1">
+                {fillResult.unmatchedRecords.map((r) => (
+                  <li key={r.id} className="text-slate-600">
+                    <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
+                    <br /><span className="text-slate-400">{r.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {fillResult.noNewDataRecords.length > 0 && (
+            <div className="text-xs">
+              <p className="font-medium text-amber-700 mb-1">Matched, but nothing to fill for {fillResult.noNewDataRecords.length} — their Employee record is missing the same field:</p>
+              <ul className="space-y-1">
+                {fillResult.noNewDataRecords.map((r) => (
+                  <li key={r.id} className="text-slate-600">
+                    <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       {showDownloadReport && (
