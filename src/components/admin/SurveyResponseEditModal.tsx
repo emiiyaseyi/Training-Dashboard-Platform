@@ -79,7 +79,7 @@ function QuestionEditInput({ q, value, onChange }: { q: EditableQuestion; value:
     case 'date':
       return <input type="date" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} className={base} />
     case 'file':
-      return <p className="text-sm text-slate-400 italic">File answers can't be edited here — re-download the file from Uploaded Files if it needs replacing.</p>
+      return <p className="text-sm text-slate-400 italic">File answers can&apos;t be edited here — re-download the file from Uploaded Files if it needs replacing.</p>
     default:
       // Covers plain text and "ranking" (a Custom-Survey-only ordered-list type) — ranking's
       // stored answer is an array, so it's edited here as a comma-separated list rather than with
