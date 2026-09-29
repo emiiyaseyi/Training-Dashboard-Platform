@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { pushTrainingRecordFieldsToSheet } from '@/lib/sheets-sync'
 
 // Sets any of Vendor/Cost/Hours/Training Type/Capability on every given TrainingRecord in one
 // call — the "assign these details to this whole training cohort" action on the missing-details
@@ -35,12 +36,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'At least one field (vendor, cost, hours, trainingType, capability) is required.' }, { status: 400 })
     }
 
+    const targets = await prisma.trainingRecord.findMany({
+      where: { id: { in: recordIds } },
+      select: { staffId: true, training: true, month: true },
+    })
+
     const { count } = await prisma.trainingRecord.updateMany({
       where: { id: { in: recordIds } },
       data,
     })
 
-    return NextResponse.json({ updated: count })
+    // Best-effort — the database write above is the source of truth regardless of whether this
+    // succeeds; reported back so the admin knows if the sheet copy needs a manual look.
+    const sheetPush = await pushTrainingRecordFieldsToSheet(
+      targets.map((t) => ({ staffId: t.staffId, training: t.training, month: t.month, fields: data }))
+    ).catch((err) => ({ success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
+
+    return NextResponse.json({ updated: count, sheetPush })
   } catch (err) {
     console.error('[admin/records/training/missing-vendor/bulk-set POST]', err)
     return NextResponse.json({ error: 'Failed to set details.' }, { status: 500 })

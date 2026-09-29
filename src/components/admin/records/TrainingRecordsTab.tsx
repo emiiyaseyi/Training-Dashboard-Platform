@@ -160,6 +160,23 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   const [missingVendorPickerKey, setMissingVendorPickerKey] = useState<string | null>(null)
   const [missingDetailsDraft, setMissingDetailsDraft] = useState<Record<string, string>>({})
   const [settingVendorKey, setSettingVendorKey] = useState<string | null>(null)
+  const [sheetPushNote, setSheetPushNote] = useState<string | null>(null)
+
+  // "Possible Duplicate Trainings" — same person, same training name, filed under more than one
+  // Month/Year. Almost always the same real attendance recorded twice, not two genuine cohorts —
+  // lets the admin pick which record to keep instead of the missing-details panel (or anything
+  // else) silently treating them as separate trainings.
+  const [showDuplicates, setShowDuplicates] = useState(false)
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false)
+  const [duplicateGroups, setDuplicateGroups] = useState<{
+    staffName: string; staffId: string; training: string
+    records: {
+      id: string; businessUnit: string; month: string; year: number
+      cost: number; hours: number | null; trainingType: string | null; capability: string | null; vendor: string | null
+      createdAt: string
+    }[]
+  }[]>([])
+  const [resolvingDuplicateKey, setResolvingDuplicateKey] = useState<string | null>(null)
 
   // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
   // Schedule form: untick a question (from the shared, global bank) to hide it from THIS
@@ -520,6 +537,35 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     }
   }
 
+  const openDuplicates = async () => {
+    setShowDuplicates(true)
+    setLoadingDuplicates(true)
+    try {
+      const data = await fetch('/api/admin/records/training/possible-duplicates').then((r) => r.json()).catch(() => [])
+      setDuplicateGroups(Array.isArray(data) ? data : [])
+    } finally {
+      setLoadingDuplicates(false)
+    }
+  }
+
+  const resolveDuplicate = async (groupKey: string, keepId: string, deleteIds: string[]) => {
+    setResolvingDuplicateKey(groupKey)
+    try {
+      const res = await fetch('/api/admin/records/training/possible-duplicates/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keepId, deleteIds }),
+      })
+      if (res.ok) {
+        setDuplicateGroups((prev) => prev.filter((g) => `${g.staffId || g.staffName}|${g.training}` !== groupKey))
+        await load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to resolve this duplicate.')
+      }
+    } finally {
+      setResolvingDuplicateKey(null)
+    }
+  }
+
   // Shared by both the per-group bulk assign and a single attendee's individual override —
   // registers a brand-new vendor name into the shared Vendor list too (same upsert-by-name
   // convention as saveNewVendor above), so it shows up as a normal option everywhere else.
@@ -548,9 +594,15 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       const res = await fetch('/api/admin/records/training/missing-vendor/bulk-set', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recordIds, ...body }),
       })
+      const resData = await res.json().catch(() => null)
       if (res.ok) {
         setMissingVendorPickerKey(null)
         setMissingDetailsDraft({})
+        setSheetPushNote(
+          resData?.sheetPush?.success
+            ? `Also updated ${resData.sheetPush.updated} row${resData.sheetPush.updated === 1 ? '' : 's'} in the Excel sheet.`
+            : `Saved here, but the Excel sheet wasn't updated: ${resData?.sheetPush?.error || 'unknown reason'}.`
+        )
         // Not a refetch: Cost = 0 is ambiguous ("never set" and "genuinely free" store the same
         // value), so the server-side missing-details check would immediately re-flag a training
         // the admin just deliberately set to ₦0 — an unresolvable loop. Trusting what was just
@@ -743,6 +795,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             <AlertTriangle className="w-4 h-4" /> Trainings Missing Details
           </button>
         )}
+        {!showDuplicates && (
+          <button onClick={openDuplicates} className="flex items-center gap-1.5 text-sm font-medium text-amber-700 border border-amber-300 rounded-lg px-3 py-2 hover:bg-amber-50">
+            <AlertTriangle className="w-4 h-4" /> Possible Duplicate Trainings
+          </button>
+        )}
         <button
           onClick={fillMissingFields}
           disabled={fillingMissingFields}
@@ -854,6 +911,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             Only flags a field when NOT A SINGLE attendee in that training has it — a stray record missing just one field
             while the rest of its cohort is filled in won&apos;t show up here; edit that one directly in the table below instead.
           </p>
+          {sheetPushNote && <p className="text-[11px] text-navy-700 bg-navy-50 border border-navy-100 rounded px-2 py-1">{sheetPushNote}</p>}
 
           {loadingMissingVendor ? (
             <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
@@ -1014,6 +1072,79 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                         })}
                       </div>
                     )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showDuplicates && (
+        <div className="border border-amber-200 rounded-lg p-4 space-y-3 bg-amber-50/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Possible Duplicate Trainings
+            </div>
+            <button onClick={() => setShowDuplicates(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Same person, same training name, filed under more than one Month/Year — almost always the same attendance
+            recorded twice. Pick which record to keep; the other(s) are deleted (any linked schedule keeps pointing to the one you keep).
+          </p>
+
+          {loadingDuplicates ? (
+            <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
+          ) : duplicateGroups.length === 0 ? (
+            <p className="text-xs text-slate-400">No same-person, same-training duplicates found.</p>
+          ) : (
+            <div className="space-y-2">
+              {duplicateGroups.map((g) => {
+                const groupKey = `${g.staffId || g.staffName}|${g.training}`
+                const resolving = resolvingDuplicateKey === groupKey
+                return (
+                  <div key={groupKey} className="bg-white border border-slate-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-slate-800">{g.staffName} <span className="text-slate-400 font-normal">({g.staffId})</span> — {g.training}</p>
+                    <div className="overflow-x-auto mt-2">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-slate-400 border-b border-slate-100">
+                            <th className="text-left font-medium py-1 pr-3">Month/Year</th>
+                            <th className="text-left font-medium py-1 pr-3">Business Unit</th>
+                            <th className="text-right font-medium py-1 pr-3">Cost</th>
+                            <th className="text-right font-medium py-1 pr-3">Hours</th>
+                            <th className="text-left font-medium py-1 pr-3">Type</th>
+                            <th className="text-left font-medium py-1 pr-3">Capability</th>
+                            <th className="text-left font-medium py-1 pr-3">Vendor</th>
+                            <th className="py-1"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.records.map((r) => (
+                            <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                              <td className="py-1.5 pr-3 text-slate-600 whitespace-nowrap">{r.month} {r.year}</td>
+                              <td className="py-1.5 pr-3 text-slate-600">{r.businessUnit}</td>
+                              <td className="py-1.5 pr-3 text-slate-600 text-right">{r.cost ? `₦${r.cost.toLocaleString()}` : '—'}</td>
+                              <td className="py-1.5 pr-3 text-slate-600 text-right">{r.hours ?? '—'}</td>
+                              <td className="py-1.5 pr-3 text-slate-600">{r.trainingType || '—'}</td>
+                              <td className="py-1.5 pr-3 text-slate-600">{r.capability || '—'}</td>
+                              <td className="py-1.5 pr-3 text-slate-600">{r.vendor || '—'}</td>
+                              <td className="py-1.5 text-center">
+                                <button
+                                  onClick={() => resolveDuplicate(groupKey, r.id, g.records.filter((other) => other.id !== r.id).map((other) => other.id))}
+                                  disabled={resolving}
+                                  className="text-xs font-medium text-white bg-amber-600 rounded-lg px-2.5 py-1 hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
+                                >
+                                  {resolving ? <Loader2 className="w-3.5 h-3.5 animate-spin inline" /> : 'Keep this one'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )
               })}

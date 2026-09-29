@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { MONTHS } from '@/lib/filter-types'
+import { pushTrainingRecordFieldsToSheet } from '@/lib/sheets-sync'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
@@ -15,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       cost?: number; hours?: number | null; trainingType?: string | null; capability?: string | null; vendor?: string | null
     }
 
-    const existing = await prisma.trainingRecord.findUnique({ where: { id }, select: { month: true, year: true } })
+    const existing = await prisma.trainingRecord.findUnique({ where: { id }, select: { staffId: true, training: true, month: true, year: true } })
 
     const record = await prisma.trainingRecord.update({
       where: { id },
@@ -64,7 +65,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    return NextResponse.json(record)
+    // Best-effort push of whatever changed among Cost/Hours/Type/Capability/Vendor back to the
+    // live sheet, keyed by this record's identity as it was BEFORE this edit (in case
+    // staffId/training/month were also changed just now — the sheet row is still filed under the
+    // old one). Never blocks or fails the response; the database write above is the source of
+    // truth either way.
+    const sheetFields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string } = {}
+    if (body.cost !== undefined) sheetFields.cost = record.cost
+    if (body.hours !== undefined) sheetFields.hours = record.hours ?? 0
+    if (body.trainingType !== undefined) sheetFields.trainingType = record.trainingType || ''
+    if (body.capability !== undefined) sheetFields.capability = record.capability || ''
+    if (body.vendor !== undefined) sheetFields.vendor = record.vendor || ''
+    const sheetPush = existing && Object.keys(sheetFields).length > 0
+      ? await pushTrainingRecordFieldsToSheet([{ staffId: existing.staffId, training: existing.training, month: existing.month, fields: sheetFields }])
+          .catch((err) => ({ success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }))
+      : undefined
+
+    return NextResponse.json({ ...record, sheetPush })
   } catch (err) {
     console.error('[admin/records/training/[id] PUT]', err)
     return NextResponse.json({ error: 'Failed to update record.' }, { status: 500 })

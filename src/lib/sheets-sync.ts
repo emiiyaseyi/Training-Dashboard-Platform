@@ -684,6 +684,77 @@ export async function pushVendorUpdatesToSheet(year: number = new Date().getFull
   }
 }
 
+export interface PushTrainingFieldsResult {
+  success: boolean
+  updated: number
+  notFound: number
+  error?: string
+}
+
+// Pushes any of Cost/Hours/Training Type/Capability/Vendor straight to the matching row in the
+// live Training Cost sheet, right after they're edited on the platform (Manage Records' row edit,
+// or the Trainings Missing Details bulk/individual "Set" actions) — so a later sync never sees the
+// database and the sheet disagree and queues the sheet's stale value back up as a "detected
+// change" to approve, which would silently undo the very fix just made. Best-effort: a failure
+// here (no sheet configured, connection issue) is reported but never blocks or rolls back the
+// database write, which is the source of truth either way.
+//
+// Keyed by Staff ID + Training + Month, same convention as pushVendorUpdatesToSheet — pass the
+// record's identity as it was BEFORE this edit (in case the edit itself changed Training/Month),
+// since the sheet row is still filed under the old one.
+export async function pushTrainingRecordFieldsToSheet(
+  records: {
+    staffId: string
+    training: string
+    month: string
+    fields: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string }
+  }[]
+): Promise<PushTrainingFieldsResult> {
+  const toPush = records.filter((r) => Object.keys(r.fields).length > 0)
+  if (toPush.length === 0) return { success: true, updated: 0, notFound: 0 }
+
+  const config = await prisma.googleSheetsConfig.findFirst()
+  if (!config?.spreadsheetUrl) return { success: false, updated: 0, notFound: 0, error: 'No Google Sheet configured yet.' }
+  if (!config.trainingSheetName?.trim()) return { success: false, updated: 0, notFound: 0, error: 'No Training Cost tab name configured.' }
+
+  const sheetName = config.trainingSheetName.trim()
+  try {
+    const connection = await connectToSpreadsheet(config.spreadsheetUrl)
+    if (!connection.tabTitles.includes(sheetName)) {
+      return { success: false, updated: 0, notFound: 0, error: `Tab "${sheetName}" not found in the spreadsheet.` }
+    }
+
+    const FIELD_COLUMNS: Record<string, string[]> = {
+      vendor: ['vendor', 'trainingvendor', 'provider', 'facilitator', 'trainer'],
+      cost: ['amount', 'fee', 'trainingcost', 'spend', 'cost'],
+      hours: ['hoursoflearning', 'learningduration', 'traininghours', 'durationhours', 'hours'],
+      trainingType: ['type', 'category', 'trainingtype'],
+      capability: ['capability', 'competency'],
+    }
+
+    const { found, notFound, error } = await batchUpdateRowsByCompoundKey(
+      connection.spreadsheetId,
+      sheetName,
+      connection.accessToken,
+      [
+        ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'],
+        ['training', 'trainingname', 'trainingtitle', 'course', 'programme'],
+        ['month', 'period', 'trainingmonth'],
+      ],
+      toPush.map((r) => ({
+        keyParts: [r.staffId, r.training, r.month],
+        updates: Object.entries(r.fields).map(([key, value]) => ({
+          columnCandidates: FIELD_COLUMNS[key],
+          value: String(value),
+        })),
+      }))
+    )
+    return { success: !error, updated: found, notFound, error }
+  } catch (err) {
+    return { success: false, updated: 0, notFound: 0, error: err instanceof Error ? err.message : 'Failed to write to the sheet.' }
+  }
+}
+
 export interface RosterBackfillResult {
   checked: number // flagged staff (missing at least one of the fields below) that were looked up
   updated: number // of those, how many had at least one field actually filled in
