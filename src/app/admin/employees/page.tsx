@@ -153,7 +153,10 @@ export default function EmployeesPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
 
-  const [query, setQuery] = useState('')
+  // Reads a "?search=" query param on mount (e.g. a deep link from Manage Records' Fill Missing
+  // Fields result, which knows exactly who needs a look) so this page opens with that person
+  // already found instead of the admin having to retype the name.
+  const [query, setQuery] = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('search') || '' : ''))
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
   const [employmentFilter, setEmploymentFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')

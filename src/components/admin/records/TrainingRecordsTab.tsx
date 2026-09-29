@@ -141,6 +141,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     unmatchedRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
     noNewDataRecords: { id: string; staffId: string; staffName: string; training: string; missingFields: string[]; reason: string }[]
   } | null>(null)
+  // Manual fix for a record Fill Missing Fields couldn't match by name on its own — search the
+  // same roster directly and pick the right person.
+  const [manualFixId, setManualFixId] = useState<string | null>(null)
+  const [manualFixQuery, setManualFixQuery] = useState('')
+  const [manualFixSavingId, setManualFixSavingId] = useState<string | null>(null)
 
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
@@ -532,6 +537,32 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     }
   }
 
+  const manualFixRecord = async (recordId: string, staff: RosterStaff) => {
+    setManualFixSavingId(recordId)
+    try {
+      const res = await fetch(`/api/admin/records/training/${recordId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: staff.staffId, businessUnit: staff.businessUnit, email: staff.email || undefined }),
+      })
+      if (res.ok) {
+        setManualFixId(null)
+        setManualFixQuery('')
+        setFillResult((prev) => prev && {
+          ...prev,
+          filled: prev.filled + 1,
+          unmatchedRecords: prev.unmatchedRecords.filter((r) => r.id !== recordId),
+        })
+        await load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to save.')
+      }
+    } finally {
+      setManualFixSavingId(null)
+    }
+  }
+
   const openMissingVendor = async () => {
     setShowMissingVendor(true)
     setLoadingMissingVendor(true)
@@ -836,13 +867,58 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           {fillResult.unmatchedRecords.length > 0 && (
             <div className="text-xs">
               <p className="font-medium text-red-700 mb-1">Couldn&apos;t match {fillResult.unmatchedRecords.length} to anyone in the roster:</p>
-              <ul className="space-y-1">
-                {fillResult.unmatchedRecords.map((r) => (
-                  <li key={r.id} className="text-slate-600">
-                    <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
-                    <br /><span className="text-slate-400">{r.reason}</span>
-                  </li>
-                ))}
+              <ul className="space-y-1.5">
+                {fillResult.unmatchedRecords.map((r) => {
+                  const picking = manualFixId === r.id
+                  const q = manualFixQuery.trim().toLowerCase()
+                  const results = picking && q
+                    ? directory.filter((s) => s.name.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)).slice(0, 6)
+                    : []
+                  return (
+                    <li key={r.id} className="text-slate-600">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span>
+                          <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
+                        </span>
+                        {!picking && (
+                          <button onClick={() => { setManualFixId(r.id); setManualFixQuery('') }} className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap">
+                            Fix manually
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-slate-400">{r.reason}</p>
+                      {picking && (
+                        <div className="relative mt-1 max-w-xs">
+                          <input
+                            autoFocus
+                            value={manualFixQuery}
+                            onChange={(e) => setManualFixQuery(e.target.value)}
+                            placeholder="Search the roster by name or Staff ID…"
+                            className="w-full border border-slate-300 rounded-md px-2 py-1 text-xs"
+                          />
+                          {results.length > 0 && (
+                            <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                              {results.map((s) => (
+                                <button
+                                  key={s.staffId}
+                                  onClick={() => manualFixRecord(r.id, s)}
+                                  disabled={manualFixSavingId === r.id}
+                                  className="w-full text-left px-2.5 py-1.5 hover:bg-slate-50 flex items-center justify-between gap-2 disabled:opacity-50"
+                                >
+                                  <span className="text-slate-700">{s.name}</span>
+                                  <span className="text-slate-400">{s.staffId} · {s.businessUnit}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <button onClick={() => { setManualFixId(null); setManualFixQuery('') }} className="text-slate-400 hover:text-slate-600 text-[11px] mt-1">
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}
@@ -851,8 +927,18 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
               <p className="font-medium text-amber-700 mb-1">Matched, but nothing to fill for {fillResult.noNewDataRecords.length} — their Employee record is missing the same field:</p>
               <ul className="space-y-1">
                 {fillResult.noNewDataRecords.map((r) => (
-                  <li key={r.id} className="text-slate-600">
-                    <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
+                  <li key={r.id} className="text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+                    <span>
+                      <span className="font-medium text-slate-700">{r.staffName}</span> ({r.staffId || '—'}) — {r.training} — missing {r.missingFields.join(', ')}
+                    </span>
+                    <a
+                      href={`/admin/employees?search=${encodeURIComponent(r.staffName)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-navy-600 hover:text-navy-800 font-medium whitespace-nowrap"
+                    >
+                      Fix in Employees →
+                    </a>
                   </li>
                 ))}
               </ul>

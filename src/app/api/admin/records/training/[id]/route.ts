@@ -14,6 +14,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json() as {
       staffId?: string; staffName?: string; businessUnit?: string; training?: string; month?: string; year?: number
       cost?: number; hours?: number | null; trainingType?: string | null; capability?: string | null; vendor?: string | null
+      email?: string | null
     }
 
     const existing = await prisma.trainingRecord.findUnique({ where: { id }, select: { staffId: true, training: true, month: true, year: true } })
@@ -32,6 +33,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(body.trainingType !== undefined && { trainingType: body.trainingType || null }),
         ...(body.capability !== undefined && { capability: body.capability || null }),
         ...(body.vendor !== undefined && { vendor: body.vendor || null }),
+        ...(body.email !== undefined && { email: body.email || null }),
       },
     })
 
