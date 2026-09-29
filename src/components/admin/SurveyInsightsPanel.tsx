@@ -42,10 +42,20 @@ interface Question {
   ratingMax?: number
 }
 
+interface DashboardMetric {
+  label: string
+  allRecordsCount: number
+  allRecordsAverage: number | null
+  nativeOnlyCount: number
+  nativeOnlyAverage: number | null
+  uploadedOrUneditedCount: number
+}
+
 interface InsightsData {
   questions: Question[]
   responses: ResponseRow[]
   insights: Insight[]
+  dashboardMetric: DashboardMetric | null
   respondentCount: number
   businessUnitCounts: { name: string; count: number }[]
 }
@@ -197,6 +207,20 @@ export function SurveyInsightsPanel() {
               <p className="text-xs text-slate-500">
                 {data.respondentCount} response{data.respondentCount === 1 ? '' : 's'} for {STAGE_LABELS[stage]}{businessUnit !== 'all' ? ` in ${businessUnit}` : ' across all Business Units'}.
               </p>
+
+              {data.dashboardMetric && data.dashboardMetric.uploadedOrUneditedCount > 0 && (
+                <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="font-medium">
+                    The dashboard&apos;s &quot;{data.dashboardMetric.label}&quot; for this selection is{' '}
+                    {data.dashboardMetric.allRecordsAverage?.toFixed(1) ?? '—'}/5 across {data.dashboardMetric.allRecordsCount} record{data.dashboardMetric.allRecordsCount === 1 ? '' : 's'} —
+                    not the same {data.dashboardMetric.nativeOnlyCount} shown below.
+                  </p>
+                  <p className="text-amber-700 mt-0.5">
+                    {data.dashboardMetric.uploadedOrUneditedCount} additional record{data.dashboardMetric.uploadedOrUneditedCount === 1 ? '' : 's'} came from an uploaded spreadsheet rather than this survey, so {data.dashboardMetric.uploadedOrUneditedCount === 1 ? "it isn't" : "they aren't"} listed in Responses below — but {data.dashboardMetric.uploadedOrUneditedCount === 1 ? 'it still counts' : 'they still count'} toward the dashboard figure, same as the {data.dashboardMetric.nativeOnlyCount} survey response{data.dashboardMetric.nativeOnlyCount === 1 ? '' : 's'} here ({data.dashboardMetric.nativeOnlyAverage?.toFixed(1) ?? '—'}/5 avg).
+                  </p>
+                </div>
+              )}
+
               {tab === 'insights' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {data.insights.length === 0 ? (
