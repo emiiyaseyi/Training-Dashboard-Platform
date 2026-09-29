@@ -6,6 +6,7 @@ import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
 import { getOrCreateNativeBatch } from '@/lib/import-records'
 import { connectToSpreadsheet, appendMirrorRow } from '@/lib/google-sheets'
+import { buildFullName } from '@/lib/staff-name'
 
 // Roster uploads accumulate over time (each re-upload adds new rows rather than replacing old
 // ones) — same "most recent wins per Staff ID" convention as loadRosterDirectory() and the Yet to
@@ -26,7 +27,7 @@ export async function GET() {
       firstName: r.firstName,
       middleName: r.middleName,
       lastName: r.lastName,
-      name: [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' '),
+      name: buildFullName(r.firstName, r.middleName, r.lastName),
       email: r.email,
       businessUnit: r.businessUnit,
       department: r.department,
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
         const connection = await connectToSpreadsheet(config.spreadsheetUrl)
         await appendMirrorRow(connection.spreadsheetId, config.comprehensiveStaffListSheetName, connection.accessToken, [
           { label: 'Staff ID', candidates: ['staffno', 'employeeid', 'employeeno', 'id'], value: record.staffId },
-          { label: 'Name', candidates: ['fullname', 'staffname', 'employeename'], value: [record.firstName, record.middleName, record.lastName].filter(Boolean).join(' ') },
+          { label: 'Name', candidates: ['fullname', 'staffname', 'employeename'], value: buildFullName(record.firstName, record.middleName, record.lastName) },
           { label: 'First Name', candidates: ['first'], value: record.firstName },
           { label: 'Last Name', candidates: ['surname', 'last'], value: record.lastName },
           { label: 'Email', candidates: ['emailaddress', 'staffemail', 'workemail'], value: record.email || '' },

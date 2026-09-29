@@ -40,6 +40,26 @@ function uniqueZipPath(path: string, used: Map<string, number>): string {
   return dot === -1 ? `${path} (${count})` : `${path.slice(0, dot)} (${count})${path.slice(dot)}`
 }
 
+// Windows' default extraction path limit (MAX_PATH, ~260 chars including the destination folder
+// the person extracts into) is easy to blow past once every file's own name already embeds Staff
+// Name - Training Name - Date (see uploaded-file-naming.ts), nested inside a Business
+// Unit/Training/Question folder structure that repeats a lot of the same text — a training with a
+// long title and a long filename can build a path well over 300 characters on its own, before the
+// extraction destination is even counted. Every path segment is capped, and the folder structure
+// drops the Training-name level entirely (it's already in the filename) to cut one more layer of
+// duplication rather than just truncating everything harder.
+function truncateSegment(s: string, maxLen: number): string {
+  const trimmed = s.trim()
+  return trimmed.length > maxLen ? trimmed.slice(0, maxLen).trim() : trimmed
+}
+function truncateFileName(name: string, maxLen: number): string {
+  if (name.length <= maxLen) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > -1 ? name.slice(dot) : ''
+  const base = dot > -1 ? name.slice(0, dot) : name
+  return `${base.slice(0, Math.max(10, maxLen - ext.length))}${ext}`
+}
+
 // Lists every file uploaded through a "file"-type survey question (training or custom survey),
 // stored directly in the DB — see UploadedFile in schema.prisma — rather than Google Drive, which
 // a bare service account can't reliably write into outside a Shared Drive. Each row is downloaded
@@ -167,7 +187,10 @@ export function UploadedFilesPanel() {
       const zipEntries: { name: string; blob: Blob }[] = []
       for (const f of selectedVisible) {
         const blob = await fetch(`/api/admin/survey-files/${f.id}`).then((r) => r.blob())
-        const path = uniqueZipPath(`${f.businessUnit || UNASSIGNED_BU}/${f.surveyName}/${f.questionLabel}/${f.fileName}`, used)
+        const path = uniqueZipPath(
+          `${truncateSegment(f.businessUnit || UNASSIGNED_BU, 30)}/${truncateSegment(f.questionLabel, 30)}/${truncateFileName(f.fileName, 120)}`,
+          used
+        )
         zipEntries.push({ name: path, blob })
         setZipping((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev))
       }

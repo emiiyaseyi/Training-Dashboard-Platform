@@ -5,6 +5,7 @@ import { buildCustomSurveyEmail } from '@/lib/custom-survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { buildFullName } from '@/lib/staff-name'
 
 export interface ResolvedAudienceMember {
   staffId: string
@@ -52,7 +53,7 @@ export async function resolveAudience(
 
   return roster.map((r) => ({
     staffId: r.staffId,
-    staffName: [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' '),
+    staffName: buildFullName(r.firstName, r.middleName, r.lastName),
     email: r.email,
     businessUnit: r.businessUnit,
   }))

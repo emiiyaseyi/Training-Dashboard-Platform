@@ -4,6 +4,7 @@ import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { connectToSpreadsheet, fetchSheetAsBuffer } from '@/lib/google-sheets'
 import { findHeader } from '@/lib/excel-parser'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { buildFullName } from '@/lib/staff-name'
 
 export interface ResolvedStaff {
   staffId: string
@@ -104,7 +105,7 @@ async function fetchComprehensiveStaffList(): Promise<Map<string, ResolvedStaff>
       const lastName = col.lastName ? norm(r[col.lastName]) : ''
       const name = col.name
         ? norm(r[col.name])
-        : [firstName, col.middleName && norm(r[col.middleName]), lastName].filter(Boolean).join(' ')
+        : buildFullName(firstName, col.middleName ? norm(r[col.middleName]) : '', lastName)
 
       map.set(key, {
         staffId: staffId.toUpperCase(),
@@ -142,7 +143,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
   for (const r of all) {
     map.set(normalizeStaffIdKey(r.staffId), {
       staffId: r.staffId.toUpperCase(),
-      name: [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' '),
+      name: buildFullName(r.firstName, r.middleName, r.lastName),
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email,

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { getLiveRosterStaffIdKeys } from '@/lib/sheets-sync'
+import { buildFullName } from '@/lib/staff-name'
 import type { StaffRosterRecord } from '@prisma/client'
 
 export interface StaffQualityRow {
@@ -73,7 +74,7 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
 
   for (const [key, list] of groups) {
     const latest = list[list.length - 1]
-    const name = [latest.firstName, latest.middleName, latest.lastName].filter(Boolean).join(' ').trim()
+    const name = buildFullName(latest.firstName, latest.middleName, latest.lastName)
     const issues: string[] = []
 
     // Exited/deactivated staff (Employees page -> Deactivate, or synced from the roster sheet's

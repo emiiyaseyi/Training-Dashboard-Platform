@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { buildFullName } from '@/lib/staff-name'
 
 // Kept intentionally separate from analytics.ts — this report reads TrainingRecord (and, for the
 // same reason Talent Members unions two sources — see computeTalentMemberReport — TrainingSchedule)
@@ -30,7 +31,7 @@ export interface YetToAttendStaff {
 }
 
 function fullName(r: { firstName: string; middleName: string | null; lastName: string }): string {
-  return [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ')
+  return buildFullName(r.firstName, r.middleName, r.lastName)
 }
 
 export interface BUAttendanceBreakdown {

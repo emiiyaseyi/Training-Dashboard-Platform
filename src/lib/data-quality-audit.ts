@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { buildFullName } from '@/lib/staff-name'
 
 // A production roster backfill can touch thousands of rows (every pre-existing row across four
 // tables needed a Staff Email backfill the first time that field was added). Awaiting one Prisma
@@ -273,7 +274,7 @@ async function buildRosterLookups(): Promise<{
   for (const r of roster) {
     byStaffId.set(normalizeStaffIdKey(r.staffId), { staffId: r.staffId, businessUnit: r.businessUnit, email: r.email })
     const candidate = { staffId: r.staffId, businessUnit: r.businessUnit, email: r.email }
-    const name = [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ').trim().toLowerCase()
+    const name = buildFullName(r.firstName, r.middleName, r.lastName).toLowerCase()
     if (name) {
       if (!byName.has(name)) byName.set(name, [])
       byName.get(name)!.push(candidate)
