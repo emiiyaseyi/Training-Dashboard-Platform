@@ -1746,8 +1746,29 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                                 {isEditing && draft ? (
                                   <>
                                     <td className="px-2.5 py-1.5"><input value={draft.staffName} onChange={(e) => setDraft({ ...draft, staffName: e.target.value })} className="w-28 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5"><input value={draft.staffId} onChange={(e) => setDraft({ ...draft, staffId: e.target.value })} className="w-24 border border-slate-200 rounded px-1.5 py-1" /></td>
-                                    <td className="px-2.5 py-1.5"><input value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="w-32 border border-slate-200 rounded px-1.5 py-1" /></td>
+                                    <td className="px-2.5 py-1.5">
+                                      <input
+                                        value={draft.staffId}
+                                        onChange={(e) => {
+                                          const staffId = e.target.value
+                                          // Typing a Staff ID that resolves on the roster fills Business
+                                          // Unit from that person's CURRENT one too — still overridable via
+                                          // the dropdown right after, same as picking an attendee does on
+                                          // the New Training Schedule form.
+                                          const match = directory.find((d) => d.staffId.toUpperCase() === staffId.trim().toUpperCase())
+                                          setDraft((prev) => prev && { ...prev, staffId, businessUnit: match ? match.businessUnit : prev.businessUnit })
+                                        }}
+                                        className="w-24 border border-slate-200 rounded px-1.5 py-1"
+                                      />
+                                    </td>
+                                    <td className="px-2.5 py-1.5">
+                                      <select value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="w-32 border border-slate-200 rounded px-1.5 py-1">
+                                        {!businessUnits.some((bu) => bu.name === draft.businessUnit) && draft.businessUnit && (
+                                          <option value={draft.businessUnit}>{draft.businessUnit} (not recognized)</option>
+                                        )}
+                                        {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+                                      </select>
+                                    </td>
                                     <td className="px-2.5 py-1.5"><input value={draft.training} onChange={(e) => setDraft({ ...draft, training: e.target.value })} className="w-36 border border-slate-200 rounded px-1.5 py-1" /></td>
                                     <td className="px-2.5 py-1.5">
                                       <div className="flex items-center gap-1">

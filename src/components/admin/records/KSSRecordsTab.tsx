@@ -58,6 +58,7 @@ export function KSSRecordsTab() {
 
   const [addingNew, setAddingNew] = useState(false)
   const [directory, setDirectory] = useState<RosterStaff[]>([])
+  const [businessUnits, setBusinessUnits] = useState<{ id: string; name: string }[]>([])
   const [pickerQuery, setPickerQuery] = useState('')
   const [pickedStaff, setPickedStaff] = useState<RosterStaff | null>(null)
   const [newDuration, setNewDuration] = useState('')
@@ -94,6 +95,7 @@ export function KSSRecordsTab() {
 
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setDirectory(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
   const pickerResults = useMemo(() => {
@@ -482,7 +484,14 @@ export function KSSRecordsTab() {
                     <>
                       <td className="px-3 py-1.5"><input value={draft.staffName} onChange={(e) => setDraft({ ...draft, staffName: e.target.value })} className="w-full border border-slate-200 rounded px-2 py-1 text-sm" /></td>
                       <td className="px-3 py-1.5 text-slate-500">{r.staffId}</td>
-                      <td className="px-3 py-1.5"><input value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="w-full border border-slate-200 rounded px-2 py-1 text-sm" /></td>
+                      <td className="px-3 py-1.5">
+                        <select value={draft.businessUnit} onChange={(e) => setDraft({ ...draft, businessUnit: e.target.value })} className="w-full border border-slate-200 rounded px-2 py-1 text-sm">
+                          {!businessUnits.some((bu) => bu.name === draft.businessUnit) && draft.businessUnit && (
+                            <option value={draft.businessUnit}>{draft.businessUnit} (not recognized)</option>
+                          )}
+                          {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+                        </select>
+                      </td>
                       <td className="px-3 py-1.5"><input type="number" value={draft.durationMinutes} onChange={(e) => setDraft({ ...draft, durationMinutes: e.target.value })} className="w-24 border border-slate-200 rounded px-2 py-1 text-sm" /></td>
                       <td className="px-3 py-1.5">
                         <select value={draft.month} onChange={(e) => setDraft({ ...draft, month: e.target.value })} className="border border-slate-200 rounded px-2 py-1 text-sm">
