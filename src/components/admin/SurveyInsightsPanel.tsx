@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2, Pencil, Wrench } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronUp, BarChart2, MessageSquare, Building2, Pencil, Wrench, Upload } from 'lucide-react'
 import { SurveyResponseEditModal } from './SurveyResponseEditModal'
 
 type Stage = 'pre' | 'post1' | 'post2'
@@ -83,6 +83,8 @@ export function SurveyInsightsPanel() {
   const [reloadTick, setReloadTick] = useState(0)
   const [backfilling, setBackfilling] = useState(false)
   const [backfillResult, setBackfillResult] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState('')
 
   useEffect(() => {
     if (!expanded) return
@@ -129,6 +131,25 @@ export function SurveyInsightsPanel() {
     }
   }
 
+  const runImport = async () => {
+    if (!confirm(
+      "This brings every Manager Review that was uploaded via spreadsheet (not filled through a survey) into Survey Automation: a \"Legacy Manager Reviews\" schedule is created per training, and each review becomes individually viewable and editable here, per Business Unit. The dashboard keeps reading the same records — this just gives them provenance and an edit path. Continue?"
+    )) return
+    setImporting(true)
+    setImportResult('')
+    try {
+      const res = await fetch('/api/admin/training-schedule/import-legacy-manager-reviews', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Import failed.')
+      setImportResult(`Found ${json.totalFound} uploaded-only reviews — imported ${json.imported} into ${json.schedulesCreated} legacy schedule(s)${json.unresolved > 0 ? `, ${json.unresolved} skipped (staff ID not found in the roster)` : ''}.`)
+      setReloadTick((t) => t + 1)
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
       <button
@@ -144,7 +165,15 @@ export function SurveyInsightsPanel() {
 
       {expanded && (
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={runImport}
+              disabled={importing}
+              className="flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 bg-navy-50 rounded-lg px-3 py-1.5 hover:bg-navy-100 disabled:opacity-60"
+            >
+              {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              Import Uploaded Manager Reviews into Survey Automation
+            </button>
             <button
               onClick={runBackfill}
               disabled={backfilling}
@@ -153,8 +182,9 @@ export function SurveyInsightsPanel() {
               {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
               Fix Business Unit on all existing Manager Reviews
             </button>
-            {backfillResult && <p className="text-xs text-slate-500">{backfillResult}</p>}
           </div>
+          {importResult && <p className="text-xs text-slate-500">{importResult}</p>}
+          {backfillResult && <p className="text-xs text-slate-500">{backfillResult}</p>}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
               {(['pre', 'post1', 'post2'] as const).map((s) => (
