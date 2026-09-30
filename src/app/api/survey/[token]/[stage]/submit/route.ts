@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { excludeQuestions, parseExcludedQuestionIds, type SurveyStageKey } from '@/lib/survey-questions'
 import { isSurveyExpired } from '@/lib/survey-expiry'
 import { mirrorSurveyResponse } from '@/lib/survey-mirror'
 import { rateLimit } from '@/lib/rate-limit'
 import { upsertStructuredRecordForResponse } from '@/lib/survey-structured-sync'
+
+export const maxDuration = 60
 
 const VALID_STAGES: SurveyStageKey[] = ['pre', 'post1', 'post2']
 
@@ -65,22 +67,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     })
 
     // Feed the structured metric this stage maps to (FeedbackRecord for post1, ManagerReviewRecord
-    // for post2) — shared with the admin response editor so a later correction recomputes the same
-    // way a fresh submission does.
-    if (stageKey === 'post1' || stageKey === 'post2') {
-      await upsertStructuredRecordForResponse(stageKey, attendee, answers, questions, response.id)
-    }
-
-    // Best-effort: mirror into the Google Sheet tab. Outcome is persisted on the response itself
-    // (not just logged) so a failure is visible to the admin and individually retryable, rather
-    // than silently disappearing into server logs nobody sees.
-    const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions, response.submittedAt)
-    if (mirrorResult.attempted) {
-      await prisma.surveyResponse.update({
-        where: { id: response.id },
-        data: { mirrorSyncedAt: mirrorResult.success ? new Date() : null, mirrorError: mirrorResult.success ? null : mirrorResult.message },
-      })
-    }
+    // for post2) and mirror into the Google Sheet tab — both are best-effort and both can hit the
+    // Google Sheets API (slow, sometimes rate-limited), so they run AFTER the response has already
+    // gone back to the respondent instead of blocking it. That network call blocking the response
+    // is what was turning "Submit" into an indefinite spinner for real respondents.
+    after(async () => {
+      try {
+        if (stageKey === 'post1' || stageKey === 'post2') {
+          await upsertStructuredRecordForResponse(stageKey, attendee, answers, questions, response.id)
+        }
+        const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions, response.submittedAt)
+        if (mirrorResult.attempted) {
+          await prisma.surveyResponse.update({
+            where: { id: response.id },
+            data: { mirrorSyncedAt: mirrorResult.success ? new Date() : null, mirrorError: mirrorResult.success ? null : mirrorResult.message },
+          })
+        }
+      } catch (err) {
+        console.error('[survey submit background]', err)
+      }
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {
