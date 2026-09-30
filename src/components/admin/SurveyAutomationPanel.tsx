@@ -60,6 +60,7 @@ interface Schedule {
   post2Enabled: boolean
   additionalCc: string | null
   additionalCcMode: string
+  skipLineManagerCc: boolean
   sourcedFromHistoricalData: boolean
   trainingMode: string
   location: string | null
@@ -460,6 +461,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       meetingLink: s.meetingLink ?? '',
     })
     setExcludedQuestionIds(s.excludedQuestionIds ?? {})
+    setNewScheduleIncludeLineManagerCc(!s.skipLineManagerCc)
     setEditingScheduleId(s.id)
     setShowAddSchedule(true)
   }
@@ -477,6 +479,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
             isHistorical: undefined, // local UI flag only (hides the Pre-Training checkbox when editing an already-historical schedule) — not a field the API accepts
             hours: newSchedule.hours ? Number(newSchedule.hours) : undefined,
             costPerAttendee: newSchedule.costPerAttendee ? Number(newSchedule.costPerAttendee) : undefined,
+            // Persisted on the schedule itself now, not just used for the immediate creation-time
+            // send below — see skipLineManagerCc on TrainingSchedule for why.
+            skipLineManagerCc: !newScheduleIncludeLineManagerCc,
             excludedQuestionIds,
           }),
         }
@@ -1370,10 +1375,10 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                   checked={newScheduleIncludeLineManagerCc}
                   onChange={(e) => setNewScheduleIncludeLineManagerCc(e.target.checked)}
                 />
-                Cc line managers on the first send
+                Cc line managers on Pre/Post-1 sends
               </label>
               <p className="text-[11px] text-slate-400 mt-1">
-                Untick to leave line managers off the Pre/Post-1 Cc for that first send (Post-2 already goes straight to the manager, so this has no effect there).
+                Untick to leave line managers off the Pre/Post-1 Cc for this schedule — every send, not just the first: the daily automated send, reminders, and a later manual resend all respect this too, not only the immediate send at creation. (Post-2 already goes straight to the manager, so this has no effect there.)
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1460,10 +1465,10 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                         />
                         Include Default Cc on this send
                       </label>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600" title="Untick to leave line managers off the Pre/Post-1 Cc for this send. Post-2 already goes straight to the manager, so this has no effect there.">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600" title="Untick to leave line managers off the Pre/Post-1 Cc for this send. Post-2 already goes straight to the manager, so this has no effect there. Defaults from this schedule's own Cc setting (edit the schedule to change that default) but can be overridden per send.">
                         <input
                           type="checkbox"
-                          checked={includeLineManagerCc[s.id] !== false}
+                          checked={includeLineManagerCc[s.id] ?? !s.skipLineManagerCc}
                           onChange={(e) => setIncludeLineManagerCc({ ...includeLineManagerCc, [s.id]: e.target.checked })}
                         />
                         Cc line managers on this send

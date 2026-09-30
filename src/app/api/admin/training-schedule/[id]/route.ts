@@ -16,11 +16,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, skipLineManagerCc, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
       remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
-      additionalCc?: string; additionalCcMode?: string
+      additionalCc?: string; additionalCcMode?: string; skipLineManagerCc?: boolean
       trainingMode?: string; location?: string; meetingLink?: string; excludedQuestionIds?: ExcludedQuestionIds
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
@@ -45,6 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(post2Enabled !== undefined ? { post2Enabled } : {}),
         ...(additionalCc !== undefined ? { additionalCc: additionalCc.trim() || null } : {}),
         ...(additionalCcMode !== undefined ? { additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all' } : {}),
+        ...(skipLineManagerCc !== undefined ? { skipLineManagerCc } : {}),
         ...(trainingMode !== undefined && ['physical', 'virtual', 'platform', 'hybrid'].includes(trainingMode) ? {
           trainingMode,
           location: trainingMode === 'physical' || trainingMode === 'hybrid' ? (location?.trim() || null) : null,

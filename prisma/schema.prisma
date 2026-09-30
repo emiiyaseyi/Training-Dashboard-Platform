@@ -412,6 +412,13 @@ model TrainingSchedule {
   meetingLink     String? // join link — set when trainingMode is "virtual", "platform", or "hybrid"
   additionalCc     String? // comma/semicolon-separated email addresses Cc'd on top of the default line-manager/employee Cc and the global defaultCc — meaning depends on additionalCcMode
   additionalCcMode String  @default("all") // "all" = additionalCc applies to every attendee's emails; "individual" = each attendee has their own additionalCc (TrainingScheduleAttendee.additionalCc) instead, left blank = just the global defaultCc for that person
+  // When true, Pre/Post-1 emails for THIS schedule never Cc the employee's line manager, on any
+  // send — the immediate send at creation, the daily cron sweep, a later manual "Send to all", or
+  // a reminder. Previously this was only a one-off flag passed to the immediate creation-time
+  // send and never persisted anywhere, so it silently stopped applying the moment a schedule's
+  // actual first send happened later (the normal case — most schedules aren't due yet when
+  // created) via the cron sweep, which had no way to know the admin's choice at all.
+  skipLineManagerCc Boolean @default(false)
   excludedQuestionIds String? // JSON: { pre: string[], post1: string[], post2: string[] } — SurveyQuestion ids to hide from THIS schedule's respondents only (the question bank itself is shared/global across all schedules); blank/missing stage key = show everything, as before this existed
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

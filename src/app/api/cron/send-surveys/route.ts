@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
       if (!hasUnsent) continue
 
       try {
-        const result = await sendSurveyStage(schedule.id, stage, undefined, true)
+        const result = await sendSurveyStage(schedule.id, stage, undefined, true, false, schedule.skipLineManagerCc)
         if (result.sent > 0 || result.skipped.length > 0) {
           results.push({ scheduleId: schedule.id, trainingName: schedule.trainingName, stage, sent: result.sent, skipped: result.skipped.length })
         }

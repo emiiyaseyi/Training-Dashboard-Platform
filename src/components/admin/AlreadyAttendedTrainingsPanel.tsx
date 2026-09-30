@@ -214,6 +214,9 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
           post1Enabled: stageChoice !== 'post2',
           post2Enabled: stageChoice !== 'post1',
           sourcedFromHistoricalData: true,
+          // Persisted on the schedule, not just used for the immediate send below — see
+          // skipLineManagerCc on TrainingSchedule for why that distinction matters.
+          skipLineManagerCc: !includeLineManagerCcOnCreate,
           excludedQuestionIds,
         }),
       })

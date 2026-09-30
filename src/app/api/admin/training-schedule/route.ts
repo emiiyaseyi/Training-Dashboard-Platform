@@ -31,6 +31,7 @@ export async function GET() {
       post2Enabled: s.post2Enabled,
       additionalCc: s.additionalCc,
       additionalCcMode: s.additionalCcMode,
+      skipLineManagerCc: s.skipLineManagerCc,
       sourcedFromHistoricalData: s.sourcedFromHistoricalData,
       trainingMode: s.trainingMode,
       location: s.location,
@@ -68,11 +69,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, sourcedFromHistoricalData, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, skipLineManagerCc, sourcedFromHistoricalData, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
       remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
-      additionalCc?: string; additionalCcMode?: string; sourcedFromHistoricalData?: boolean
+      additionalCc?: string; additionalCcMode?: string; skipLineManagerCc?: boolean; sourcedFromHistoricalData?: boolean
       trainingMode?: string; location?: string; meetingLink?: string; excludedQuestionIds?: ExcludedQuestionIds
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
         post2Enabled: post2Enabled ?? true,
         additionalCc: additionalCc?.trim() || null,
         additionalCcMode: additionalCcMode === 'individual' ? 'individual' : 'all',
+        skipLineManagerCc: skipLineManagerCc ?? false,
         sourcedFromHistoricalData: sourcedFromHistoricalData ?? false,
         trainingMode: ['physical', 'virtual', 'platform', 'hybrid'].includes(trainingMode || '') ? trainingMode! : 'physical',
         location: trainingMode === 'physical' || trainingMode === 'hybrid' ? (location?.trim() || null) : null,

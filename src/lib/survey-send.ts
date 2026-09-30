@@ -308,7 +308,11 @@ export async function sendSurveyReminders(
       const ccAddress = recipientRole === 'manager' ? attendee.email : attendee.lineManagerEmail
       if (!toAddress) return // already reported as skipped by the original send
 
-      const cc = [...(ccAddress ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
+      // Same per-schedule opt-out sendSurveyStage respects on the original send — a reminder is
+      // still Pre/Post-1 going to the employee, and skipping the manager Cc on the first send but
+      // then reinstating it on every daily nudge afterward would defeat the point of opting out.
+      const dropLineManagerCc = schedule.skipLineManagerCc && recipientRole !== 'manager'
+      const cc = [...(ccAddress && !dropLineManagerCc ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
         stage,
         recipientName: recipientName || 'there',

@@ -466,6 +466,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           post2Enabled: newTraining.post2Enabled,
           additionalCc: newTraining.additionalCc || undefined,
           additionalCcMode: newTraining.additionalCcMode,
+          // Persisted on the schedule, not just used for the immediate send below — see
+          // skipLineManagerCc on TrainingSchedule for why that distinction matters.
+          skipLineManagerCc: !newTrainingIncludeLineManagerCc,
           excludedQuestionIds,
         }),
       })
