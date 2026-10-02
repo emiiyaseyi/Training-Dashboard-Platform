@@ -186,8 +186,16 @@ interface PivotConfig {
 // admin can add/update individually or in bulk, per the brief. Bulk posts { items: [...] } to the
 // same endpoint the single form posts a bare object to; the API upserts by its own natural key so
 // re-pasting a correction never duplicates a row.
+interface QuickToggleConfig {
+  key: string // field to flip, e.g. 'status'
+  onValue: string // e.g. 'Exited'
+  offValue: string // e.g. 'Active'
+  onLabel: string // button label shown while the field is at offValue (click turns it on)
+  offLabel: string // button label shown while the field is at onValue (click turns it back off)
+}
+
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot, dedupePath,
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot, dedupePath, quickToggle,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -212,10 +220,15 @@ function RecordSection({
   // One-time cleanup endpoint for a section whose natural key isn't DB-enforced (currently just
   // Strategic Committees) — shows a "Remove duplicates" button when set.
   dedupePath?: string
+  // One-click status flip per row (e.g. Active <-> Exited) without opening the full edit form —
+  // same pattern as the Employees page's Deactivate/Reactivate button. Sends the row's existing
+  // fields back unchanged except the toggled one, via the same PUT the edit form uses.
+  quickToggle?: QuickToggleConfig
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [form, setForm] = useState<Record<string, string>>(() => defaultForm(fields))
   const [bulkText, setBulkText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -358,6 +371,25 @@ function RecordSection({
       load()
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const toggleStatus = async (row: Row) => {
+    if (!quickToggle) return
+    const id = String(row[idKey])
+    setTogglingId(id)
+    try {
+      const current = row[quickToggle.key]
+      const next = current === quickToggle.onValue ? quickToggle.offValue : quickToggle.onValue
+      const body: Record<string, unknown> = { id }
+      for (const f of fields) body[f.key] = f.key === quickToggle.key ? next : row[f.key]
+      const res = await fetch(apiPath, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to update status.') }
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update status.')
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -545,6 +577,14 @@ function RecordSection({
                     {columns.map((c) => <td key={c} className="py-1.5 pr-4 text-slate-700">{fmtCell(r[c])}</td>)}
                     {computedColumns.map((cc) => <td key={cc.key} className="py-1.5 pr-4 text-slate-400">{cc.compute(r)}</td>)}
                     <td className="py-1.5 text-right whitespace-nowrap">
+                      {quickToggle && (
+                        <button
+                          type="button" onClick={() => toggleStatus(r)} disabled={togglingId === String(r[idKey])}
+                          className="mr-2 px-1.5 py-0.5 border border-slate-300 rounded text-[10px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {togglingId === String(r[idKey]) ? '…' : r[quickToggle.key] === quickToggle.onValue ? quickToggle.offLabel : quickToggle.onLabel}
+                        </button>
+                      )}
                       <button type="button" onClick={() => startEdit(r)} className="mr-2" title="Edit">
                         <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 inline" />
                       </button>
@@ -759,6 +799,7 @@ export default function TalentManagementAdminPage() {
         icon={Users2}
         apiPath="/api/hr/talent-management/roster"
         idKey="id"
+        quickToggle={{ key: 'status', onValue: 'Exited', offValue: 'Active', onLabel: 'Exit', offLabel: 'Reactivate' }}
         refreshSignal={refreshSignal}
         buOptions={buOptions}
         fields={[
