@@ -9,7 +9,7 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
 
   try {
-    const entries = await prisma.talentMemberRosterEntry.findMany({ orderBy: { createdAt: 'desc' } })
+    const entries = await prisma.talentMemberInfo.findMany({ orderBy: { createdAt: 'desc' } })
     const directory = await loadRosterDirectory()
     return NextResponse.json(
       entries.map((e) => {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nothing to add.' }, { status: 400 })
     }
 
-    const created = await prisma.$transaction(toCreate.map((data) => prisma.talentMemberRosterEntry.create({ data })))
+    const created = await prisma.$transaction(toCreate.map((data) => prisma.talentMemberInfo.create({ data })))
 
     // Resolve against the staff directory immediately so the stored row (and what gets mirrored
     // to the sheet) carries the full Name/Staff ID/Email, not just whichever one was typed —
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       const { entry: finalEntry } = await backfillRosterEntryFromDirectory(entry)
       const result = await mirrorRosterEntryToSheet(finalEntry)
       if (result.attempted) {
-        await prisma.talentMemberRosterEntry.update({
+        await prisma.talentMemberInfo.update({
           where: { id: entry.id },
           data: { sheetSyncedAt: result.success ? new Date() : null, sheetSyncError: result.success ? null : result.message },
         })
@@ -100,7 +100,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const { id } = await req.json() as { id: string }
     if (!id) return NextResponse.json({ error: 'ID is required.' }, { status: 400 })
-    await prisma.talentMemberRosterEntry.delete({ where: { id } })
+    await prisma.talentMemberInfo.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('[admin/talent-member-roster DELETE]', err)

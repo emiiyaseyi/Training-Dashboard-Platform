@@ -38,7 +38,11 @@ model GoogleSheetsConfig {
   kssSheetName                     String    @default("KSS")
   rosterSheetName                  String? // optional — when set, Sync Now/scheduled sync also imports new-or-changed Staff Roster rows from this tab, same as a manual Upload & Data → Staff Roster upload. Leave blank to keep managing the roster by upload only.
   comprehensiveStaffListSheetName  String? // optional secondary staff source (e.g. "MERISTEM COMPREHENSIVE STAFF LIST") — read-only supplement to the uploaded roster, fills in gaps like missing email/line manager
-  talentMemberSheetName            String? // tab the Talent Member roster (TalentMemberRosterEntry) is mirrored into — admin adds/removes TMs from the Talent Members page, not by editing this sheet directly
+  talentMemberSheetName            String? // tab the Talent Member roster (TalentMemberInfo) is mirrored into — "Talent Members Info" — admin adds/removes/edits TMs from the Talent Members page, not by editing this sheet directly
+  tmInternalMobilitySheetName      String? // "TM Internal Mobility" — mirror target for MobilityRecord
+  tmPromotionSheetName             String? // "TM Promotion" — mirror target for PromotionRecord
+  tmStrategicTeamsSheetName        String? // "TM Strategic Teams" — mirror target for StrategicCommitteeRecord
+  tmPerformanceAppraisalSheetName  String? // "TM Performance Appraisal" — mirror target for PerformanceAppraisalRecord
   autoSyncEnabled                  Boolean   @default(false)
   syncFrequencyMinutes             Int       @default(60)
   lastSyncedAt                     DateTime?
@@ -118,15 +122,91 @@ model DifferentiatingCapability {
   updatedAt DateTime @updatedAt
 }
 
-// The Talent Member (TM) roster itself — admin-entered from the Talent Members page (bulk paste
-// or one at a time, by name/Staff ID/email), NOT derived from a column on the general staff list.
-// Each entry is mirrored (best-effort, auto + manual retry) into the sheet tab configured as
-// GoogleSheetsConfig.talentMemberSheetName, so the admin has an external copy too.
-model TalentMemberRosterEntry {
+// The Talent Member (TM) roster, merged with its enrichment fields (formerly split between
+// TalentMemberRosterEntry and a separately-tracked "TM Info" sheet nobody could edit in-app) —
+// admin-entered/edited from the Talent Members page, bulk or one at a time, NOT derived from a
+// column on the general staff list. Each entry is mirrored (best-effort, auto + manual retry)
+// into the sheet tab configured as GoogleSheetsConfig.talentMemberSheetName ("Talent Members
+// Info"), so the admin still has a human-readable external copy, even though the sheet is no
+// longer what's actually edited.
+model TalentMemberInfo {
   id             String    @id @default(cuid())
   staffId        String?
   name           String?
   email          String?
+  businessUnit   String?
+  dojMeristem    DateTime? // DOJ Meristem — tenure at Meristem is computed live from this, never stored
+  dateJoinedTM   DateTime? // Date of Joining TM — time in the TM pool is computed live from this
+  currentRole    String?
+  currentGrade   String?   // "Current Job Grade" on the sheet
+  currentTier    Int?
+  gender         String?
+  status         String    @default("Active") // "Active" | "Exited"
+  createdAt      DateTime  @default(now())
+  sheetSyncedAt  DateTime?
+  sheetSyncError String?
+
+  @@index([staffId])
+}
+
+// One row per promotion-eligible year for a TM member — replaces the old sheet's wide
+// "2023 Promotion / New Grade, 2024 Promotion / New Grade, ..." column layout, which required
+// editing the sheet's structure every year. Adding next year's data is just a new row here.
+model PromotionRecord {
+  id             String    @id @default(cuid())
+  staffId        String
+  year           Int
+  previousGrade  String?
+  newGrade       String?
+  promoted       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  sheetSyncedAt  DateTime?
+  sheetSyncError String?
+
+  @@index([staffId])
+  @@index([year])
+}
+
+// One row per year a TM member's BU/role was reviewed for a move — replaces the old sheet's wide
+// "2025 New BU / 2025 New Role, 2026 New BU / 2026 New Role" column layout, same reasoning as
+// PromotionRecord above.
+model MobilityRecord {
+  id              String    @id @default(cuid())
+  staffId         String
+  year            Int
+  newBusinessUnit String?
+  newRole         String?
+  changeStatus    String? // e.g. "Changed", "No Change"
+  createdAt       DateTime  @default(now())
+  sheetSyncedAt   DateTime?
+  sheetSyncError  String?
+
+  @@index([staffId])
+  @@index([year])
+}
+
+// One row per appraisal period for a TM member — replaces the old sheet's wide "H1 2025, H2 2025,
+// H1 2026" column layout. Score is stored as the sheet's own 0–1 decimal (e.g. 0.7478); the
+// dashboard converts to a /5 display value, never stored pre-converted.
+model PerformanceAppraisalRecord {
+  id             String    @id @default(cuid())
+  staffId        String
+  period         String // e.g. "H1 2026"
+  score          Float?
+  createdAt      DateTime  @default(now())
+  sheetSyncedAt  DateTime?
+  sheetSyncError String?
+
+  @@index([staffId])
+  @@index([period])
+}
+
+// One row per TM member's strategic committee membership.
+model StrategicCommitteeRecord {
+  id             String    @id @default(cuid())
+  staffId        String?
+  name           String?
+  committee      String
   createdAt      DateTime  @default(now())
   sheetSyncedAt  DateTime?
   sheetSyncError String?

@@ -8,12 +8,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (gate instanceof NextResponse) return gate
 
   const { id } = await params
-  const entry = await prisma.talentMemberRosterEntry.findUnique({ where: { id } })
+  const entry = await prisma.talentMemberInfo.findUnique({ where: { id } })
   if (!entry) return NextResponse.json({ error: 'Roster entry not found.' }, { status: 404 })
 
   const result = await mirrorRosterEntryToSheet(entry)
   if (result.attempted) {
-    await prisma.talentMemberRosterEntry.update({
+    await prisma.talentMemberInfo.update({
       where: { id },
       data: { sheetSyncedAt: result.success ? new Date() : null, sheetSyncError: result.success ? null : result.message },
     })

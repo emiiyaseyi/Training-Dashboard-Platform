@@ -18,7 +18,7 @@ export async function POST() {
 
   try {
     const [entries, directory] = await Promise.all([
-      prisma.talentMemberRosterEntry.findMany(),
+      prisma.talentMemberInfo.findMany(),
       loadRosterDirectory(),
     ])
 
@@ -37,7 +37,7 @@ export async function POST() {
     }
 
     await prisma.$transaction(
-      toUpdate.map((u) => prisma.talentMemberRosterEntry.update({
+      toUpdate.map((u) => prisma.talentMemberInfo.update({
         where: { id: u.id },
         data: { staffId: u.staffId, name: u.name, email: u.email },
       }))

@@ -4,7 +4,7 @@ import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { MONTHS, activeMonthIndices, type PeriodFilter } from '@/lib/filter-types'
 
 // Talent Member (TM) Trainings — a Training Type ("TM") tracked against a real, named roster.
-// The roster itself is admin-entered (TalentMemberRosterEntry, managed from Admin → Talent Member
+// The roster itself is admin-entered (TalentMemberInfo, managed from Admin → Talent Member
 // Roster — bulk or one at a time, by name/Staff ID/email), each entry resolved here against the
 // staff directory for display name/BU/email.
 //
@@ -142,7 +142,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
 
   const [directory, rosterEntries, exemptions, allSchedules, yearTrainingRecords] = await Promise.all([
     loadRosterDirectory(),
-    prisma.talentMemberRosterEntry.findMany(),
+    prisma.talentMemberInfo.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
     prisma.trainingSchedule.findMany({
       include: { attendees: true },
