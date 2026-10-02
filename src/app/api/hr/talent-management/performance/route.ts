@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { mirrorPerformanceToSheet } from '@/lib/tm-records-mirror'
+import type { PerformanceAppraisalRecord } from '@prisma/client'
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
@@ -12,6 +14,15 @@ export async function GET() {
 
 interface PerformanceItemInput {
   staffId: string; name?: string; period: string; score?: number
+}
+
+async function syncToSheet(record: PerformanceAppraisalRecord): Promise<PerformanceAppraisalRecord> {
+  const result = await mirrorPerformanceToSheet(record)
+  if (!result.attempted) return record
+  return prisma.performanceAppraisalRecord.update({
+    where: { id: record.id },
+    data: { sheetSyncedAt: result.success ? new Date() : null, sheetSyncError: result.success ? null : result.message },
+  })
 }
 
 // Upserted by (staffId, period). score is stored exactly as entered — a 0-1 decimal (e.g. 0.75),
@@ -29,13 +40,12 @@ export async function POST(req: NextRequest) {
 
     const saved = []
     for (const item of valid) {
-      saved.push(
-        await prisma.performanceAppraisalRecord.upsert({
-          where: { staffId_period: { staffId: item.staffId.trim(), period: item.period.trim() } },
-          create: { staffId: item.staffId.trim(), name: item.name?.trim() || null, period: item.period.trim(), score: item.score != null ? Number(item.score) : null },
-          update: { name: item.name?.trim() || null, score: item.score != null ? Number(item.score) : null },
-        })
-      )
+      const record = await prisma.performanceAppraisalRecord.upsert({
+        where: { staffId_period: { staffId: item.staffId.trim(), period: item.period.trim() } },
+        create: { staffId: item.staffId.trim(), name: item.name?.trim() || null, period: item.period.trim(), score: item.score != null ? Number(item.score) : null },
+        update: { name: item.name?.trim() || null, score: item.score != null ? Number(item.score) : null },
+      })
+      saved.push(await syncToSheet(record))
     }
     return NextResponse.json(Array.isArray(body.items) ? { saved: saved.length, items: saved } : saved[0])
   } catch (err) {
@@ -59,7 +69,7 @@ export async function PUT(req: NextRequest) {
       where: { id: body.id },
       data: { staffId: body.staffId.trim(), name: body.name?.trim() || null, period: body.period.trim(), score: body.score != null ? Number(body.score) : null },
     })
-    return NextResponse.json(updated)
+    return NextResponse.json(await syncToSheet(updated))
   } catch (err) {
     console.error('[hr/talent-management/performance PUT]', err)
     return NextResponse.json({ error: 'Failed to update appraisal record.' }, { status: 500 })

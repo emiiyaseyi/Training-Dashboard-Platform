@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { mirrorMobilityToSheet } from '@/lib/tm-records-mirror'
+import type { MobilityRecord } from '@prisma/client'
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
@@ -17,6 +19,15 @@ interface MobilityItemInput {
 
 const bu = (v?: string) => (v?.trim() ? normalizeBUName(v.trim()) : null)
 
+async function syncToSheet(record: MobilityRecord): Promise<MobilityRecord> {
+  const result = await mirrorMobilityToSheet(record)
+  if (!result.attempted) return record
+  return prisma.mobilityRecord.update({
+    where: { id: record.id },
+    data: { sheetSyncedAt: result.success ? new Date() : null, sheetSyncError: result.success ? null : result.message },
+  })
+}
+
 // Upserted by (staffId, year) — same reasoning as promotions/route.ts.
 export async function POST(req: NextRequest) {
   const gate = await requirePermission('hr-talent-management', 'admin')
@@ -31,22 +42,21 @@ export async function POST(req: NextRequest) {
     const saved = []
     for (const item of valid) {
       const newBusinessUnit = bu(item.newBusinessUnit)
-      saved.push(
-        await prisma.mobilityRecord.upsert({
-          where: { staffId_year: { staffId: item.staffId.trim(), year: Number(item.year) } },
-          create: {
-            staffId: item.staffId.trim(), name: item.name?.trim() || null, year: Number(item.year),
-            newBusinessUnit, newRole: item.newRole?.trim() || null,
-            changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
-            employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
-          },
-          update: {
-            name: item.name?.trim() || null, newBusinessUnit, newRole: item.newRole?.trim() || null,
-            changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
-            employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
-          },
-        })
-      )
+      const record = await prisma.mobilityRecord.upsert({
+        where: { staffId_year: { staffId: item.staffId.trim(), year: Number(item.year) } },
+        create: {
+          staffId: item.staffId.trim(), name: item.name?.trim() || null, year: Number(item.year),
+          newBusinessUnit, newRole: item.newRole?.trim() || null,
+          changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
+          employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
+        },
+        update: {
+          name: item.name?.trim() || null, newBusinessUnit, newRole: item.newRole?.trim() || null,
+          changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
+          employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
+        },
+      })
+      saved.push(await syncToSheet(record))
     }
     return NextResponse.json(Array.isArray(body.items) ? { saved: saved.length, items: saved } : saved[0])
   } catch (err) {
@@ -76,7 +86,7 @@ export async function PUT(req: NextRequest) {
         employmentStatus: body.employmentStatus === 'Exited' ? 'Exited' : 'Active',
       },
     })
-    return NextResponse.json(updated)
+    return NextResponse.json(await syncToSheet(updated))
   } catch (err) {
     console.error('[hr/talent-management/mobility PUT]', err)
     return NextResponse.json({ error: 'Failed to update mobility record.' }, { status: 500 })

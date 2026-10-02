@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { mirrorCommitteeToSheet } from '@/lib/tm-records-mirror'
+import type { StrategicCommitteeRecord } from '@prisma/client'
+
+async function syncToSheet(record: StrategicCommitteeRecord): Promise<StrategicCommitteeRecord> {
+  const result = await mirrorCommitteeToSheet(record)
+  if (!result.attempted) return record
+  return prisma.strategicCommitteeRecord.update({
+    where: { id: record.id },
+    data: { sheetSyncedAt: result.success ? new Date() : null, sheetSyncError: result.success ? null : result.message },
+  })
+}
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
@@ -33,11 +44,10 @@ export async function POST(req: NextRequest) {
       const existing = staffId
         ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee: item.committee.trim() } })
         : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name: item.name.trim(), committee: item.committee.trim() } })
-      if (existing) {
-        saved.push(await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: item.name.trim() } }))
-      } else {
-        saved.push(await prisma.strategicCommitteeRecord.create({ data: { staffId, name: item.name.trim(), committee: item.committee.trim() } }))
-      }
+      const record = existing
+        ? await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: item.name.trim() } })
+        : await prisma.strategicCommitteeRecord.create({ data: { staffId, name: item.name.trim(), committee: item.committee.trim() } })
+      saved.push(await syncToSheet(record))
     }
     return NextResponse.json(Array.isArray(body.items) ? { saved: saved.length, items: saved } : saved[0])
   } catch (err) {
@@ -62,7 +72,7 @@ export async function PUT(req: NextRequest) {
       where: { id: body.id },
       data: { staffId: body.staffId?.trim() || null, name: body.name.trim(), committee: body.committee.trim() },
     })
-    return NextResponse.json(updated)
+    return NextResponse.json(await syncToSheet(updated))
   } catch (err) {
     console.error('[hr/talent-management/committees PUT]', err)
     return NextResponse.json({ error: 'Failed to update committee record.' }, { status: 500 })
