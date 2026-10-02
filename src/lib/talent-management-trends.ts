@@ -1,8 +1,18 @@
 import { prisma } from '@/lib/prisma'
+import type { PeriodFilter } from '@/lib/filter-types'
 
 // Supporting lib for the TM sub-nav's detail tabs (Mobility Trends / Promotion Trends /
 // Committees & Performance) — same "active pool only" scoping as talent-management-dashboard.ts's
 // Executive Summary numbers, so a person who's exited never counts toward any of these either.
+
+// TM records are tracked at year (Promotion/Mobility) or half-year (Performance) granularity, not
+// by month — so 'year', 'ytd', and 'range' all scope to filter.year (or the current year if
+// unset); only 'all' shows every tracked year/period. Same simplification as
+// talent-management-dashboard.ts's effectiveYear().
+function effectiveYear(filter: PeriodFilter): number | null {
+  if (filter.mode === 'all') return null
+  return filter.year ?? new Date().getFullYear()
+}
 
 async function loadActiveRoster() {
   const members = await prisma.talentMemberInfo.findMany()
@@ -20,16 +30,18 @@ export interface TMMobilityTrends {
   records: { staffId: string; name: string; year: number; fromBU: string | null; toBU: string | null; fromRole: string | null; toRole: string | null }[]
 }
 
-export async function computeTMMobilityTrends(): Promise<TMMobilityTrends> {
+export async function computeTMMobilityTrends(filter: PeriodFilter): Promise<TMMobilityTrends> {
+  const filteredYear = effectiveYear(filter)
+  const years = filteredYear ? [filteredYear] : [2025, 2026]
   const { active, byStaffId } = await loadActiveRoster()
   const totalTMPool = active.length
   const mobility = await prisma.mobilityRecord.findMany({
-    where: { employmentStatus: { not: 'Exited' }, changeStatus: 'Changed' },
+    where: { employmentStatus: { not: 'Exited' }, changeStatus: 'Changed', year: { in: years } },
     orderBy: [{ year: 'asc' }, { staffId: 'asc' }],
   })
   const activeMobility = mobility.filter((m) => byStaffId.has(m.staffId))
 
-  const byYear = [2025, 2026].map((year) => {
+  const byYear = years.map((year) => {
     const movedCount = new Set(activeMobility.filter((m) => m.year === year).map((m) => m.staffId)).size
     return { year, movedCount, ratePct: totalTMPool > 0 ? (movedCount / totalTMPool) * 100 : 0 }
   })
@@ -73,16 +85,18 @@ export interface TMPromotionTrends {
   records: { staffId: string; name: string; year: number; previousGrade: string | null; newGrade: string | null }[]
 }
 
-export async function computeTMPromotionTrends(): Promise<TMPromotionTrends> {
+export async function computeTMPromotionTrends(filter: PeriodFilter): Promise<TMPromotionTrends> {
+  const filteredYear = effectiveYear(filter)
+  const years = filteredYear ? [filteredYear] : [2025, 2026]
   const { active, byStaffId } = await loadActiveRoster()
   const totalTMPool = active.length
   const promotions = await prisma.promotionRecord.findMany({
-    where: { year: { in: [2025, 2026] }, promoted: true },
+    where: { year: { in: years }, promoted: true },
     orderBy: [{ year: 'asc' }, { staffId: 'asc' }],
   })
   const activePromotions = promotions.filter((p) => byStaffId.has(p.staffId))
 
-  const byYear = [2025, 2026].map((year) => {
+  const byYear = years.map((year) => {
     const promotedCount = new Set(activePromotions.filter((p) => p.year === year).map((p) => p.staffId)).size
     return { year, promotedCount, ratePct: totalTMPool > 0 ? (promotedCount / totalTMPool) * 100 : 0 }
   })
@@ -121,13 +135,16 @@ export interface TMCommitteesPerformance {
   records: { staffId: string; name: string; score: number }[]
 }
 
-export async function computeTMCommitteesPerformance(): Promise<TMCommitteesPerformance> {
+export async function computeTMCommitteesPerformance(filter: PeriodFilter): Promise<TMCommitteesPerformance> {
+  const filteredYear = effectiveYear(filter)
   const { byStaffId } = await loadActiveRoster()
   const [committees, performance] = await Promise.all([
     prisma.strategicCommitteeRecord.findMany(),
     prisma.performanceAppraisalRecord.findMany(),
   ])
 
+  // Committee membership has no year/period on it at all, so it isn't scoped by the filter — a
+  // person is or isn't on a committee, there's no "which year" dimension to narrow it by.
   const committeeCounts = new Map<string, number>()
   for (const c of committees) {
     if (!c.staffId || !byStaffId.has(c.staffId)) continue
@@ -135,9 +152,14 @@ export async function computeTMCommitteesPerformance(): Promise<TMCommitteesPerf
   }
   const committeeBreakdown = [...committeeCounts.entries()].map(([committee, count]) => ({ committee, count })).sort((a, b) => b.count - a.count)
 
-  // Most recent tracked period, by the same H1/H2-year ordering used everywhere else here.
-  const periodOrder = ['H1 2025', 'H2 2025', 'H1 2026']
-  const latestPeriod = periodOrder[periodOrder.length - 1]
+  // Most recent tracked period — within the filtered year if one's selected (H2 if it has data,
+  // else H1), otherwise the latest tracked period overall. H2 2026 is excluded everywhere here
+  // because it hasn't happened yet, not because it's bad data.
+  const allTrackedPeriods = ['H1 2025', 'H2 2025', 'H1 2026']
+  const periodOrder = filteredYear
+    ? allTrackedPeriods.filter((p) => p.endsWith(String(filteredYear)))
+    : allTrackedPeriods
+  const latestPeriod = periodOrder.length > 0 ? periodOrder[periodOrder.length - 1] : allTrackedPeriods[allTrackedPeriods.length - 1]
   const latestScores = performance.filter((p) => p.period === latestPeriod && p.staffId && byStaffId.has(p.staffId) && p.score != null)
 
   const buScores = new Map<string, number[]>()

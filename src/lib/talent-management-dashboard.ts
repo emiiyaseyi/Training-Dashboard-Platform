@@ -6,9 +6,19 @@ import type { PeriodFilter } from '@/lib/filter-types'
 // — this is what makes Promotion Rate and Internal Mobility Rate finally share one consistent
 // denominator instead of the 41-vs-43 mismatch the source workbook had.
 
+// TM records are tracked at year (Promotion/Mobility) or half-year (Performance) granularity,
+// never by month — so a PeriodFilter's fromMonth/toMonth (YTD/range) can't be honored any more
+// precisely than "the selected year": 'year', 'ytd', and 'range' all scope to filter.year (or the
+// current year if unset); only 'all' shows every tracked year/period, as before.
+function effectiveYear(filter: PeriodFilter): number | null {
+  if (filter.mode === 'all') return null
+  return filter.year ?? new Date().getFullYear()
+}
+
 export interface TMDashboardData {
   totalTMPool: number
   memberNames: { staffId: string; name: string }[]
+  filteredYear: number | null // null = all tracked years
 
   promotedCount: number
   promotionRatePct: number
@@ -45,14 +55,17 @@ function tenureBucket(years: number): '0–2 yrs' | '3–5 yrs' | '6–10 yrs' |
 }
 
 export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashboardData> {
+  const filteredYear = effectiveYear(filter)
+  const promotionYears = filteredYear ? [filteredYear] : [2025, 2026]
+
   const allMembers = await prisma.talentMemberInfo.findMany()
   const activeMembers = allMembers.filter((m) => m.status !== 'Exited' && m.staffId)
   const activeStaffIds = new Set(activeMembers.map((m) => m.staffId as string))
   const totalTMPool = activeMembers.length
 
   const [promotions, mobility, performance, committees, trainingReport] = await Promise.all([
-    prisma.promotionRecord.findMany({ where: { year: { in: [2025, 2026] } } }),
-    prisma.mobilityRecord.findMany({ where: { employmentStatus: { not: 'Exited' } } }),
+    prisma.promotionRecord.findMany({ where: { year: { in: promotionYears } } }),
+    prisma.mobilityRecord.findMany({ where: { employmentStatus: { not: 'Exited' }, ...(filteredYear ? { year: filteredYear } : {}) } }),
     prisma.performanceAppraisalRecord.findMany(),
     prisma.strategicCommitteeRecord.findMany(),
     computeTalentMemberReport(filter),
@@ -94,7 +107,9 @@ export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashbo
   }
 
   // --- Performance (stored 0–100; displayed as % bold + /5 small) ---
-  const periods = ['H1 2025', 'H2 2025', 'H1 2026']
+  // H2 2026 isn't excluded because it's bad data — it just hasn't happened yet (the sheet only
+  // ever tracked up to H1 2026) — filtered out rather than shown as an always-empty bar.
+  const periods = (filteredYear ? [`H1 ${filteredYear}`, `H2 ${filteredYear}`] : ['H1 2025', 'H2 2025', 'H1 2026']).filter((p) => p !== 'H2 2026')
   const performanceByPeriod = periods.map((period) => {
     const scores = performance.filter((p) => p.period === period && activeStaffIds.has(p.staffId) && p.score != null).map((p) => p.score as number)
     const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
@@ -131,6 +146,7 @@ export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashbo
   return {
     totalTMPool,
     memberNames: activeMembers.map((m) => ({ staffId: m.staffId as string, name: m.name || m.staffId as string })).sort((a, b) => a.name.localeCompare(b.name)),
+    filteredYear,
     promotedCount,
     promotionRatePct,
     mobilityCount,

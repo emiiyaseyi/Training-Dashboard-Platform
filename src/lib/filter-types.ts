@@ -54,6 +54,23 @@ export function filterToQuery(f: PeriodFilter): string {
   return qs ? `?${qs}` : ''
 }
 
+// Shared parsing for any API route that accepts the same filterMode/year/fromMonth/toMonth query
+// params the FilterBar sends — avoids re-writing this exact block in every route.
+export function parsePeriodFilterFromParams(sp: URLSearchParams): PeriodFilter {
+  const mode = (sp.get('filterMode') ?? 'all') as PeriodFilter['mode']
+  const validModes: PeriodFilter['mode'][] = ['all', 'year', 'ytd', 'range']
+  const year = sp.get('year') ? parseInt(sp.get('year')!) : undefined
+  const fromMonth = (sp.get('fromMonth') as PeriodFilter['fromMonth']) ?? undefined
+  const toMonth = (sp.get('toMonth') as PeriodFilter['toMonth']) ?? undefined
+
+  return {
+    mode: validModes.includes(mode) ? mode : 'all',
+    year,
+    fromMonth: fromMonth && MONTHS.includes(fromMonth as Month) ? fromMonth : undefined,
+    toMonth: toMonth && MONTHS.includes(toMonth as Month) ? toMonth : undefined,
+  }
+}
+
 export function activeMonthIndices(f: PeriodFilter): number[] | null {
   if (f.mode === 'all' || f.mode === 'year') return null
   const now = new Date()

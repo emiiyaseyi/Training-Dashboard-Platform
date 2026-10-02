@@ -15,6 +15,7 @@ import type { PeriodFilter } from '@/lib/filter-types'
 interface TMDashboardData {
   totalTMPool: number
   memberNames: { staffId: string; name: string }[]
+  filteredYear: number | null
   promotedCount: number
   promotionRatePct: number
   mobilityCount: number
@@ -108,7 +109,7 @@ export default function TalentManagementPage() {
               <TrendingUp className="w-4.5 h-4.5 text-meristem-700" />
             </div>
             <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.promotionRatePct) : '—'}</p>
-            <p className="text-xs font-medium text-slate-600 mt-1">Promoted (2025–2026)</p>
+            <p className="text-xs font-medium text-slate-600 mt-1">Promoted {data ? `(${data.filteredYear ?? '2025–2026'})` : ''}</p>
             <p className="text-[11px] text-slate-400 mt-0.5">{data ? `${data.promotedCount} of ${data.totalTMPool}` : 'loading…'}</p>
           </div>
 
@@ -117,7 +118,7 @@ export default function TalentManagementPage() {
               <Repeat className="w-4.5 h-4.5 text-meristem-700" />
             </div>
             <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.mobilityRatePct) : '—'}</p>
-            <p className="text-xs font-medium text-slate-600 mt-1">Internal Mobility (2025–2026)</p>
+            <p className="text-xs font-medium text-slate-600 mt-1">Internal Mobility {data ? `(${data.filteredYear ?? '2025–2026'})` : ''}</p>
             <p className="text-[11px] text-slate-400 mt-0.5">{data ? `${data.mobilityCount} of ${data.totalTMPool} changed BU/role` : 'loading…'}</p>
           </div>
 

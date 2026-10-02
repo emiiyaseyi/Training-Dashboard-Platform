@@ -5,7 +5,9 @@ import { Repeat, ArrowRight } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TmSubNav } from '@/components/hr/tm/TmSubNav'
 import { BarChart } from '@/components/charts/BarChart'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { abbreviateBUName } from '@/lib/bu-normalizer'
+import { filterToQuery, type PeriodFilter } from '@/lib/filter-types'
 
 interface MobilityTrends {
   byYear: { year: number; movedCount: number; ratePct: number }[]
@@ -20,19 +22,25 @@ function pct(n: number): string {
 
 export default function MobilityTrendsPage() {
   const [data, setData] = useState<MobilityTrends | null>(null)
+  const [period, setPeriod] = useState<PeriodFilter>({ mode: 'all' })
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/hr/talent-management/mobility-trends')
+    fetch(`/api/hr/talent-management/mobility-trends${filterToQuery(period)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => { if (!cancelled && d) setData(d) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [period])
 
   return (
     <div>
-      <UnitPageHeader title="Talent Management" description="TM pool, promotion, mobility & performance" icon={<Repeat className="w-5 h-5 text-meristem-700" />} />
+      <UnitPageHeader
+        title="Talent Management"
+        description="TM pool, promotion, mobility & performance"
+        icon={<Repeat className="w-5 h-5 text-meristem-700" />}
+        actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
+      />
       <TmSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
