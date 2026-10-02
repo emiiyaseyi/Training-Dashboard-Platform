@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLooseAny } from '@/lib/staff-directory'
 import { mirrorRosterEntryToSheet, backfillRosterEntryFromDirectory } from '@/lib/talent-member-roster-mirror'
 
 export async function GET() {
@@ -13,7 +13,7 @@ export async function GET() {
     const directory = await loadRosterDirectory()
     return NextResponse.json(
       entries.map((e) => {
-        const match = e.staffId || e.name || e.email ? resolveStaffLoose(e.staffId || e.name || e.email || '', directory) : null
+        const match = resolveStaffLooseAny(e, directory)
         return {
           id: e.id,
           staffId: e.staffId,

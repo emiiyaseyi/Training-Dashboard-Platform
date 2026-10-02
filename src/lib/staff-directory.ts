@@ -227,6 +227,31 @@ export function resolveStaffLoose(identifier: string, directory: Map<string, Res
   return null
 }
 
+// Tries Staff ID, Name, and Email as INDEPENDENT attempts (not "pick whichever one is set and
+// hope it works") — a roster entry that has a Staff ID recorded doesn't necessarily mean that ID
+// is still correct (stale, typo'd, or just formatted differently from the Staff Roster upload);
+// `e.staffId || e.name || e.email` silently gives up the moment a present-but-wrong Staff ID
+// fails to match, never falling back to the Name that would have resolved fine. This is what TM
+// roster entries (and TM exemptions) should always use instead of that short-circuit chain.
+export function resolveStaffLooseAny(
+  e: { staffId?: string | null; name?: string | null; email?: string | null },
+  directory: Map<string, ResolvedStaff>
+): ResolvedStaff | null {
+  if (e.staffId) {
+    const match = resolveStaffLoose(e.staffId, directory)
+    if (match) return match
+  }
+  if (e.name) {
+    const match = resolveStaffLoose(e.name, directory)
+    if (match) return match
+  }
+  if (e.email) {
+    const match = resolveStaffLoose(e.email, directory)
+    if (match) return match
+  }
+  return null
+}
+
 export function resolveLineManager(staff: ResolvedStaff, directory: Map<string, ResolvedStaff>): ResolvedStaff | null {
   if (!staff.lineManagerStaffId) return null
   return directory.get(normalizeStaffIdKey(staff.lineManagerStaffId)) || null

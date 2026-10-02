@@ -1,6 +1,6 @@
 import { connectToSpreadsheet, appendMirrorRow, updateRowByKey, type MirrorField } from '@/lib/google-sheets'
 import { prisma } from '@/lib/prisma'
-import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLooseAny } from '@/lib/staff-directory'
 import type { TalentMemberInfo } from '@prisma/client'
 
 export interface TalentMemberRosterMirrorResult {
@@ -97,11 +97,10 @@ export async function mirrorRosterEntryToSheet(entry: TalentMemberInfo): Promise
 export async function backfillRosterEntryFromDirectory(
   entry: TalentMemberInfo
 ): Promise<{ updated: boolean; entry: TalentMemberInfo }> {
-  const identifier = entry.staffId || entry.name || entry.email
-  if (!identifier) return { updated: false, entry }
+  if (!entry.staffId && !entry.name && !entry.email) return { updated: false, entry }
 
   const directory = await loadRosterDirectory()
-  const match = resolveStaffLoose(identifier, directory)
+  const match = resolveStaffLooseAny(entry, directory)
   if (!match) return { updated: false, entry }
 
   const needsUpdate = entry.staffId !== match.staffId || entry.name !== match.name || entry.email !== (match.email || null)

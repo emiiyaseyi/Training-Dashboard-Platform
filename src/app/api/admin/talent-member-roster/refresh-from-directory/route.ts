@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLooseAny } from '@/lib/staff-directory'
 import { connectToSpreadsheet, batchUpdateRowsByKey } from '@/lib/google-sheets'
 
 const NAME_CANDIDATES = ['name', 'fullname', 'staffname', 'employeename']
@@ -24,8 +24,7 @@ export async function POST() {
 
     const toUpdate: { id: string; staffId: string; name: string; email: string | null; wasSynced: boolean }[] = []
     for (const entry of entries) {
-      const identifier = entry.staffId || entry.name || entry.email
-      const match = identifier ? resolveStaffLoose(identifier, directory) : null
+      const match = resolveStaffLooseAny(entry, directory)
       if (!match) continue
       const changed = entry.staffId !== match.staffId || entry.name !== match.name || entry.email !== (match.email || null)
       if (!changed) continue

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLooseAny, type ResolvedStaff } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { MONTHS, activeMonthIndices, type PeriodFilter } from '@/lib/filter-types'
 
@@ -181,9 +181,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   const activeStatusByKey = new Map<string, boolean>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
   for (const e of allRosterEntries) {
-    const match = e.staffId || e.name || e.email
-      ? resolveStaffLoose(e.staffId || e.name || e.email || '', directory)
-      : null
+    const match = resolveStaffLooseAny(e, directory)
     if (match) {
       const key = normalizeStaffIdKey(match.staffId)
       rosterMap.set(key, match)

@@ -102,9 +102,12 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
 
   let imported = 0
   let skipped = 0
-  for (const row of body) {
+  // Each row's find-then-create/update is independent of every other row, so they run
+  // concurrently instead of one sequential round-trip at a time — with ~40+ rows at roughly 2 DB
+  // calls each, sequential execution was most of what pushed this past Vercel's 60s limit.
+  await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
-    if (!staffId) { skipped++; continue }
+    if (!staffId) { skipped++; return }
     const data = {
       staffId,
       name: iName != null ? s(row[iName]) || null : null,
@@ -130,7 +133,7 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
       await prisma.talentMemberInfo.create({ data })
     }
     imported++
-  }
+  }))
   return { sheet: 'Talent Members Info', tabName: sheetName, imported, skipped, unresolved: [], error: null }
 }
 
@@ -153,9 +156,9 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
 
   let imported = 0
   let skipped = 0
-  for (const row of body) {
+  await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
-    if (!staffId) { skipped++; continue }
+    if (!staffId) { skipped++; return }
     const name = iName != null ? s(row[iName]) || null : null
     const employmentStatus = iEmpStatus != null && s(row[iEmpStatus]).toLowerCase() === 'exited' ? 'Exited' : 'Active'
 
@@ -163,8 +166,8 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
       { year: 2025, bu: i2025BU != null ? s(row[i2025BU]) : '', role: i2025Role != null ? s(row[i2025Role]) : '' },
       { year: 2026, bu: i2026BU != null ? s(row[i2026BU]) : '', role: i2026Role != null ? s(row[i2026Role]) : '' },
     ]
-    for (const y of years) {
-      if (!y.bu && !y.role) continue // nothing recorded for this person this year — don't create an empty row
+    await Promise.all(years.map(async (y) => {
+      if (!y.bu && !y.role) return // nothing recorded for this person this year — don't create an empty row
       const newBusinessUnit = y.bu ? normalizeBUName(y.bu) : null
       await prisma.mobilityRecord.upsert({
         where: { staffId_year: { staffId, year: y.year } },
@@ -181,8 +184,8 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
         },
       })
       imported++
-    }
-  }
+    }))
+  }))
   return { sheet: 'TM Internal Mobility', tabName: sheetName, imported, skipped, unresolved: [], error: null }
 }
 
@@ -211,38 +214,42 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
 
   let imported = 0
   let skipped = 0
-  for (const row of body) {
+  await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
-    if (!staffId) { skipped++; continue }
+    if (!staffId) { skipped++; return }
     const name = iName != null ? s(row[iName]) || null : null
 
+    const writes: Promise<unknown>[] = []
     if (i2025Promo != null) {
       const promoted2025 = s(row[i2025Promo]).toLowerCase() === 'yes'
-      await prisma.promotionRecord.upsert({
-        where: { staffId_year: { staffId, year: 2025 } },
-        create: {
-          staffId, name, year: 2025, promoted: promoted2025,
-          previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
-          newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
-        },
-        update: {
-          name, promoted: promoted2025,
-          previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
-          newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
-        },
-      })
-      imported++
+      writes.push(
+        prisma.promotionRecord.upsert({
+          where: { staffId_year: { staffId, year: 2025 } },
+          create: {
+            staffId, name, year: 2025, promoted: promoted2025,
+            previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
+            newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
+          },
+          update: {
+            name, promoted: promoted2025,
+            previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
+            newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
+          },
+        }).then(() => { imported++ })
+      )
     }
     if (i2026Promo != null) {
       const promoted2026 = s(row[i2026Promo]).toLowerCase() === 'yes'
-      await prisma.promotionRecord.upsert({
-        where: { staffId_year: { staffId, year: 2026 } },
-        create: { staffId, name, year: 2026, promoted: promoted2026, previousGrade: null, newGrade: null },
-        update: { name, promoted: promoted2026 },
-      })
-      imported++
+      writes.push(
+        prisma.promotionRecord.upsert({
+          where: { staffId_year: { staffId, year: 2026 } },
+          create: { staffId, name, year: 2026, promoted: promoted2026, previousGrade: null, newGrade: null },
+          update: { name, promoted: promoted2026 },
+        }).then(() => { imported++ })
+      )
     }
-  }
+    await Promise.all(writes)
+  }))
   return { sheet: 'TM Promotion', tabName: sheetName, imported, skipped, unresolved: [], error: null }
 }
 
@@ -260,10 +267,10 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
   let imported = 0
   let skipped = 0
   const unresolved: string[] = []
-  for (const row of body) {
+  await Promise.all(body.map(async (row) => {
     const name = iName != null ? s(row[iName]) : ''
     const committee = iCommittee != null ? s(row[iCommittee]) : ''
-    if (!name || !committee) { skipped++; continue }
+    if (!name || !committee) { skipped++; return }
     const match = resolveStaffLoose(name, directory)
     if (!match) unresolved.push(name)
     const staffId = match?.staffId ?? null
@@ -277,7 +284,7 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
       await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee, sheetSyncedAt: new Date(), sheetSyncError: null } })
     }
     imported++
-  }
+  }))
   return { sheet: 'TM Strategic Teams', tabName: sheetName, imported, skipped, unresolved, error: null }
 }
 
@@ -299,22 +306,22 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
 
   let imported = 0
   let skipped = 0
-  for (const row of body) {
+  await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
-    if (!staffId) { skipped++; continue }
+    if (!staffId) { skipped++; return }
     const name = iName != null ? s(row[iName]) || null : null
-    for (const p of periodCols) {
-      if (p.idx == null) continue
+    await Promise.all(periodCols.map(async (p) => {
+      if (p.idx == null) return
       const score = parseScore(row[p.idx])
-      if (score == null) continue
+      if (score == null) return
       await prisma.performanceAppraisalRecord.upsert({
         where: { staffId_period: { staffId, period: p.period } },
         create: { staffId, name, period: p.period, score, sheetSyncedAt: new Date(), sheetSyncError: null },
         update: { name, score, sheetSyncedAt: new Date(), sheetSyncError: null },
       })
       imported++
-    }
-  }
+    }))
+  }))
   return { sheet: 'TM Performance Appraisal', tabName: sheetName, imported, skipped, unresolved: [], error: null }
 }
 
