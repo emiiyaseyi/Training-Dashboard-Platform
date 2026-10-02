@@ -10,7 +10,7 @@
 // same key. Run it again deliberately (not on a schedule) when the sheet changes.
 import { prisma } from '@/lib/prisma'
 import { connectToSpreadsheet } from '@/lib/google-sheets'
-import { loadRosterDirectory, resolveStaffLooseFuzzy } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaff, resolveStaffLooseFuzzy, type ResolvedStaff } from '@/lib/staff-directory'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 
 async function fetchRangeUnformatted(spreadsheetId: string, sheetName: string, accessToken: string): Promise<unknown[][]> {
@@ -67,6 +67,14 @@ function headerIndex(headerRow: unknown[]): Map<string, number> {
   return map
 }
 
+// Staff ID is the reliable anchor on every sheet that has one — the Name column next to it is
+// whatever the TM/L&D team happened to type (a nickname, an old surname, a different word order),
+// which is exactly what was failing to resolve elsewhere. Prefer the Staff Roster's own canonical
+// name for that ID; only fall back to the sheet's own text if the ID itself doesn't resolve.
+function canonicalNameFor(staffId: string, sheetName: string | null, directory: Map<string, ResolvedStaff>): string | null {
+  return resolveStaff(staffId, directory)?.name || sheetName
+}
+
 export interface TMImportSheetResult {
   sheet: string
   tabName: string | null
@@ -83,7 +91,7 @@ export interface TMImportResult {
 // Talent Members Info -> TalentMemberInfo. Upserted by Staff ID (created if new). A row with no
 // Emp. ID at all is skipped — this table is the roster itself, so an unidentifiable row can't be
 // usefully stored.
-async function importTalentMembersInfo(spreadsheetId: string, sheetName: string, accessToken: string): Promise<TMImportSheetResult> {
+async function importTalentMembersInfo(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'Talent Members Info', tabName: sheetName, imported: 0, skipped: 0, unresolved: [], error: null }
   const [header, ...body] = rows
@@ -108,9 +116,10 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
   await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; return }
+    const sheetName_ = iName != null ? s(row[iName]) || null : null
     const data = {
       staffId,
-      name: iName != null ? s(row[iName]) || null : null,
+      name: canonicalNameFor(staffId, sheetName_, directory),
       businessUnit: iBU != null && s(row[iBU]) ? normalizeBUName(s(row[iBU])) : null,
       dojMeristem: iDojMeristem != null ? parseDateCell(row[iDojMeristem]) : null,
       dateJoinedTM: iDateJoinedTM != null ? parseDateCell(row[iDateJoinedTM]) : null,
@@ -141,7 +150,7 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
 // created if that year's New BU/New Role cell has something in it. changeStatus is derived per
 // year from whether those cells are filled, not parsed from the sheet's own combined
 // "Changed 2025 Only"/"Changed Both Years" text, which describes both years at once.
-async function importMobility(spreadsheetId: string, sheetName: string, accessToken: string): Promise<TMImportSheetResult> {
+async function importMobility(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Internal Mobility', tabName: sheetName, imported: 0, skipped: 0, unresolved: [], error: null }
   const [header, ...body] = rows
@@ -159,7 +168,7 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
   await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; return }
-    const name = iName != null ? s(row[iName]) || null : null
+    const name = canonicalNameFor(staffId, iName != null ? s(row[iName]) || null : null, directory)
     const employmentStatus = iEmpStatus != null && s(row[iEmpStatus]).toLowerCase() === 'exited' ? 'Exited' : 'Active'
 
     const years: { year: number; bu: string; role: string }[] = [
@@ -208,7 +217,7 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
 // "Promoted at least once (2025-2026)"), so guessing at 2023/2024 isn't worth the risk of storing
 // wrong data. "Ever Promoted (2025-2026)" is the authoritative promoted flag for both years
 // combined; 2025/2026 are also split out individually since the sheet has the detail.
-async function importPromotions(spreadsheetId: string, sheetName: string, accessToken: string): Promise<TMImportSheetResult> {
+async function importPromotions(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Promotion', tabName: sheetName, imported: 0, skipped: 0, unresolved: [], error: null }
   const [header, ...body] = rows
@@ -230,7 +239,7 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
   await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; return }
-    const name = iName != null ? s(row[iName]) || null : null
+    const name = canonicalNameFor(staffId, iName != null ? s(row[iName]) || null : null, directory)
 
     const writes: Promise<unknown>[] = []
     if (i2025Promo != null) {
@@ -268,7 +277,7 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
 
 // TM Strategic Teams -> StrategicCommitteeRecord. No Emp. ID on this sheet — resolved against the
 // staff directory by Name; unresolved names are reported back rather than silently dropped.
-async function importStrategicTeams(spreadsheetId: string, sheetName: string, accessToken: string): Promise<TMImportSheetResult> {
+async function importStrategicTeams(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Strategic Teams', tabName: sheetName, imported: 0, skipped: 0, unresolved: [], error: null }
   const [header, ...body] = rows
@@ -276,7 +285,6 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
   const iName = idx.get('name')
   const iCommittee = idx.get('strategic committee')
 
-  const directory = await loadRosterDirectory()
   let imported = 0
   let skipped = 0
   const unresolved: string[] = []
@@ -284,6 +292,9 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
     const name = iName != null ? s(row[iName]) : ''
     const committee = iCommittee != null ? s(row[iCommittee]) : ''
     if (!name || !committee) { skipped++; return }
+    // Resolved name is already canonical (comes straight from the matched directory record) —
+    // this sheet has no Staff ID of its own to borrow from, so name-matching (with the comma-
+    // reversal/middle-name fallbacks in resolveStaffLooseFuzzy) is still how this one resolves.
     const match = resolveStaffLooseFuzzy(name, directory)
     if (!match) unresolved.push(name)
     const staffId = match?.staffId ?? null
@@ -304,7 +315,7 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
 // TM Performance Appraisal -> PerformanceAppraisalRecord. One row in -> up to 3 rows out (H1 2025,
 // H2 2025, H1 2026), one per non-blank score cell. Scores are stored exactly as the sheet has them
 // (a 0-1 decimal) — the /5 conversion happens only at display time.
-async function importPerformanceAppraisal(spreadsheetId: string, sheetName: string, accessToken: string): Promise<TMImportSheetResult> {
+async function importPerformanceAppraisal(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Performance Appraisal', tabName: sheetName, imported: 0, skipped: 0, unresolved: [], error: null }
   const [header, ...body] = rows
@@ -322,7 +333,7 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
   await Promise.all(body.map(async (row) => {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; return }
-    const name = iName != null ? s(row[iName]) || null : null
+    const name = canonicalNameFor(staffId, iName != null ? s(row[iName]) || null : null, directory)
     await Promise.all(periodCols.map(async (p) => {
       if (p.idx == null) return
       const rawScore = parseScore(row[p.idx])
@@ -348,8 +359,12 @@ export async function importTMDataFromSheets(): Promise<TMImportResult> {
     throw new Error('No spreadsheet configured under Admin -> Live Data Source.')
   }
   const connection = await connectToSpreadsheet(config.spreadsheetUrl)
+  // Loaded once and passed to every importer — each one resolves its sheet's Staff ID against
+  // this to pull the canonical name from the Staff Roster, instead of trusting whatever got typed
+  // into the TM sheet's own Name column (a nickname, a different word order, an old surname).
+  const directory = await loadRosterDirectory()
 
-  const sheets: { label: string; tabName: string | null; run: (spreadsheetId: string, tabName: string, accessToken: string) => Promise<TMImportSheetResult> }[] = [
+  const sheets: { label: string; tabName: string | null; run: (spreadsheetId: string, tabName: string, accessToken: string, directory: Map<string, ResolvedStaff>) => Promise<TMImportSheetResult> }[] = [
     { label: 'Talent Members Info', tabName: config.talentMemberSheetName, run: importTalentMembersInfo },
     { label: 'TM Internal Mobility', tabName: config.tmInternalMobilitySheetName, run: importMobility },
     { label: 'TM Promotion', tabName: config.tmPromotionSheetName, run: importPromotions },
@@ -364,7 +379,7 @@ export async function importTMDataFromSheets(): Promise<TMImportResult> {
       continue
     }
     try {
-      results.push(await sheet.run(connection.spreadsheetId, sheet.tabName, connection.accessToken))
+      results.push(await sheet.run(connection.spreadsheetId, sheet.tabName, connection.accessToken, directory))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error.'
       results.push({ sheet: sheet.label, tabName: sheet.tabName, imported: 0, skipped: 0, unresolved: [], error: message })
