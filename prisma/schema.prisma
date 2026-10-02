@@ -155,6 +155,7 @@ model TalentMemberInfo {
 model PromotionRecord {
   id             String    @id @default(cuid())
   staffId        String
+  name           String? // denormalized for display in the admin table, same as StrategicCommitteeRecord
   year           Int
   previousGrade  String?
   newGrade       String?
@@ -176,6 +177,7 @@ model PromotionRecord {
 model MobilityRecord {
   id               String    @id @default(cuid())
   staffId          String
+  name             String? // denormalized for display in the admin table
   year             Int
   newBusinessUnit  String?
   newRole          String?
@@ -196,6 +198,7 @@ model MobilityRecord {
 model PerformanceAppraisalRecord {
   id             String    @id @default(cuid())
   staffId        String
+  name           String? // denormalized for display in the admin table
   period         String // e.g. "H1 2026"
   score          Float?
   createdAt      DateTime  @default(now())

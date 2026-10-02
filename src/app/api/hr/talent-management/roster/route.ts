@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { mirrorRosterEntryToSheet } from '@/lib/talent-member-roster-mirror'
+import { normalizeBUName } from '@/lib/bu-normalizer'
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
@@ -23,7 +24,7 @@ async function createOne(item: RosterItemInput) {
       staffId: item.staffId?.trim() || null,
       name: item.name?.trim() || null,
       email: item.email?.trim().toLowerCase() || null,
-      businessUnit: item.businessUnit?.trim() || null,
+      businessUnit: item.businessUnit?.trim() ? normalizeBUName(item.businessUnit.trim()) : null,
       dojMeristem: item.dojMeristem ? new Date(item.dojMeristem) : null,
       dateJoinedTM: item.dateJoinedTM ? new Date(item.dateJoinedTM) : null,
       currentRole: item.currentRole?.trim() || null,
@@ -86,7 +87,7 @@ export async function PUT(req: NextRequest) {
         staffId: staffId?.trim() || null,
         name: name?.trim() || null,
         email: email?.trim().toLowerCase() || null,
-        businessUnit: businessUnit?.trim() || null,
+        businessUnit: businessUnit?.trim() ? normalizeBUName(businessUnit.trim()) : null,
         dojMeristem: dojMeristem ? new Date(dojMeristem) : null,
         dateJoinedTM: dateJoinedTM ? new Date(dateJoinedTM) : null,
         currentRole: currentRole?.trim() || null,

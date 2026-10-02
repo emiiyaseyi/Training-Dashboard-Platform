@@ -11,7 +11,7 @@ export async function GET() {
 }
 
 interface PromotionItemInput {
-  staffId: string; year: number; previousGrade?: string; newGrade?: string; promoted?: boolean
+  staffId: string; name?: string; year: number; previousGrade?: string; newGrade?: string; promoted?: boolean
 }
 
 // Upserted by (staffId, year) — a bulk paste that includes an existing person+year just corrects
@@ -32,11 +32,12 @@ export async function POST(req: NextRequest) {
         await prisma.promotionRecord.upsert({
           where: { staffId_year: { staffId: item.staffId.trim(), year: Number(item.year) } },
           create: {
-            staffId: item.staffId.trim(), year: Number(item.year),
+            staffId: item.staffId.trim(), name: item.name?.trim() || null, year: Number(item.year),
             previousGrade: item.previousGrade?.trim() || null, newGrade: item.newGrade?.trim() || null,
             promoted: !!item.promoted,
           },
           update: {
+            name: item.name?.trim() || null,
             previousGrade: item.previousGrade?.trim() || null, newGrade: item.newGrade?.trim() || null,
             promoted: !!item.promoted,
           },
@@ -65,7 +66,7 @@ export async function PUT(req: NextRequest) {
     const updated = await prisma.promotionRecord.update({
       where: { id: body.id },
       data: {
-        staffId: body.staffId.trim(), year: Number(body.year),
+        staffId: body.staffId.trim(), name: body.name?.trim() || null, year: Number(body.year),
         previousGrade: body.previousGrade?.trim() || null, newGrade: body.newGrade?.trim() || null,
         promoted: !!body.promoted,
       },

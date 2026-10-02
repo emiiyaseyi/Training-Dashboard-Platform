@@ -11,11 +11,31 @@ import { usePagePermission } from '@/lib/use-page-permission'
 interface FieldConfig {
   key: string
   label: string
-  type: 'text' | 'number' | 'date' | 'checkbox'
+  type: 'text' | 'number' | 'date' | 'checkbox' | 'select'
   placeholder?: string
+  options?: string[] // for type: 'select' — a static list, or left empty to use `dynamicOptions` (BU list)
+  dynamicOptions?: 'businessUnit' // fetched once and shared across all sections that need it
 }
 
 type Row = Record<string, unknown>
+
+interface ComputedColumn {
+  key: string
+  label: string
+  compute: (row: Row) => string
+}
+
+function yearsBetweenToday(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return (Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+}
+
+function fmtYears(years: number | null): string {
+  if (years == null) return '—'
+  return `${Math.round(years * 10) / 10} yrs`
+}
 
 function fmtCell(value: unknown): string {
   if (value == null) return ''
@@ -30,7 +50,7 @@ function fmtCell(value: unknown): string {
 // same endpoint the single form posts a bare object to; the API upserts by its own natural key so
 // re-pasting a correction never duplicates a row.
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], refreshSignal = 0,
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -38,6 +58,13 @@ function RecordSection({
   fields: FieldConfig[]
   idKey?: string
   extraColumns?: string[]
+  // Read-only, derived-at-render columns appended after the editable ones (e.g. tenure computed
+  // from a date field) — never sent back to the API, just shown for reference.
+  computedColumns?: ComputedColumn[]
+  // Canonical Business Unit names (e.g. "Meristem Securities Limited", not "MSL") for any field
+  // with dynamicOptions: 'businessUnit' — fetched once at the page level and passed down so every
+  // section's BU dropdown stays in sync with the same list used across the rest of the app.
+  buOptions?: string[]
   // Bumped by the parent after a successful "Import from Sheets" run — this section mounted (and
   // fetched) once, before that import happened, so without this it would keep showing stale
   // (often empty) data until the admin manually reloads the whole page.
@@ -196,6 +223,17 @@ function RecordSection({
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.checked ? 'on' : '' })}
                   className="w-4 h-4 mt-1.5"
                 />
+              ) : f.type === 'select' ? (
+                <select
+                  value={form[f.key] || ''}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs w-44 bg-white"
+                >
+                  <option value="">—</option>
+                  {(f.dynamicOptions === 'businessUnit' ? buOptions : f.options || []).map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
               ) : (
                 <input
                   type={f.type}
@@ -265,10 +303,13 @@ function RecordSection({
                   {columns.map((c) => (
                     <th key={c} className="py-1.5 pr-4 font-medium">
                       <button type="button" onClick={() => toggleSort(c)} className="flex items-center gap-1 hover:text-slate-600">
-                        {c}
+                        {fields.find((f) => f.key === c)?.label || c}
                         {sortCol === c ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
                       </button>
                     </th>
+                  ))}
+                  {computedColumns.map((cc) => (
+                    <th key={cc.key} className="py-1.5 pr-4 font-medium text-slate-300" title="Computed, not stored">{cc.label}</th>
                   ))}
                   <th />
                 </tr>
@@ -277,6 +318,7 @@ function RecordSection({
                 {displayRows.map((r) => (
                   <tr key={String(r[idKey])} className="border-b border-slate-50">
                     {columns.map((c) => <td key={c} className="py-1.5 pr-4 text-slate-700">{fmtCell(r[c])}</td>)}
+                    {computedColumns.map((cc) => <td key={cc.key} className="py-1.5 pr-4 text-slate-400">{cc.compute(r)}</td>)}
                     <td className="py-1.5 text-right whitespace-nowrap">
                       <button type="button" onClick={() => startEdit(r)} className="mr-2" title="Edit">
                         <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 inline" />
@@ -303,6 +345,16 @@ export default function TalentManagementAdminPage() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
   const [refreshSignal, setRefreshSignal] = useState(0)
+  const [buOptions, setBuOptions] = useState<string[]>([])
+
+  // Canonical BU names (e.g. "Meristem Securities Limited", not "MSL") — the same list used
+  // across the rest of the app, so Current BU / New BU dropdowns here can't drift from it.
+  useEffect(() => {
+    fetch('/api/business-units')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { name: string }[]) => setBuOptions(Array.isArray(data) ? data.map((u) => u.name).sort() : []))
+      .catch(() => {})
+  }, [])
 
   const runImport = async () => {
     setImporting(true)
@@ -364,17 +416,23 @@ export default function TalentManagementAdminPage() {
         apiPath="/api/hr/talent-management/roster"
         idKey="id"
         refreshSignal={refreshSignal}
+        buOptions={buOptions}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text', placeholder: 'MRL-0001' },
           { key: 'name', label: 'Name', type: 'text' },
-          { key: 'businessUnit', label: 'Current BU', type: 'text' },
+          { key: 'email', label: 'Email', type: 'text' },
+          { key: 'businessUnit', label: 'Current BU', type: 'select', dynamicOptions: 'businessUnit' },
           { key: 'currentRole', label: 'Current Role', type: 'text' },
           { key: 'currentGrade', label: 'Current Job Grade', type: 'text' },
-          { key: 'currentTier', label: 'Current Tier', type: 'number' },
-          { key: 'gender', label: 'Gender', type: 'text' },
+          { key: 'currentTier', label: 'Current Tier', type: 'select', options: ['1', '2', '3'] },
+          { key: 'gender', label: 'Gender', type: 'select', options: ['Male', 'Female'] },
           { key: 'dojMeristem', label: 'DOJ Meristem', type: 'date' },
           { key: 'dateJoinedTM', label: 'Date Joined TM', type: 'date' },
-          { key: 'status', label: 'Status (Active/Exited)', type: 'text', placeholder: 'Active' },
+          { key: 'status', label: 'Status', type: 'select', options: ['Active', 'Exited'] },
+        ]}
+        computedColumns={[
+          { key: 'lengthOfService', label: 'Length of Service (live)', compute: (r) => fmtYears(yearsBetweenToday(r.dojMeristem as string)) },
+          { key: 'lengthInTM', label: 'Length in TM (live)', compute: (r) => fmtYears(yearsBetweenToday(r.dateJoinedTM as string)) },
         ]}
       />
 
@@ -385,6 +443,7 @@ export default function TalentManagementAdminPage() {
         refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'name', label: 'Name', type: 'text' },
           { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
           { key: 'previousGrade', label: 'Previous Grade', type: 'text' },
           { key: 'newGrade', label: 'New Grade', type: 'text' },
@@ -397,12 +456,14 @@ export default function TalentManagementAdminPage() {
         icon={Repeat}
         apiPath="/api/hr/talent-management/mobility"
         refreshSignal={refreshSignal}
+        buOptions={buOptions}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'name', label: 'Name', type: 'text' },
           { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
-          { key: 'newBusinessUnit', label: 'New BU', type: 'text' },
+          { key: 'newBusinessUnit', label: 'New BU', type: 'select', dynamicOptions: 'businessUnit' },
           { key: 'newRole', label: 'New Role', type: 'text' },
-          { key: 'employmentStatus', label: 'Employment Status', type: 'text', placeholder: 'Active' },
+          { key: 'employmentStatus', label: 'Employment Status', type: 'select', options: ['Active', 'Exited'] },
         ]}
       />
 
@@ -422,8 +483,10 @@ export default function TalentManagementAdminPage() {
         title="Performance Appraisal"
         icon={Star}
         apiPath="/api/hr/talent-management/performance"
+        refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'name', label: 'Name', type: 'text' },
           { key: 'period', label: 'Period', type: 'text', placeholder: 'H1 2026' },
           { key: 'score', label: 'Score (0–1)', type: 'number', placeholder: '0.78' },
         ]}

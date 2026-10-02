@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma'
 import { connectToSpreadsheet } from '@/lib/google-sheets'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { normalizeBUName } from '@/lib/bu-normalizer'
 
 async function fetchRangeUnformatted(spreadsheetId: string, sheetName: string, accessToken: string): Promise<unknown[][]> {
   const res = await fetch(
@@ -107,7 +108,7 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
     const data = {
       staffId,
       name: iName != null ? s(row[iName]) || null : null,
-      businessUnit: iBU != null ? s(row[iBU]) || null : null,
+      businessUnit: iBU != null && s(row[iBU]) ? normalizeBUName(s(row[iBU])) : null,
       dojMeristem: iDojMeristem != null ? parseDateCell(row[iDojMeristem]) : null,
       dateJoinedTM: iDateJoinedTM != null ? parseDateCell(row[iDateJoinedTM]) : null,
       currentRole: iRole != null ? s(row[iRole]) || null : null,
@@ -137,6 +138,7 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
   const [header, ...body] = rows
   const idx = headerIndex(header)
   const iEmpId = idx.get('emp. id') ?? idx.get('emp id')
+  const iName = idx.get('name')
   const i2025BU = idx.get('2025 new bu')
   const i2025Role = idx.get('2025 new role')
   const i2026BU = idx.get('2026 new bu')
@@ -148,6 +150,7 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
   for (const row of body) {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; continue }
+    const name = iName != null ? s(row[iName]) || null : null
     const employmentStatus = iEmpStatus != null && s(row[iEmpStatus]).toLowerCase() === 'exited' ? 'Exited' : 'Active'
 
     const years: { year: number; bu: string; role: string }[] = [
@@ -156,15 +159,16 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
     ]
     for (const y of years) {
       if (!y.bu && !y.role) continue // nothing recorded for this person this year — don't create an empty row
+      const newBusinessUnit = y.bu ? normalizeBUName(y.bu) : null
       await prisma.mobilityRecord.upsert({
         where: { staffId_year: { staffId, year: y.year } },
         create: {
-          staffId, year: y.year,
-          newBusinessUnit: y.bu || null, newRole: y.role || null,
+          staffId, name, year: y.year,
+          newBusinessUnit, newRole: y.role || null,
           changeStatus: 'Changed', employmentStatus,
         },
         update: {
-          newBusinessUnit: y.bu || null, newRole: y.role || null,
+          name, newBusinessUnit, newRole: y.role || null,
           changeStatus: 'Changed', employmentStatus,
         },
       })
@@ -186,6 +190,7 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
   const [header, ...body] = rows
   const idx = headerIndex(header)
   const iEmpId = idx.get('emp. id') ?? idx.get('emp id')
+  const iName = idx.get('name')
   const i2025Promo = idx.get('2025 promotion')
   const i2026Promo = idx.get('2026 promotion')
   // "Grade Before Promotion" sits immediately before the "2025 Promotion" column on the sheet —
@@ -201,18 +206,19 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
   for (const row of body) {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; continue }
+    const name = iName != null ? s(row[iName]) || null : null
 
     if (i2025Promo != null) {
       const promoted2025 = s(row[i2025Promo]).toLowerCase() === 'yes'
       await prisma.promotionRecord.upsert({
         where: { staffId_year: { staffId, year: 2025 } },
         create: {
-          staffId, year: 2025, promoted: promoted2025,
+          staffId, name, year: 2025, promoted: promoted2025,
           previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
           newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
         },
         update: {
-          promoted: promoted2025,
+          name, promoted: promoted2025,
           previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
           newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
         },
@@ -223,8 +229,8 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
       const promoted2026 = s(row[i2026Promo]).toLowerCase() === 'yes'
       await prisma.promotionRecord.upsert({
         where: { staffId_year: { staffId, year: 2026 } },
-        create: { staffId, year: 2026, promoted: promoted2026, previousGrade: null, newGrade: null },
-        update: { promoted: promoted2026 },
+        create: { staffId, name, year: 2026, promoted: promoted2026, previousGrade: null, newGrade: null },
+        update: { name, promoted: promoted2026 },
       })
       imported++
     }
@@ -276,6 +282,7 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
   const [header, ...body] = rows
   const idx = headerIndex(header)
   const iEmpId = idx.get('emp. id') ?? idx.get('emp id')
+  const iName = idx.get('name')
   const periodCols: { period: string; idx: number | undefined }[] = [
     { period: 'H1 2025', idx: idx.get('h1 2025') },
     { period: 'H2 2025', idx: idx.get('h2 2025') },
@@ -287,14 +294,15 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
   for (const row of body) {
     const staffId = iEmpId != null ? s(row[iEmpId]) : ''
     if (!staffId) { skipped++; continue }
+    const name = iName != null ? s(row[iName]) || null : null
     for (const p of periodCols) {
       if (p.idx == null) continue
       const score = parseScore(row[p.idx])
       if (score == null) continue
       await prisma.performanceAppraisalRecord.upsert({
         where: { staffId_period: { staffId, period: p.period } },
-        create: { staffId, period: p.period, score },
-        update: { score },
+        create: { staffId, name, period: p.period, score },
+        update: { name, score },
       })
       imported++
     }

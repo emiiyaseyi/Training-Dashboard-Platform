@@ -11,7 +11,7 @@ export async function GET() {
 }
 
 interface PerformanceItemInput {
-  staffId: string; period: string; score?: number
+  staffId: string; name?: string; period: string; score?: number
 }
 
 // Upserted by (staffId, period). score is stored exactly as entered — a 0-1 decimal (e.g. 0.75),
@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
       saved.push(
         await prisma.performanceAppraisalRecord.upsert({
           where: { staffId_period: { staffId: item.staffId.trim(), period: item.period.trim() } },
-          create: { staffId: item.staffId.trim(), period: item.period.trim(), score: item.score != null ? Number(item.score) : null },
-          update: { score: item.score != null ? Number(item.score) : null },
+          create: { staffId: item.staffId.trim(), name: item.name?.trim() || null, period: item.period.trim(), score: item.score != null ? Number(item.score) : null },
+          update: { name: item.name?.trim() || null, score: item.score != null ? Number(item.score) : null },
         })
       )
     }
@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest) {
     }
     const updated = await prisma.performanceAppraisalRecord.update({
       where: { id: body.id },
-      data: { staffId: body.staffId.trim(), period: body.period.trim(), score: body.score != null ? Number(body.score) : null },
+      data: { staffId: body.staffId.trim(), name: body.name?.trim() || null, period: body.period.trim(), score: body.score != null ? Number(body.score) : null },
     })
     return NextResponse.json(updated)
   } catch (err) {

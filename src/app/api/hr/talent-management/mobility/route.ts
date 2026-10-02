@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { normalizeBUName } from '@/lib/bu-normalizer'
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
@@ -11,8 +12,10 @@ export async function GET() {
 }
 
 interface MobilityItemInput {
-  staffId: string; year: number; newBusinessUnit?: string; newRole?: string; employmentStatus?: string
+  staffId: string; name?: string; year: number; newBusinessUnit?: string; newRole?: string; employmentStatus?: string
 }
+
+const bu = (v?: string) => (v?.trim() ? normalizeBUName(v.trim()) : null)
 
 // Upserted by (staffId, year) — same reasoning as promotions/route.ts.
 export async function POST(req: NextRequest) {
@@ -27,18 +30,19 @@ export async function POST(req: NextRequest) {
 
     const saved = []
     for (const item of valid) {
+      const newBusinessUnit = bu(item.newBusinessUnit)
       saved.push(
         await prisma.mobilityRecord.upsert({
           where: { staffId_year: { staffId: item.staffId.trim(), year: Number(item.year) } },
           create: {
-            staffId: item.staffId.trim(), year: Number(item.year),
-            newBusinessUnit: item.newBusinessUnit?.trim() || null, newRole: item.newRole?.trim() || null,
-            changeStatus: (item.newBusinessUnit?.trim() || item.newRole?.trim()) ? 'Changed' : 'No Change',
+            staffId: item.staffId.trim(), name: item.name?.trim() || null, year: Number(item.year),
+            newBusinessUnit, newRole: item.newRole?.trim() || null,
+            changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
             employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
           },
           update: {
-            newBusinessUnit: item.newBusinessUnit?.trim() || null, newRole: item.newRole?.trim() || null,
-            changeStatus: (item.newBusinessUnit?.trim() || item.newRole?.trim()) ? 'Changed' : 'No Change',
+            name: item.name?.trim() || null, newBusinessUnit, newRole: item.newRole?.trim() || null,
+            changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
             employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
           },
         })
@@ -62,12 +66,13 @@ export async function PUT(req: NextRequest) {
     if (!body.id || !body.staffId?.trim() || !body.year) {
       return NextResponse.json({ error: 'Staff ID and Year are required.' }, { status: 400 })
     }
+    const newBusinessUnit = bu(body.newBusinessUnit)
     const updated = await prisma.mobilityRecord.update({
       where: { id: body.id },
       data: {
-        staffId: body.staffId.trim(), year: Number(body.year),
-        newBusinessUnit: body.newBusinessUnit?.trim() || null, newRole: body.newRole?.trim() || null,
-        changeStatus: (body.newBusinessUnit?.trim() || body.newRole?.trim()) ? 'Changed' : 'No Change',
+        staffId: body.staffId.trim(), name: body.name?.trim() || null, year: Number(body.year),
+        newBusinessUnit, newRole: body.newRole?.trim() || null,
+        changeStatus: (newBusinessUnit || body.newRole?.trim()) ? 'Changed' : 'No Change',
         employmentStatus: body.employmentStatus === 'Exited' ? 'Exited' : 'Active',
       },
     })
