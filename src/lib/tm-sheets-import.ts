@@ -288,10 +288,17 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
   let imported = 0
   let skipped = 0
   const unresolved: string[] = []
-  await Promise.all(body.map(async (row) => {
+  // Sequential, not Promise.all like the other importers — this one has no DB-level unique
+  // constraint to upsert against (StrategicCommitteeRecord allows more than one committee per
+  // person, so staffId+committee isn't declared unique), so "does this row already exist" is a
+  // manual findFirst-then-create, not an atomic upsert. Running that concurrently is a real race:
+  // two rows resolving to the same person+committee could both pass the findFirst check before
+  // either one's create() lands, producing an exact duplicate — which is what had this table at
+  // 65 rows for 41-ish people.
+  for (const row of body) {
     const name = iName != null ? s(row[iName]) : ''
     const committee = iCommittee != null ? s(row[iCommittee]) : ''
-    if (!name || !committee) { skipped++; return }
+    if (!name || !committee) { skipped++; continue }
     // Resolved name is already canonical (comes straight from the matched directory record) —
     // this sheet has no Staff ID of its own to borrow from, so name-matching (with the comma-
     // reversal/middle-name fallbacks in resolveStaffLooseFuzzy) is still how this one resolves.
@@ -303,12 +310,12 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
       ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee } })
       : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name, committee } })
     if (existing) {
-      await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: match?.name || name, sheetSyncedAt: new Date(), sheetSyncError: null } })
+      await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: match?.name || name, sheetSyncedAt: new Date(), sheetSyncError: null } })
     } else {
       await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee, sheetSyncedAt: new Date(), sheetSyncError: null } })
     }
     imported++
-  }))
+  }
   return { sheet: 'TM Strategic Teams', tabName: sheetName, imported, skipped, unresolved, error: null }
 }
 

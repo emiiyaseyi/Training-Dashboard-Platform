@@ -187,7 +187,7 @@ interface PivotConfig {
 // same endpoint the single form posts a bare object to; the API upserts by its own natural key so
 // re-pasting a correction never duplicates a row.
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot,
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot, dedupePath,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -209,6 +209,9 @@ function RecordSection({
   // When set, the table renders one row per person (grouped by staffId) instead of one row per
   // underlying record — see PivotConfig above.
   pivot?: PivotConfig
+  // One-time cleanup endpoint for a section whose natural key isn't DB-enforced (currently just
+  // Strategic Committees) — shows a "Remove duplicates" button when set.
+  dedupePath?: string
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
@@ -221,6 +224,8 @@ function RecordSection({
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deduping, setDeduping] = useState(false)
+  const [dedupeResult, setDedupeResult] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -356,8 +361,33 @@ function RecordSection({
     }
   }
 
+  const dedupe = async () => {
+    if (!dedupePath) return
+    setDeduping(true)
+    setDedupeResult(null)
+    try {
+      const res = await fetch(dedupePath, { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Failed to deduplicate.')
+      setDedupeResult(`Removed ${d.deleted} duplicate${d.deleted === 1 ? '' : 's'}, ${d.remaining} remaining.`)
+      load()
+    } catch (err) {
+      setDedupeResult(err instanceof Error ? err.message : 'Failed to deduplicate.')
+    } finally {
+      setDeduping(false)
+    }
+  }
+
   return (
-    <SectionCard icon={Icon} title={title} description={`${rows.length} record${rows.length === 1 ? '' : 's'}`}>
+    <SectionCard
+      icon={Icon}
+      title={title}
+      description={
+        pivot
+          ? `${rows.length} record${rows.length === 1 ? '' : 's'} across ${displayPersons.length} ${displayPersons.length === 1 ? 'person' : 'people'} — one row per year/period, pivoted below`
+          : `${rows.length} record${rows.length === 1 ? '' : 's'}`
+      }
+    >
       <div className="p-5 pt-0 space-y-4">
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 
@@ -430,16 +460,29 @@ function RecordSection({
         </div>
 
         {/* Search */}
-        {rows.length > 0 && (
-          <div className="relative max-w-xs">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="w-full pl-8 pr-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
-            />
+        {(rows.length > 0 || dedupePath) && (
+          <div className="flex items-center gap-2">
+            {rows.length > 0 && (
+              <div className="relative max-w-xs flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full pl-8 pr-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+            )}
+            {dedupePath && (
+              <button
+                type="button" onClick={dedupe} disabled={deduping}
+                className="px-2.5 py-1.5 border border-slate-300 text-slate-600 text-[11px] font-medium rounded-lg whitespace-nowrap disabled:opacity-50"
+              >
+                {deduping ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Remove duplicates'}
+              </button>
+            )}
           </div>
         )}
+        {dedupeResult && <p className="text-[11px] text-slate-500">{dedupeResult}</p>}
 
         {/* Table */}
         {loading ? (
@@ -668,6 +711,7 @@ export default function TalentManagementAdminPage() {
         icon={Award}
         apiPath="/api/hr/talent-management/committees"
         refreshSignal={refreshSignal}
+        dedupePath="/api/hr/talent-management/committees/deduplicate"
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },

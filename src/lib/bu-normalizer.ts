@@ -51,6 +51,24 @@ const CANONICAL_NAMES: Record<string, string> = {
   'MERISTEM FAMILY OFFICE':       'Meristem Family Office',
 }
 
+// Reverse of CANONICAL_NAMES — the canonical full name back to its short code, for display
+// contexts (chart legends, compact labels) where "Meristem Wealth Management Limited" is too
+// long to read next to five siblings of similar length.
+const CANONICAL_TO_ABBREVIATION: Record<string, string> = {
+  'Meristem Securities Limited': 'MSL',
+  'Meristem Stockbrokers Limited': 'MSBL',
+  'Meristem Wealth Management Limited': 'MWML',
+  'Meristem Registrars and Probate Services Limited': 'MRPSL',
+  'Meristem Capital Limited': 'MCL',
+  'Meristem Finance Limited': 'MFL',
+  'Meristem Trustees Limited': 'MTL',
+  'Meristem Family Office': 'MFO',
+}
+
+export function abbreviateBUName(fullName: string): string {
+  return CANONICAL_TO_ABBREVIATION[fullName] || fullName
+}
+
 export function normalizeBUName(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return trimmed

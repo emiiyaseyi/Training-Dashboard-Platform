@@ -8,6 +8,7 @@ import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { usePagePermission } from '@/lib/use-page-permission'
+import { abbreviateBUName } from '@/lib/bu-normalizer'
 import type { PeriodFilter } from '@/lib/filter-types'
 
 interface TMDashboardData {
@@ -174,7 +175,7 @@ export default function TalentManagementPage() {
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <p className="text-sm font-bold text-slate-800 mb-3">TM BU Composition</p>
             {data && data.buComposition.length > 0 && (
-              <PieChart labels={data.buComposition.map((b) => b.bu)} values={data.buComposition.map((b) => b.count)} height={220} />
+              <PieChart labels={data.buComposition.map((b) => abbreviateBUName(b.bu))} values={data.buComposition.map((b) => b.count)} height={220} />
             )}
           </div>
 
