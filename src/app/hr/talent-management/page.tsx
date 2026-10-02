@@ -1,127 +1,206 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users2, TrendingUp, Repeat, Award, GraduationCap, Clock } from 'lucide-react'
+import Link from 'next/link'
+import { Users2, TrendingUp, Repeat, Award, GraduationCap, Settings } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
-import { MetricListCard } from '@/components/hr/MetricListCard'
 import { BarChart } from '@/components/charts/BarChart'
+import { PieChart } from '@/components/charts/PieChart'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { usePagePermission } from '@/lib/use-page-permission'
 import type { PeriodFilter } from '@/lib/filter-types'
 
-// Sourced directly from the live formulas in "HR Dashboard/PM & TM_Data_for_Dashboard_CLEAN.xlsx"
-// ("TM Dashboard Metrics — Live Summary" sheet, cells B4/B7-B8/B11-B12/B15-B19/B27-B28) — these
-// are real figures from the spreadsheet the business maintains, just not yet wired to a live
-// database the way the two cards below are. All three below are all-time / cumulative figures
-// (the sheet's own labels: "% of TM pool promoted in any tracked year", "% of TM pool with a
-// recorded BU or role change"), not a quarterly rate — shown that way to avoid implying a rate
-// that isn't what the source actually measures.
-const EXCEL_KPIS = [
-  { label: 'Promoted (all-time)', value: '83%', sub: '34 of 41 TM staff, any tracked year', icon: TrendingUp },
-  { label: 'Internal Mobility (all-time)', value: '65%', sub: '28 of 43 with a recorded BU/role change', icon: Repeat },
-  { label: 'Committee Involvement', value: '90%', sub: '37 of 41 on a Strategic Committee', icon: Award },
-]
+interface TMDashboardData {
+  totalTMPool: number
+  memberNames: { staffId: string; name: string }[]
+  promotedCount: number
+  promotionRatePct: number
+  mobilityCount: number
+  mobilityRatePct: number
+  averageTenureYears: number
+  tenureBuckets: { labels: string[]; values: number[] }
+  performanceByPeriod: { period: string; avgScorePct: number; avgScoreOutOf5: number }[]
+  committeeInvolvedCount: number
+  committeeInvolvementRatePct: number
+  committeeBreakdown: { committee: string; count: number }[]
+  tierComposition: { tier: string; count: number }[]
+  buComposition: { bu: string; count: number }[]
+  genderComposition: { gender: string; count: number }[]
+  trainingCoveragePct: number
+  staffTrained: number
+}
 
-const TENURE_BUCKETS = { labels: ['0–2 yrs', '3–5 yrs', '6–10 yrs', '10+ yrs'], values: [0, 12, 13, 16] }
-const AVG_TM_TENURE = 10.0
-
-// Average Score — H1 2025 / H2 2025 / H1 2026, from 'Performance Appraisal' sheet averages
-// (columns E/F/G respectively) — a declining trend, not the improving one a rough estimate
-// might assume, which is exactly why this needed pulling from the source file directly.
-const RATING_TREND = { labels: ['H1 2025', 'H2 2025', 'H1 2026'], values: [3.9, 3.9, 3.8] }
-
-// None of these have a source anywhere in this app (no succession-planning, 9-box, career-plan
-// or attrition-risk tracking exists yet) — every value is an honest "—", not a guess.
-const TALENT_POOL_METRICS = ['High Performers', 'High Potentials', 'Critical Talent', 'Emerging Leaders', 'Leadership Talent', 'Key Specialists', 'Talent Pool by Department']
-const SUCCESSION_METRICS = ['Critical Positions', 'Positions With a Successor', 'Ready‑Now Successors', 'Ready in 1–2 Years', 'Ready in 3–5 Years']
-const NINE_BOX_METRICS = ['High Performance / High Potential', 'High Performance / Medium Potential', 'Medium Performance / High Potential', 'High Potential %', 'High Performer %', 'Ready‑Now Talent', 'Future Talent']
-const TALENT_RISK_METRICS = ['Critical Talent at Risk', 'High Performer Attrition Risk', 'Retirement Risk', 'Single‑Point‑of‑Failure Roles', 'Critical Skills at Risk']
-const CAREER_DEV_METRICS = ['Employees With a Career Plan', 'Development Plan Completion', 'Career Conversations Completed', 'Employees Ready for Promotion']
-const RETENTION_METRICS = ['Critical Talent Retention', 'High Performer Retention', 'HiPo Retention', 'Regrettable Attrition (Critical Roles)']
-const PIPELINE_METRICS = ['Leadership Pipeline', 'Successor Pipeline', 'Graduate/Entry‑Level Pipeline', 'Future Capability Gaps']
-
-interface LiveTm { totalTalentMembers: number; coveragePct: number; staffTrained: number }
+function pct(n: number): string {
+  return `${Math.round(n * 10) / 10}%`
+}
 
 export default function TalentManagementPage() {
-  const [live, setLive] = useState<LiveTm | null>(null)
+  const [data, setData] = useState<TMDashboardData | null>(null)
   const [period, setPeriod] = useState<PeriodFilter>({ mode: 'all' })
+  const [showRoster, setShowRoster] = useState(false)
+  const { canAdmin } = usePagePermission()
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/talent-members')
+    const sp = new URLSearchParams({ filterMode: period.mode })
+    if (period.year) sp.set('year', String(period.year))
+    if (period.fromMonth) sp.set('fromMonth', period.fromMonth)
+    if (period.toMonth) sp.set('toMonth', period.toMonth)
+    fetch(`/api/hr/talent-management?${sp.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (!cancelled && data) setLive(data) })
+      .then((d) => { if (!cancelled && d) setData(d) })
       .catch(() => { /* keep placeholder state on failure */ })
     return () => { cancelled = true }
-  }, [])
+  }, [period])
 
   return (
     <div>
       <UnitPageHeader
         title="Talent Management"
-        description="TM pool, promotion, mobility & succession"
+        description="TM pool, promotion, mobility & performance"
         icon={<Users2 className="w-5 h-5 text-meristem-700" />}
-        actions={<FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <FilterBar availableYears={[2026, 2025]} value={period} onChange={setPeriod} />
+            {canAdmin && (
+              <Link
+                href="/hr/talent-management/admin"
+                className="flex items-center gap-1.5 text-xs font-medium text-meristem-700 bg-meristem-50 hover:bg-meristem-100 rounded-lg px-3 py-2"
+              >
+                <Settings className="w-3.5 h-3.5" /> TM Admin
+              </Link>
+            )}
+          </div>
+        }
       />
 
       <div className="p-4 sm:p-8 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
               <Users2 className="w-4.5 h-4.5 text-meristem-700" />
             </div>
-            <p className="text-2xl font-bold text-slate-800 tabular-nums">{live ? live.totalTalentMembers : '—'}</p>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? data.totalTMPool : '—'}</p>
             <p className="text-xs font-medium text-slate-600 mt-1">Total TM Pool</p>
-            <p className="text-[11px] text-meristem-700 font-medium mt-0.5">Live — from Talent Members roster</p>
+            <button
+              type="button"
+              onClick={() => setShowRoster((v) => !v)}
+              className="text-[11px] text-meristem-700 font-medium mt-0.5 hover:underline"
+              disabled={!data || data.memberNames.length === 0}
+            >
+              {showRoster ? 'Hide names' : 'View names'}
+            </button>
+            {showRoster && data && (
+              <select className="w-full mt-2 text-[11px] border border-slate-200 rounded-lg px-2 py-1.5" defaultValue="">
+                <option value="" disabled>Select a member…</option>
+                {data.memberNames.map((m) => (
+                  <option key={m.staffId} value={m.staffId}>{m.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
+              <TrendingUp className="w-4.5 h-4.5 text-meristem-700" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.promotionRatePct) : '—'}</p>
+            <p className="text-xs font-medium text-slate-600 mt-1">Promoted (2025–2026)</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{data ? `${data.promotedCount} of ${data.totalTMPool}` : 'loading…'}</p>
+          </div>
+
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
+              <Repeat className="w-4.5 h-4.5 text-meristem-700" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.mobilityRatePct) : '—'}</p>
+            <p className="text-xs font-medium text-slate-600 mt-1">Internal Mobility (2025–2026)</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{data ? `${data.mobilityCount} of ${data.totalTMPool} changed BU/role` : 'loading…'}</p>
+          </div>
+
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
+              <Award className="w-4.5 h-4.5 text-meristem-700" />
+            </div>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.committeeInvolvementRatePct) : '—'}</p>
+            <p className="text-xs font-medium text-slate-600 mt-1">Committee Involvement</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{data ? `${data.committeeInvolvedCount} of ${data.totalTMPool}` : 'loading…'}</p>
           </div>
 
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
               <GraduationCap className="w-4.5 h-4.5 text-meristem-700" />
             </div>
-            <p className="text-2xl font-bold text-slate-800 tabular-nums">{live ? `${Math.round(live.coveragePct * 10) / 10}%` : '—'}</p>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums">{data ? pct(data.trainingCoveragePct) : '—'}</p>
             <p className="text-xs font-medium text-slate-600 mt-1">Training Coverage</p>
-            <p className="text-[11px] text-meristem-700 font-medium mt-0.5">Live — {live ? `${live.staffTrained} trained this year` : 'loading…'}</p>
+            <p className="text-[11px] text-meristem-700 font-medium mt-0.5">{data ? `${data.staffTrained} trained this period` : 'loading…'}</p>
           </div>
-
-          {EXCEL_KPIS.map((k) => (
-            <div key={k.label} className="bg-white border border-meristem-100 rounded-2xl p-5">
-              <div className="w-9 h-9 rounded-full bg-meristem-100 flex items-center justify-center mb-3">
-                <k.icon className="w-4.5 h-4.5 text-meristem-700" />
-              </div>
-              <p className="text-2xl font-bold text-slate-800 tabular-nums">{k.value}</p>
-              <p className="text-xs font-medium text-slate-600 mt-1">{k.label}</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">{k.sub}</p>
-            </div>
-          ))}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <p className="text-sm font-bold text-slate-800 mb-1">TM Pool by Tenure</p>
-            <p className="text-xs text-slate-400 mb-3">Average {AVG_TM_TENURE} years at Meristem — from the TM dashboard workbook</p>
-            <BarChart labels={TENURE_BUCKETS.labels} values={TENURE_BUCKETS.values} color="#B0714F" showLabels height={220} />
+            <p className="text-xs text-slate-400 mb-3">
+              Average {data ? `${Math.round(data.averageTenureYears * 10) / 10} years` : '—'} at Meristem — computed live from DOJ Meristem
+            </p>
+            {data && <BarChart labels={data.tenureBuckets.labels} values={data.tenureBuckets.values} color="#B0714F" showLabels height={220} />}
           </div>
 
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <p className="text-sm font-bold text-slate-800 mb-1">Average Performance Score</p>
-            <p className="text-xs text-slate-400 mb-3">TM pool, out of 5.0, by half‑year — from the TM dashboard workbook</p>
-            <BarChart labels={RATING_TREND.labels} values={RATING_TREND.values} color="#9A4A2E" showLabels height={220} />
+            <p className="text-xs text-slate-400 mb-3">TM pool, by half-year</p>
+            {data && (
+              <div className="grid grid-cols-3 gap-3">
+                {data.performanceByPeriod.map((p) => (
+                  <div key={p.period} className="text-center">
+                    <p className="text-lg font-bold text-slate-800 tabular-nums">{pct(p.avgScorePct)}</p>
+                    <p className="text-[11px] text-slate-400">{Math.round(p.avgScoreOutOf5 * 10) / 10}/5</p>
+                    <p className="text-[11px] text-slate-500 mt-1">{p.period}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <MetricListCard title="Talent Pool Composition" metrics={TALENT_POOL_METRICS} />
-          <MetricListCard title="Succession Planning" metrics={SUCCESSION_METRICS} />
-          <MetricListCard title="9‑Box / Talent Segmentation" metrics={NINE_BOX_METRICS} />
-          <MetricListCard title="Talent Risk" metrics={TALENT_RISK_METRICS} />
-          <MetricListCard title="Career Development" metrics={CAREER_DEV_METRICS} />
-          <MetricListCard title="Retention of Key Talent" metrics={RETENTION_METRICS} />
-          <MetricListCard title="Workforce Pipeline" metrics={PIPELINE_METRICS} />
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <p className="text-sm font-bold text-slate-800 mb-3">Talent Pool Composition (by Tier)</p>
+            {data && data.tierComposition.length > 0 && (
+              <PieChart labels={data.tierComposition.map((t) => t.tier)} values={data.tierComposition.map((t) => t.count)} height={220} />
+            )}
+          </div>
+
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <p className="text-sm font-bold text-slate-800 mb-3">TM BU Composition</p>
+            {data && data.buComposition.length > 0 && (
+              <PieChart labels={data.buComposition.map((b) => b.bu)} values={data.buComposition.map((b) => b.count)} height={220} />
+            )}
+          </div>
+
+          <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+            <p className="text-sm font-bold text-slate-800 mb-3">Gender Composition</p>
+            {data && data.genderComposition.length > 0 && (
+              <PieChart labels={data.genderComposition.map((g) => g.gender)} values={data.genderComposition.map((g) => g.count)} height={220} />
+            )}
+          </div>
         </div>
 
-        <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
-          <Clock className="w-3 h-3" /> Excel-sourced figures reflect the workbook as of when it was shared — connect a live sheet to keep them current automatically.
-        </p>
+        <div className="bg-white border border-meristem-100 rounded-2xl p-5">
+          <p className="text-sm font-bold text-slate-800 mb-3">Strategic Committee Breakdown</p>
+          {data && data.committeeBreakdown.length > 0 ? (
+            <div className="space-y-2">
+              {data.committeeBreakdown.map((c) => (
+                <div key={c.committee} className="flex items-center justify-between text-[12px]">
+                  <span className="text-slate-600">{c.committee}</span>
+                  <span className="font-semibold text-slate-800 tabular-nums">{c.count}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">No committee data yet.</p>
+          )}
+        </div>
       </div>
     </div>
   )

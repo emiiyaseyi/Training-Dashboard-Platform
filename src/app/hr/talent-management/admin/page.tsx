@@ -1,0 +1,338 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader2, Trash2 } from 'lucide-react'
+import { SectionCard } from '@/components/ui/SectionCard'
+import { usePagePermission } from '@/lib/use-page-permission'
+
+// ---------- shared bits ----------
+
+interface FieldConfig {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'date' | 'checkbox'
+  placeholder?: string
+}
+
+type Row = Record<string, unknown>
+
+function fmtCell(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10)
+  return String(value)
+}
+
+// One section = one table of existing rows (with per-row delete), one "add one" form, and one
+// bulk-paste box (tab or comma separated, one row per line, same column order as `fields`) — the
+// admin can add/update individually or in bulk, per the brief. Bulk posts { items: [...] } to the
+// same endpoint the single form posts a bare object to; the API upserts by its own natural key so
+// re-pasting a correction never duplicates a row.
+function RecordSection({
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [],
+}: {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  apiPath: string
+  fields: FieldConfig[]
+  idKey?: string
+  extraColumns?: string[]
+}) {
+  const [rows, setRows] = useState<Row[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [bulkText, setBulkText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    fetch(apiPath)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setRows(Array.isArray(data) ? data : []))
+      .catch(() => setError('Failed to load.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [apiPath])
+
+  const columns = [...extraColumns, ...fields.map((f) => f.key)]
+
+  const submitOne = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const body: Record<string, unknown> = {}
+      for (const f of fields) {
+        if (f.type === 'checkbox') body[f.key] = form[f.key] === 'on'
+        else if (f.type === 'number') body[f.key] = form[f.key] ? Number(form[f.key]) : undefined
+        else body[f.key] = form[f.key] || undefined
+      }
+      const res = await fetch(apiPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save.') }
+      setForm({})
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitBulk = async () => {
+    const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0) return
+    setSaving(true)
+    setError('')
+    try {
+      const items = lines.map((line) => {
+        const parts = line.split(/\t|,/).map((p) => p.trim())
+        const item: Record<string, unknown> = {}
+        fields.forEach((f, i) => {
+          const raw = parts[i] ?? ''
+          if (f.type === 'checkbox') item[f.key] = /^(yes|true|y|1)$/i.test(raw)
+          else if (f.type === 'number') item[f.key] = raw ? Number(raw) : undefined
+          else item[f.key] = raw || undefined
+        })
+        return item
+      })
+      const res = await fetch(apiPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save.') }
+      setBulkText('')
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    setDeletingId(id)
+    try {
+      await fetch(apiPath, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+      load()
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <SectionCard icon={Icon} title={title} description={`${rows.length} record${rows.length === 1 ? '' : 's'}`}>
+      <div className="p-5 pt-0 space-y-4">
+        {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+
+        {/* Add one */}
+        <div className="flex flex-wrap items-end gap-2">
+          {fields.map((f) => (
+            <div key={f.key}>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">{f.label}</label>
+              {f.type === 'checkbox' ? (
+                <input
+                  type="checkbox"
+                  checked={form[f.key] === 'on'}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.checked ? 'on' : '' })}
+                  className="w-4 h-4 mt-1.5"
+                />
+              ) : (
+                <input
+                  type={f.type}
+                  value={form[f.key] || ''}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs w-36"
+                />
+              )}
+            </div>
+          ))}
+          <button
+            type="button" onClick={submitOne} disabled={saving}
+            className="px-3 py-1.5 bg-meristem-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Add / Update'}
+          </button>
+        </div>
+
+        {/* Bulk paste */}
+        <div>
+          <label className="block text-[11px] font-medium text-slate-500 mb-1">
+            Bulk paste — one row per line, columns in order: {fields.map((f) => f.label).join(', ')} (tab or comma separated)
+          </label>
+          <textarea
+            value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+            rows={3} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+            placeholder={fields.map((f) => f.placeholder || f.label).join('\t')}
+          />
+          <button
+            type="button" onClick={submitBulk} disabled={saving || !bulkText.trim()}
+            className="mt-1.5 px-3 py-1.5 bg-slate-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+          >
+            Save bulk rows
+          </button>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <p className="text-xs text-slate-400">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-slate-400">No records yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-400 border-b border-slate-100">
+                  {columns.map((c) => <th key={c} className="py-1.5 pr-4 font-medium">{c}</th>)}
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={String(r[idKey])} className="border-b border-slate-50">
+                    {columns.map((c) => <td key={c} className="py-1.5 pr-4 text-slate-700">{fmtCell(r[c])}</td>)}
+                    <td className="py-1.5 text-right">
+                      <button type="button" onClick={() => remove(String(r[idKey]))} disabled={deletingId === String(r[idKey])}>
+                        <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
+// ---------- page ----------
+
+export default function TalentManagementAdminPage() {
+  const { canAdmin } = usePagePermission()
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<string | null>(null)
+
+  const runImport = async () => {
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const res = await fetch('/api/admin/talent-management/import-from-sheets', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Import failed.')
+      const summary = (data.results as { sheet: string; imported: number; skipped: number; unresolved: string[]; error: string | null }[])
+        .map((r) => r.error ? `${r.sheet}: ${r.error}` : `${r.sheet}: ${r.imported} imported, ${r.skipped} skipped${r.unresolved.length ? `, ${r.unresolved.length} unresolved (${r.unresolved.join(', ')})` : ''}`)
+        .join('\n')
+      setImportResult(summary)
+    } catch (err) {
+      setImportResult(err instanceof Error ? err.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  if (!canAdmin) {
+    return (
+      <div className="p-8">
+        <p className="text-sm text-slate-500">You don&apos;t have admin access to Talent Management.</p>
+        <Link href="/hr/talent-management" className="text-xs text-meristem-700 mt-2 inline-block">← Back to dashboard</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 sm:p-8 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Link href="/hr/talent-management" className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 mb-2">
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Talent Management
+          </Link>
+          <h1 className="text-lg font-bold text-slate-800">Talent Management — Admin</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Edit TM profiles, promotions, mobility, strategic committees, and appraisal scores — individually or in bulk.</p>
+        </div>
+        <div className="text-right">
+          <button
+            type="button" onClick={runImport} disabled={importing}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+            Import from Sheets
+          </button>
+          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">One-time/occasional bootstrap from the configured Talent Management tabs — safe to re-run, never overwrites a record you've since corrected here with stale sheet data for a different key.</p>
+        </div>
+      </div>
+
+      {importResult && (
+        <pre className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap">{importResult}</pre>
+      )}
+
+      <RecordSection
+        title="Talent Member Profiles"
+        icon={Users2}
+        apiPath="/api/hr/talent-management/roster"
+        idKey="id"
+        fields={[
+          { key: 'staffId', label: 'Emp. ID', type: 'text', placeholder: 'MRL-0001' },
+          { key: 'name', label: 'Name', type: 'text' },
+          { key: 'businessUnit', label: 'Current BU', type: 'text' },
+          { key: 'currentRole', label: 'Current Role', type: 'text' },
+          { key: 'currentGrade', label: 'Current Job Grade', type: 'text' },
+          { key: 'currentTier', label: 'Current Tier', type: 'number' },
+          { key: 'gender', label: 'Gender', type: 'text' },
+          { key: 'dojMeristem', label: 'DOJ Meristem', type: 'date' },
+          { key: 'dateJoinedTM', label: 'Date Joined TM', type: 'date' },
+          { key: 'status', label: 'Status (Active/Exited)', type: 'text', placeholder: 'Active' },
+        ]}
+      />
+
+      <RecordSection
+        title="Promotions"
+        icon={TrendingUp}
+        apiPath="/api/hr/talent-management/promotions"
+        fields={[
+          { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
+          { key: 'previousGrade', label: 'Previous Grade', type: 'text' },
+          { key: 'newGrade', label: 'New Grade', type: 'text' },
+          { key: 'promoted', label: 'Promoted', type: 'checkbox' },
+        ]}
+      />
+
+      <RecordSection
+        title="Internal Mobility"
+        icon={Repeat}
+        apiPath="/api/hr/talent-management/mobility"
+        fields={[
+          { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
+          { key: 'newBusinessUnit', label: 'New BU', type: 'text' },
+          { key: 'newRole', label: 'New Role', type: 'text' },
+          { key: 'employmentStatus', label: 'Employment Status', type: 'text', placeholder: 'Active' },
+        ]}
+      />
+
+      <RecordSection
+        title="Strategic Committees"
+        icon={Award}
+        apiPath="/api/hr/talent-management/committees"
+        fields={[
+          { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'name', label: 'Name', type: 'text' },
+          { key: 'committee', label: 'Committee', type: 'text' },
+        ]}
+      />
+
+      <RecordSection
+        title="Performance Appraisal"
+        icon={Star}
+        apiPath="/api/hr/talent-management/performance"
+        fields={[
+          { key: 'staffId', label: 'Emp. ID', type: 'text' },
+          { key: 'period', label: 'Period', type: 'text', placeholder: 'H1 2026' },
+          { key: 'score', label: 'Score (0–1)', type: 'number', placeholder: '0.78' },
+        ]}
+      />
+    </div>
+  )
+}

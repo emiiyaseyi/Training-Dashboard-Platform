@@ -140,7 +140,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // doesn't span multiple years the way it does on other pages; see activeMonthIndices).
   const monthIndices = activeMonthIndices(filter)
 
-  const [directory, rosterEntries, exemptions, allSchedules, yearTrainingRecords] = await Promise.all([
+  const [directory, allRosterEntries, exemptions, allSchedules, yearTrainingRecords] = await Promise.all([
     loadRosterDirectory(),
     prisma.talentMemberInfo.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
@@ -171,6 +171,10 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   const tmTrainingRecords = yearTrainingRecords.filter((r) =>
     isTMTrainingType(r.trainingType) && inSelectedPeriod(r.month) && !scheduledPersonTrainingKeys.has(scheduleAttendeeKey(r.staffId, r.training))
   )
+
+  // Exited TM members don't count toward TM Trainings coverage any more than they count toward
+  // the rest of the Talent Management dashboard — same "active pool only" scoping throughout.
+  const rosterEntries = allRosterEntries.filter((e) => e.status !== 'Exited')
 
   const rosterMap = new Map<string, ResolvedStaff>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
