@@ -116,6 +116,12 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
       currentTier: iTier != null ? parseIntCell(row[iTier]) : null,
       gender: iGender != null ? s(row[iGender]) || null : null,
       status: iStatus != null && s(row[iStatus]).toLowerCase() === 'exited' ? 'Exited' : 'Active',
+      // This row's data came FROM this same sheet, so it's already in sync with it by definition —
+      // marking it synced here stops the old Talent Member Roster page's auto-retry (which treats
+      // sheetSyncedAt: null as "needs pushing to the sheet") from immediately hammering the Sheets
+      // API to re-write back the exact values it was just read from.
+      sheetSyncedAt: new Date(),
+      sheetSyncError: null,
     }
     const existing = await prisma.talentMemberInfo.findFirst({ where: { staffId } })
     if (existing) {
@@ -166,10 +172,12 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
           staffId, name, year: y.year,
           newBusinessUnit, newRole: y.role || null,
           changeStatus: 'Changed', employmentStatus,
+          sheetSyncedAt: new Date(), sheetSyncError: null,
         },
         update: {
           name, newBusinessUnit, newRole: y.role || null,
           changeStatus: 'Changed', employmentStatus,
+          sheetSyncedAt: new Date(), sheetSyncError: null,
         },
       })
       imported++
@@ -264,9 +272,9 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
       ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee } })
       : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name, committee } })
     if (existing) {
-      await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: match?.name || name } })
+      await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: match?.name || name, sheetSyncedAt: new Date(), sheetSyncError: null } })
     } else {
-      await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee } })
+      await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee, sheetSyncedAt: new Date(), sheetSyncError: null } })
     }
     imported++
   }
@@ -301,8 +309,8 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
       if (score == null) continue
       await prisma.performanceAppraisalRecord.upsert({
         where: { staffId_period: { staffId, period: p.period } },
-        create: { staffId, name, period: p.period, score },
-        update: { name, score },
+        create: { staffId, name, period: p.period, score, sheetSyncedAt: new Date(), sheetSyncError: null },
+        update: { name, score, sheetSyncedAt: new Date(), sheetSyncError: null },
       })
       imported++
     }

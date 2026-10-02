@@ -172,20 +172,28 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     isTMTrainingType(r.trainingType) && inSelectedPeriod(r.month) && !scheduledPersonTrainingKeys.has(scheduleAttendeeKey(r.staffId, r.training))
   )
 
-  // Exited TM members don't count toward TM Trainings coverage any more than they count toward
-  // the rest of the Talent Management dashboard — same "active pool only" scoping throughout.
-  const rosterEntries = allRosterEntries.filter((e) => e.status !== 'Exited')
-
+  // A person who's since exited the TM program still really did attend that training while they
+  // were on it — their historical completion shouldn't become an "unmatched" record just because
+  // they're no longer current. So attendance matching (rosterKeys below) resolves against
+  // EVERYONE ever on the roster, active or exited. Only the *current pool size* — totalTalentMembers,
+  // and who still needs to attend something — is scoped to active members, via activeStatusByKey.
   const rosterMap = new Map<string, ResolvedStaff>()
+  const activeStatusByKey = new Map<string, boolean>()
   const unresolvedRosterEntries: TMUnresolvedRosterEntry[] = []
-  for (const e of rosterEntries) {
+  for (const e of allRosterEntries) {
     const match = e.staffId || e.name || e.email
       ? resolveStaffLoose(e.staffId || e.name || e.email || '', directory)
       : null
-    if (match) rosterMap.set(normalizeStaffIdKey(match.staffId), match)
-    else unresolvedRosterEntries.push({ id: e.id, staffId: e.staffId, name: e.name, email: e.email })
+    if (match) {
+      const key = normalizeStaffIdKey(match.staffId)
+      rosterMap.set(key, match)
+      activeStatusByKey.set(key, e.status !== 'Exited')
+    } else {
+      unresolvedRosterEntries.push({ id: e.id, staffId: e.staffId, name: e.name, email: e.email })
+    }
   }
   const roster = [...rosterMap.values()]
+  const activeRoster = roster.filter((s) => activeStatusByKey.get(normalizeStaffIdKey(s.staffId)) !== false)
 
   const exemptedKeys = new Set<string>()
   const exempted: TMExemptedRecord[] = exemptions.map((e) => {
@@ -312,7 +320,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
 
   const distinctTrainingsDelivered = new Set(attended.map((a) => a.trainingName.trim().toLowerCase())).size
 
-  const yetToAttend: TMYetToAttendRecord[] = roster
+  const yetToAttend: TMYetToAttendRecord[] = activeRoster
     .filter((s) => {
       const key = normalizeStaffIdKey(s.staffId)
       // Someone already on a scheduled-but-not-yet-happened training isn't "yet to attend" in the
@@ -321,7 +329,10 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
     })
     .map((s) => ({ staffId: s.staffId, staffName: s.name, businessUnit: s.businessUnit, email: s.email }))
 
-  const totalTalentMembers = roster.length
+  // Current pool size, not "everyone who was ever on the roster" — matches the Talent Management
+  // dashboard's own "active pool only" denominator. staffTrained (below, derived from attendedKeys)
+  // deliberately still counts an exited member's real historical completion.
+  const totalTalentMembers = activeRoster.length
   const staffExempted = exemptedKeys.size
   const staffTrained = attendedKeys.size
   const staffNotTrained = yetToAttend.length
