@@ -110,19 +110,25 @@ export async function mirrorCommitteeToSheet(record: StrategicCommitteeRecord): 
   if (!target) return { attempted: false, success: false, message: 'No TM Strategic Teams sheet configured under Admin -> Live Data Source.' }
 
   try {
+    // The sheet tags this column with the year it applies to (e.g. "2026 Strategic Committee") —
+    // same convention the importer reads via findYearTaggedColumns. Fall back to the plain
+    // "strategic committee" header for a sheet that hasn't been renamed yet.
+    const committeeYear = record.year ?? new Date().getFullYear()
+    const committeeCandidates = [`${committeeYear} strategic committee`, 'strategic committee']
+
     const keyCandidates = record.staffId ? STAFFID_CANDIDATES : NAME_CANDIDATES
     const keyValue = record.staffId || record.name || ''
     if (keyValue) {
       const result = await updateRowByKey(target.spreadsheetId, target.sheetName, target.accessToken, keyCandidates, keyValue, [
         { columnCandidates: NAME_CANDIDATES, value: record.name || '' },
-        { columnCandidates: ['strategic committee'], value: record.committee },
+        { columnCandidates: committeeCandidates, value: record.committee },
       ])
       if (result.rowFound) return { attempted: true, success: true, message: `Updated existing row in "${target.sheetName}".` }
     }
 
     const fields: MirrorField[] = [
       { label: 'Name', candidates: NAME_CANDIDATES, value: record.name || '' },
-      { label: 'Strategic Committee', candidates: ['strategic committee'], value: record.committee },
+      { label: 'Strategic Committee', candidates: committeeCandidates, value: record.committee },
     ]
     await appendMirrorRow(target.spreadsheetId, target.sheetName, target.accessToken, fields)
     return { attempted: true, success: true, message: `Synced to "${target.sheetName}".` }

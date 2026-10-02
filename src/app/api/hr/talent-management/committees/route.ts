@@ -22,7 +22,13 @@ export async function GET() {
 }
 
 interface CommitteeItemInput {
-  staffId?: string; name: string; committee: string
+  staffId?: string; name: string; committee: string; year?: string | number
+}
+
+function parseYear(year: string | number | undefined): number | null {
+  if (year == null || year === '') return null
+  const n = typeof year === 'number' ? year : parseInt(year, 10)
+  return Number.isFinite(n) ? n : null
 }
 
 // Not upserted by a unique key the way Promotion/Mobility/Performance are — a person can
@@ -48,9 +54,10 @@ export async function POST(req: NextRequest) {
       const existing =
         (await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name: item.name.trim(), committee: item.committee.trim() } })) ??
         (staffId ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee: item.committee.trim() } }) : null)
+      const year = parseYear(item.year)
       const record = existing
-        ? await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: item.name.trim() } })
-        : await prisma.strategicCommitteeRecord.create({ data: { staffId, name: item.name.trim(), committee: item.committee.trim() } })
+        ? await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: item.name.trim(), ...(year != null ? { year } : {}) } })
+        : await prisma.strategicCommitteeRecord.create({ data: { staffId, name: item.name.trim(), committee: item.committee.trim(), year } })
       saved.push(await syncToSheet(record))
     }
     return NextResponse.json(Array.isArray(body.items) ? { saved: saved.length, items: saved } : saved[0])
@@ -74,7 +81,7 @@ export async function PUT(req: NextRequest) {
     }
     const updated = await prisma.strategicCommitteeRecord.update({
       where: { id: body.id },
-      data: { staffId: body.staffId?.trim() || null, name: body.name.trim(), committee: body.committee.trim() },
+      data: { staffId: body.staffId?.trim() || null, name: body.name.trim(), committee: body.committee.trim(), year: parseYear(body.year) },
     })
     return NextResponse.json(await syncToSheet(updated))
   } catch (err) {

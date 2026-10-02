@@ -195,7 +195,7 @@ interface QuickToggleConfig {
 }
 
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot, dedupePath, quickToggle,
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot, dedupePath, quickToggle, cleanupPath, cleanupLabel,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -220,6 +220,11 @@ function RecordSection({
   // One-time cleanup endpoint for a section whose natural key isn't DB-enforced (currently just
   // Strategic Committees) — shows a "Remove duplicates" button when set.
   dedupePath?: string
+  // One-time cleanup endpoint for a different kind of prune than dedupe (currently: deleting every
+  // Strategic Committee row that never resolved to a Staff ID). Shows a second button alongside
+  // "Remove duplicates" when set.
+  cleanupPath?: string
+  cleanupLabel?: string
   // One-click status flip per row (e.g. Active <-> Exited) without opening the full edit form —
   // same pattern as the Employees page's Deactivate/Reactivate button. Sends the row's existing
   // fields back unchanged except the toggled one, via the same PUT the edit form uses.
@@ -239,6 +244,8 @@ function RecordSection({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deduping, setDeduping] = useState(false)
   const [dedupeResult, setDedupeResult] = useState<string | null>(null)
+  const [cleaningUp, setCleaningUp] = useState(false)
+  const [cleanupResult, setCleanupResult] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -410,6 +417,23 @@ function RecordSection({
     }
   }
 
+  const cleanup = async () => {
+    if (!cleanupPath) return
+    setCleaningUp(true)
+    setCleanupResult(null)
+    try {
+      const res = await fetch(cleanupPath, { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Failed to clean up.')
+      setCleanupResult(`Removed ${d.deleted} record${d.deleted === 1 ? '' : 's'}.`)
+      load()
+    } catch (err) {
+      setCleanupResult(err instanceof Error ? err.message : 'Failed to clean up.')
+    } finally {
+      setCleaningUp(false)
+    }
+  }
+
   return (
     <SectionCard
       icon={Icon}
@@ -492,7 +516,7 @@ function RecordSection({
         </div>
 
         {/* Search */}
-        {(rows.length > 0 || dedupePath) && (
+        {(rows.length > 0 || dedupePath || cleanupPath) && (
           <div className="flex items-center gap-2">
             {rows.length > 0 && (
               <div className="relative max-w-xs flex-1">
@@ -512,9 +536,18 @@ function RecordSection({
                 {deduping ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Remove duplicates'}
               </button>
             )}
+            {cleanupPath && (
+              <button
+                type="button" onClick={cleanup} disabled={cleaningUp}
+                className="px-2.5 py-1.5 border border-slate-300 text-slate-600 text-[11px] font-medium rounded-lg whitespace-nowrap disabled:opacity-50"
+              >
+                {cleaningUp ? <Loader2 className="w-3 h-3 animate-spin inline" /> : (cleanupLabel || 'Clean up')}
+              </button>
+            )}
           </div>
         )}
         {dedupeResult && <p className="text-[11px] text-slate-500">{dedupeResult}</p>}
+        {cleanupResult && <p className="text-[11px] text-slate-500">{cleanupResult}</p>}
 
         {/* Table */}
         {loading ? (
@@ -862,10 +895,13 @@ export default function TalentManagementAdminPage() {
         apiPath="/api/hr/talent-management/committees"
         refreshSignal={refreshSignal}
         dedupePath="/api/hr/talent-management/committees/deduplicate"
+        cleanupPath="/api/hr/talent-management/committees/remove-unresolved"
+        cleanupLabel="Remove unresolved (no Staff ID)"
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
           { key: 'committee', label: 'Committee', type: 'text' },
+          { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
         ]}
       />
 

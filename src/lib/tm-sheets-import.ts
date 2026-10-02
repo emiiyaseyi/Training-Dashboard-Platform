@@ -79,6 +79,27 @@ function findEmpIdCol(idx: Map<string, number>): number | undefined {
   return undefined
 }
 
+// Finds every header matching "{year} {suffix}" (e.g. "2026 strategic committee", "2025 new bu"),
+// returning {year, col} pairs sorted ascending by year — this is how Mobility's New BU/New Role,
+// Promotion's "{year} Promotion", and Strategic Teams' "{year} Strategic Committee" columns are all
+// found, instead of a hardcoded [2025, 2026] (or, for Strategic Teams, a single fixed header name)
+// that breaks the moment the sheet gains a new year's column or someone renames the header to add
+// a year prefix. Falls back to a single bare "{suffix}" column (no year prefix) under
+// `fallbackYear`, for sheets/years that haven't been retrofitted with a year-tagged header yet.
+function findYearTaggedColumns(idx: Map<string, number>, suffix: string, fallbackYear?: number): { year: number; col: number }[] {
+  const pattern = new RegExp(`^(\\d{4})\\s+${suffix}$`)
+  const results: { year: number; col: number }[] = []
+  for (const [header, col] of idx) {
+    const m = header.match(pattern)
+    if (m) results.push({ year: parseInt(m[1], 10), col })
+  }
+  if (results.length === 0 && fallbackYear != null) {
+    const plain = idx.get(suffix)
+    if (plain != null) results.push({ year: fallbackYear, col: plain })
+  }
+  return results.sort((a, b) => a.year - b.year)
+}
+
 // Runs `fn` over `items` with at most `limit` in flight at once — unlike a bare Promise.all, this
 // doesn't open one DB connection per row simultaneously. The Postgres pool here only has 5
 // connections total; 5 sheets' worth of unbounded Promise.all (40-90+ rows each, several queries
@@ -177,10 +198,11 @@ async function importTalentMembersInfo(spreadsheetId: string, sheetName: string,
   return { sheet: 'Talent Members Info', tabName: sheetName, imported, skipped, skippedDetails, unresolved: [], error: null }
 }
 
-// TM Internal Mobility -> MobilityRecord. One row in -> up to 2 rows out (2025, 2026), each only
+// TM Internal Mobility -> MobilityRecord. One row in -> one row out per year the sheet tracks
+// (dynamically detected — see findYearTaggedColumns, not a hardcoded [2025, 2026]), each only
 // created if that year's New BU/New Role cell has something in it. changeStatus is derived per
 // year from whether those cells are filled, not parsed from the sheet's own combined
-// "Changed 2025 Only"/"Changed Both Years" text, which describes both years at once.
+// "Changed 2025 Only"/"Changed Both Years" text, which describes multiple years at once.
 async function importMobility(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Internal Mobility', tabName: sheetName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: null }
@@ -188,10 +210,11 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
   const idx = headerIndex(header)
   const iEmpId = findEmpIdCol(idx)
   const iName = idx.get('name')
-  const i2025BU = idx.get('2025 new bu')
-  const i2025Role = idx.get('2025 new role')
-  const i2026BU = idx.get('2026 new bu')
-  const i2026Role = idx.get('2026 new role')
+  const buCols = findYearTaggedColumns(idx, 'new bu')
+  const roleCols = findYearTaggedColumns(idx, 'new role')
+  const trackedYears = [...new Set([...buCols.map((c) => c.year), ...roleCols.map((c) => c.year)])].sort((a, b) => a - b)
+  const buColByYear = new Map(buCols.map((c) => [c.year, c.col]))
+  const roleColByYear = new Map(roleCols.map((c) => [c.year, c.col]))
   const iEmpStatus = idx.get('employment status')
 
   let imported = 0
@@ -207,16 +230,17 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
     const name = canonicalNameFor(staffId, iName != null ? s(row[iName]) || null : null, directory)
     const employmentStatus = iEmpStatus != null && s(row[iEmpStatus]).toLowerCase() === 'exited' ? 'Exited' : 'Active'
 
-    const years: { year: number; bu: string; role: string }[] = [
-      { year: 2025, bu: i2025BU != null ? s(row[i2025BU]) : '', role: i2025Role != null ? s(row[i2025Role]) : '' },
-      { year: 2026, bu: i2026BU != null ? s(row[i2026BU]) : '', role: i2026Role != null ? s(row[i2026Role]) : '' },
-    ]
-    // Every tracked person gets a record for both years, changed or not — the sheet itself covers
-    // everyone (its own "Total Staff" count), so dropping the "No Change" rows during import was
-    // why only 34 of 43 showed up instead of the full roster. Processed in year order (not
-    // Promise.all, unlike the other importers) so 2026's previousBusinessUnit/previousRole can
-    // chain from 2025's resolved values — 2025 itself has no earlier year to chain from, so its
-    // previous fields stay null rather than guessed.
+    const years = trackedYears.map((year) => {
+      const buCol = buColByYear.get(year)
+      const roleCol = roleColByYear.get(year)
+      return { year, bu: buCol != null ? s(row[buCol]) : '', role: roleCol != null ? s(row[roleCol]) : '' }
+    })
+    // Every tracked person gets a record for every tracked year, changed or not — the sheet itself
+    // covers everyone (its own "Total Staff" count), so dropping the "No Change" rows during
+    // import was why only a fraction of the roster ever showed up. Processed in year order (not
+    // Promise.all, unlike the other importers) so each year's previousBusinessUnit/previousRole
+    // can chain from the prior tracked year's resolved values — the earliest tracked year has
+    // nothing earlier to chain from, so its previous fields stay null rather than guessed.
     let previousBU: string | null = null
     let previousRole: string | null = null
     for (const y of years) {
@@ -247,12 +271,15 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
   return { sheet: 'TM Internal Mobility', tabName: sheetName, imported, skipped, skippedDetails, unresolved: [], error: null }
 }
 
-// TM Promotion -> PromotionRecord. Scoped to 2025 and 2026 only — the sheet's 2023/2024 columns
-// are positionally ambiguous about which "grade before promotion" column pairs with which year,
-// and nothing on the dashboard needs anything before 2025 (Promotion Rate is explicitly scoped to
-// "Promoted at least once (2025-2026)"), so guessing at 2023/2024 isn't worth the risk of storing
-// wrong data. "Ever Promoted (2025-2026)" is the authoritative promoted flag for both years
-// combined; 2025/2026 are also split out individually since the sheet has the detail.
+// TM Promotion -> PromotionRecord. One row out per "{year} Promotion" column the sheet has
+// (dynamically detected — 2023 through whatever's latest, not a hardcoded [2025, 2026]). The New
+// Grade for each year is the column immediately after that year's own Promotion column — there
+// are multiple columns literally named "New Grade" on this sheet, one per year, so a lookup by
+// header NAME alone only ever finds the last one; position relative to each year's own Promotion
+// column is what actually pairs them correctly. previousGrade is chained year to year starting
+// from "Previous Grade (before promotion)" (the baseline before the earliest tracked year) — this
+// reconstructs the same previousGrade the sheet's own explicit "Grade Before Promotion" column
+// gave for 2025 in testing, without needing that column at all, so it generalizes to every year.
 async function importPromotions(spreadsheetId: string, sheetName: string, accessToken: string, directory: Map<string, ResolvedStaff>): Promise<TMImportSheetResult> {
   const rows = await fetchRangeUnformatted(spreadsheetId, sheetName, accessToken)
   if (rows.length === 0) return { sheet: 'TM Promotion', tabName: sheetName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: null }
@@ -260,15 +287,8 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
   const idx = headerIndex(header)
   const iEmpId = findEmpIdCol(idx)
   const iName = idx.get('name')
-  const i2025Promo = idx.get('2025 promotion')
-  const i2026Promo = idx.get('2026 promotion')
-  // "Grade Before Promotion" sits immediately before the "2025 Promotion" column on the sheet —
-  // paired with 2025's promotion, not 2024's.
-  const iGradeBefore2025 = idx.get('grade before promotion')
-  // The "New Grade" column immediately after "2025 Promotion" — there are 3 columns literally
-  // named "New Grade" on this sheet, so the lookup above only ever finds the LAST one by header
-  // name; use that column's position relative to i2025Promo to get the right one regardless.
-  const iNewGrade2025 = i2025Promo != null ? i2025Promo + 1 : undefined
+  const promoCols = findYearTaggedColumns(idx, 'promotion')
+  const iBaselineGrade = idx.get('previous grade (before promotion)') ?? idx.get('previous grade')
 
   let imported = 0
   let skipped = 0
@@ -282,36 +302,20 @@ async function importPromotions(spreadsheetId: string, sheetName: string, access
     }
     const name = canonicalNameFor(staffId, iName != null ? s(row[iName]) || null : null, directory)
 
-    const writes: Promise<unknown>[] = []
-    if (i2025Promo != null) {
-      const promoted2025 = s(row[i2025Promo]).toLowerCase() === 'yes'
-      writes.push(
-        prisma.promotionRecord.upsert({
-          where: { staffId_year: { staffId, year: 2025 } },
-          create: {
-            staffId, name, year: 2025, promoted: promoted2025,
-            previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
-            newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
-          },
-          update: {
-            name, promoted: promoted2025,
-            previousGrade: iGradeBefore2025 != null ? s(row[iGradeBefore2025]) || null : null,
-            newGrade: promoted2025 && iNewGrade2025 != null ? s(row[iNewGrade2025]) || null : null,
-          },
-        }).then(() => { imported++ })
-      )
+    let runningGrade = iBaselineGrade != null ? s(row[iBaselineGrade]) || null : null
+    for (const { year, col: promoCol } of promoCols) {
+      const promoted = s(row[promoCol]).toLowerCase() === 'yes'
+      const newGradeCol = promoCol + 1
+      const newGrade = promoted ? (s(row[newGradeCol]) || null) : null
+      const previousGrade = runningGrade
+      await prisma.promotionRecord.upsert({
+        where: { staffId_year: { staffId, year } },
+        create: { staffId, name, year, promoted, previousGrade, newGrade },
+        update: { name, promoted, previousGrade, newGrade },
+      })
+      imported++
+      runningGrade = newGrade ?? runningGrade
     }
-    if (i2026Promo != null) {
-      const promoted2026 = s(row[i2026Promo]).toLowerCase() === 'yes'
-      writes.push(
-        prisma.promotionRecord.upsert({
-          where: { staffId_year: { staffId, year: 2026 } },
-          create: { staffId, name, year: 2026, promoted: promoted2026, previousGrade: null, newGrade: null },
-          update: { name, promoted: promoted2026 },
-        }).then(() => { imported++ })
-      )
-    }
-    await Promise.all(writes)
   })
   return { sheet: 'TM Promotion', tabName: sheetName, imported, skipped, skippedDetails, unresolved: [], error: null }
 }
@@ -325,7 +329,10 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
   const idx = headerIndex(header)
   const iEmpId = findEmpIdCol(idx)
   const iName = idx.get('name')
-  const iCommittee = idx.get('strategic committee')
+  // The sheet tags this header with the year it applies to (e.g. "2026 Strategic Committee") so a
+  // new year's column can be added without a code change — falls back to the plain "strategic
+  // committee" header (tagged to the current year) for sheets that haven't been renamed yet.
+  const committeeCols = findYearTaggedColumns(idx, 'strategic committee', new Date().getFullYear())
 
   let imported = 0
   let skipped = 0
@@ -349,43 +356,48 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
     return next
   }
 
-  await mapWithConcurrency(body, 3, (row) => {
+  await mapWithConcurrency(body, 3, async (row) => {
     const name = iName != null ? s(row[iName]) : ''
-    const committee = iCommittee != null ? s(row[iCommittee]) : ''
-    if (!name || !committee) {
+    const entries = committeeCols.map(({ year, col }) => ({ year, committee: s(row[col]) })).filter((e) => e.committee)
+    if (!name || entries.length === 0) {
       skipped++
       skippedDetails.push({ identifier: name || '(blank row)', reason: !name ? 'No Name in this row' : 'No Strategic Committee value' })
-      return Promise.resolve()
+      return
     }
     // Prefer a Staff ID on this row if the sheet has one — exact and reliable, unlike matching by
     // name — falling back to name-matching (comma-reversal/middle-name tolerant) only when there's
     // no ID column or this row's ID doesn't resolve to anyone.
     const rowStaffId = iEmpId != null ? s(row[iEmpId]) : ''
     const match = (rowStaffId && resolveStaff(rowStaffId, directory)) || resolveStaffLooseFuzzy(name, directory)
-    if (!match) unresolved.push({ name, committee })
+    if (!match) unresolved.push({ name, committee: entries[0].committee })
     const staffId = match?.staffId ?? null
-    const lockKey = `${staffId ?? name.trim().toLowerCase()}|${committee}`
 
-    return withKeyLock(lockKey, async () => {
-      let existing = staffId
-        ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee } })
-        : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name, committee } })
-      // A row for this same person+committee may already exist as a STALE unresolved row (staffId:
-      // null) from before this person's Staff ID was resolvable — stored under whatever raw name
-      // the sheet had then, which won't exact-match `name` any more once canonicalized. Absorb it
-      // instead of creating a second row: look at every unresolved row still on this committee and
-      // check whether resolving ITS stored name lands on this same staffId.
-      if (!existing && staffId) {
-        const staleCandidates = await prisma.strategicCommitteeRecord.findMany({ where: { staffId: null, committee } })
-        existing = staleCandidates.find((c) => resolveStaffLooseFuzzy(c.name || '', directory)?.staffId === staffId) ?? null
-      }
-      if (existing) {
-        await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: match?.name || name, sheetSyncedAt: new Date(), sheetSyncError: null } })
-      } else {
-        await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee, sheetSyncedAt: new Date(), sheetSyncError: null } })
-      }
-      imported++
-    })
+    // A person can have a year-tagged committee column per tracked year (one row per committee,
+    // not per year — the latest year processed wins the `year` field, since the same committee
+    // recurring across years is one membership, not several).
+    for (const { year, committee } of entries) {
+      const lockKey = `${staffId ?? name.trim().toLowerCase()}|${committee}`
+      await withKeyLock(lockKey, async () => {
+        let existing = staffId
+          ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee } })
+          : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name, committee } })
+        // A row for this same person+committee may already exist as a STALE unresolved row (staffId:
+        // null) from before this person's Staff ID was resolvable — stored under whatever raw name
+        // the sheet had then, which won't exact-match `name` any more once canonicalized. Absorb it
+        // instead of creating a second row: look at every unresolved row still on this committee and
+        // check whether resolving ITS stored name lands on this same staffId.
+        if (!existing && staffId) {
+          const staleCandidates = await prisma.strategicCommitteeRecord.findMany({ where: { staffId: null, committee } })
+          existing = staleCandidates.find((c) => resolveStaffLooseFuzzy(c.name || '', directory)?.staffId === staffId) ?? null
+        }
+        if (existing) {
+          await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: match?.name || name, year, sheetSyncedAt: new Date(), sheetSyncError: null } })
+        } else {
+          await prisma.strategicCommitteeRecord.create({ data: { staffId, name: match?.name || name, committee, year, sheetSyncedAt: new Date(), sheetSyncError: null } })
+        }
+        imported++
+      })
+    }
   })
   // Collapse exact duplicate (name, committee) pairs in the report — the sheet itself sometimes
   // has the same person listed twice for the same committee, which otherwise shows up as two

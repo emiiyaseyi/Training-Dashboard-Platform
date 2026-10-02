@@ -32,7 +32,15 @@ export interface TMMobilityTrends {
 
 export async function computeTMMobilityTrends(filter: PeriodFilter): Promise<TMMobilityTrends> {
   const filteredYear = effectiveYear(filter)
-  const years = filteredYear ? [filteredYear] : [2025, 2026]
+  let years: number[]
+  if (filteredYear) {
+    years = [filteredYear]
+  } else {
+    // "All Time" — every year actually tracked (not a hardcoded [2025, 2026]), so a new year's
+    // column on the sheet shows up here without a code change.
+    const distinctYears = await prisma.mobilityRecord.findMany({ distinct: ['year'], select: { year: true }, orderBy: { year: 'asc' } })
+    years = distinctYears.map((d) => d.year)
+  }
   const { active, byStaffId } = await loadActiveRoster()
   const totalTMPool = active.length
   const mobility = await prisma.mobilityRecord.findMany({
@@ -87,7 +95,15 @@ export interface TMPromotionTrends {
 
 export async function computeTMPromotionTrends(filter: PeriodFilter): Promise<TMPromotionTrends> {
   const filteredYear = effectiveYear(filter)
-  const years = filteredYear ? [filteredYear] : [2025, 2026]
+  let years: number[]
+  if (filteredYear) {
+    years = [filteredYear]
+  } else {
+    // "All Time" — every year actually tracked in the data (2023 onward, as the sheet gains
+    // columns), not a hardcoded [2025, 2026].
+    const distinctYears = await prisma.promotionRecord.findMany({ distinct: ['year'], select: { year: true }, orderBy: { year: 'asc' } })
+    years = distinctYears.map((d) => d.year)
+  }
   const { active, byStaffId } = await loadActiveRoster()
   const totalTMPool = active.length
   const promotions = await prisma.promotionRecord.findMany({
@@ -143,11 +159,13 @@ export async function computeTMCommitteesPerformance(filter: PeriodFilter): Prom
     prisma.performanceAppraisalRecord.findMany(),
   ])
 
-  // Committee membership has no year/period on it at all, so it isn't scoped by the filter — a
-  // person is or isn't on a committee, there's no "which year" dimension to narrow it by.
+  // Committee membership is now year-tagged (e.g. "2026 Strategic Committee" on the sheet) — scope
+  // to the filtered year when one's selected; "All Time" shows every tracked committee row,
+  // including legacy rows imported before the year field existed (year: null).
   const committeeCounts = new Map<string, number>()
   for (const c of committees) {
     if (!c.staffId || !byStaffId.has(c.staffId)) continue
+    if (filteredYear && c.year != null && c.year !== filteredYear) continue
     committeeCounts.set(c.committee, (committeeCounts.get(c.committee) || 0) + 1)
   }
   const committeeBreakdown = [...committeeCounts.entries()].map(([committee, count]) => ({ committee, count })).sort((a, b) => b.count - a.count)

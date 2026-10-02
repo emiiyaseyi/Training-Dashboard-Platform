@@ -214,17 +214,22 @@ model PerformanceAppraisalRecord {
   @@index([period])
 }
 
-// One row per TM member's strategic committee membership.
+// One row per TM member's strategic committee membership, per year — the sheet column itself is
+// year-tagged ("2026 Strategic Committee"), since who's on which committee can change year to
+// year; a future year just means a new "20XX Strategic Committee" column, no schema change needed.
+// year is nullable only for rows that predate this column existing on the sheet.
 model StrategicCommitteeRecord {
   id             String    @id @default(cuid())
   staffId        String?
   name           String?
   committee      String
+  year           Int?
   createdAt      DateTime  @default(now())
   sheetSyncedAt  DateTime?
   sheetSyncError String?
 
   @@index([staffId])
+  @@index([year])
 }
 
 // Per-year exemption list for the Talent Member (TM) Trainings report — staff the admin has
