@@ -50,6 +50,33 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Edits an existing row in place by id — distinct from the POST upsert above, which keys off
+// (staffId, year) and would create a new row instead of updating this one if the edit itself
+// changes staffId or year.
+export async function PUT(req: NextRequest) {
+  const gate = await requirePermission('hr-talent-management', 'admin')
+  if (gate instanceof NextResponse) return gate
+
+  try {
+    const body = (await req.json()) as { id: string } & PromotionItemInput
+    if (!body.id || !body.staffId?.trim() || !body.year) {
+      return NextResponse.json({ error: 'Staff ID and Year are required.' }, { status: 400 })
+    }
+    const updated = await prisma.promotionRecord.update({
+      where: { id: body.id },
+      data: {
+        staffId: body.staffId.trim(), year: Number(body.year),
+        previousGrade: body.previousGrade?.trim() || null, newGrade: body.newGrade?.trim() || null,
+        promoted: !!body.promoted,
+      },
+    })
+    return NextResponse.json(updated)
+  } catch (err) {
+    console.error('[hr/talent-management/promotions PUT]', err)
+    return NextResponse.json({ error: 'Failed to update promotion record.' }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const gate = await requirePermission('hr-talent-management', 'admin')
   if (gate instanceof NextResponse) return gate

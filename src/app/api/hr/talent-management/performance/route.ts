@@ -44,6 +44,28 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Edits an existing row in place by id — see promotions/route.ts PUT for why this is separate
+// from the POST upsert above.
+export async function PUT(req: NextRequest) {
+  const gate = await requirePermission('hr-talent-management', 'admin')
+  if (gate instanceof NextResponse) return gate
+
+  try {
+    const body = (await req.json()) as { id: string } & PerformanceItemInput
+    if (!body.id || !body.staffId?.trim() || !body.period?.trim()) {
+      return NextResponse.json({ error: 'Staff ID and Period are required.' }, { status: 400 })
+    }
+    const updated = await prisma.performanceAppraisalRecord.update({
+      where: { id: body.id },
+      data: { staffId: body.staffId.trim(), period: body.period.trim(), score: body.score != null ? Number(body.score) : null },
+    })
+    return NextResponse.json(updated)
+  } catch (err) {
+    console.error('[hr/talent-management/performance PUT]', err)
+    return NextResponse.json({ error: 'Failed to update appraisal record.' }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const gate = await requirePermission('hr-talent-management', 'admin')
   if (gate instanceof NextResponse) return gate

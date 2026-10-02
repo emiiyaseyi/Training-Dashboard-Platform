@@ -46,6 +46,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Edits an existing row in place by id — needed because the POST upsert above keys off
+// (staffId, committee), so correcting the committee name itself there would create a new row
+// instead of fixing this one.
+export async function PUT(req: NextRequest) {
+  const gate = await requirePermission('hr-talent-management', 'admin')
+  if (gate instanceof NextResponse) return gate
+
+  try {
+    const body = (await req.json()) as { id: string } & CommitteeItemInput
+    if (!body.id || !body.name?.trim() || !body.committee?.trim()) {
+      return NextResponse.json({ error: 'Name and Committee are required.' }, { status: 400 })
+    }
+    const updated = await prisma.strategicCommitteeRecord.update({
+      where: { id: body.id },
+      data: { staffId: body.staffId?.trim() || null, name: body.name.trim(), committee: body.committee.trim() },
+    })
+    return NextResponse.json(updated)
+  } catch (err) {
+    console.error('[hr/talent-management/committees PUT]', err)
+    return NextResponse.json({ error: 'Failed to update committee record.' }, { status: 500 })
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   const gate = await requirePermission('hr-talent-management', 'admin')
   if (gate instanceof NextResponse) return gate

@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader2, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Pencil } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { usePagePermission } from '@/lib/use-page-permission'
 
@@ -30,7 +30,7 @@ function fmtCell(value: unknown): string {
 // same endpoint the single form posts a bare object to; the API upserts by its own natural key so
 // re-pasting a correction never duplicates a row.
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [],
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], refreshSignal = 0,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -38,6 +38,10 @@ function RecordSection({
   fields: FieldConfig[]
   idKey?: string
   extraColumns?: string[]
+  // Bumped by the parent after a successful "Import from Sheets" run — this section mounted (and
+  // fetched) once, before that import happened, so without this it would keep showing stale
+  // (often empty) data until the admin manually reloads the whole page.
+  refreshSignal?: number
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,6 +50,10 @@ function RecordSection({
   const [bulkText, setBulkText] = useState('')
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [sortCol, setSortCol] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -56,23 +64,72 @@ function RecordSection({
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [apiPath])
+  useEffect(load, [apiPath, refreshSignal])
 
   const columns = [...extraColumns, ...fields.map((f) => f.key)]
+
+  const toggleSort = (col: string) => {
+    if (sortCol !== col) { setSortCol(col); setSortDir('asc'); return }
+    setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+  }
+
+  const displayRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let result = rows
+    if (q) {
+      result = rows.filter((r) => columns.some((c) => fmtCell(r[c]).toLowerCase().includes(q)))
+    }
+    if (sortCol) {
+      result = [...result].sort((a, b) => {
+        const av = fmtCell(a[sortCol])
+        const bv = fmtCell(b[sortCol])
+        const an = Number(av)
+        const bn = Number(bv)
+        const cmp = !Number.isNaN(an) && !Number.isNaN(bn) && av !== '' && bv !== ''
+          ? an - bn
+          : av.localeCompare(bv)
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    }
+    return result
+  }, [rows, search, sortCol, sortDir, columns])
+
+  const startEdit = (row: Row) => {
+    const next: Record<string, string> = {}
+    for (const f of fields) {
+      const v = row[f.key]
+      if (f.type === 'checkbox') next[f.key] = v ? 'on' : ''
+      else if (f.type === 'date' && typeof v === 'string') next[f.key] = v.slice(0, 10)
+      else next[f.key] = v == null ? '' : String(v)
+    }
+    setForm(next)
+    setEditingId(String(row[idKey]))
+    setError('')
+  }
+
+  const cancelEdit = () => {
+    setForm({})
+    setEditingId(null)
+  }
 
   const submitOne = async () => {
     setSaving(true)
     setError('')
     try {
-      const body: Record<string, unknown> = {}
+      const body: Record<string, unknown> = editingId ? { id: editingId } : {}
       for (const f of fields) {
         if (f.type === 'checkbox') body[f.key] = form[f.key] === 'on'
         else if (f.type === 'number') body[f.key] = form[f.key] ? Number(form[f.key]) : undefined
         else body[f.key] = form[f.key] || undefined
       }
-      const res = await fetch(apiPath, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await fetch(apiPath, {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save.') }
       setForm({})
+      setEditingId(null)
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save.')
@@ -124,7 +181,10 @@ function RecordSection({
       <div className="p-5 pt-0 space-y-4">
         {error && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 
-        {/* Add one */}
+        {/* Add one / Edit */}
+        {editingId && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5">Editing an existing record — Save to apply changes, or Cancel.</p>
+        )}
         <div className="flex flex-wrap items-end gap-2">
           {fields.map((f) => (
             <div key={f.key}>
@@ -151,8 +211,13 @@ function RecordSection({
             type="button" onClick={submitOne} disabled={saving}
             className="px-3 py-1.5 bg-meristem-700 text-white text-xs font-medium rounded-lg disabled:opacity-50"
           >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Add / Update'}
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : editingId ? 'Save Changes' : 'Add'}
           </button>
+          {editingId && (
+            <button type="button" onClick={cancelEdit} className="px-3 py-1.5 border border-slate-300 text-slate-600 text-xs font-medium rounded-lg">
+              Cancel
+            </button>
+          )}
         </div>
 
         {/* Bulk paste */}
@@ -173,26 +238,50 @@ function RecordSection({
           </button>
         </div>
 
+        {/* Search */}
+        {rows.length > 0 && (
+          <div className="relative max-w-xs">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full pl-8 pr-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+            />
+          </div>
+        )}
+
         {/* Table */}
         {loading ? (
           <p className="text-xs text-slate-400">Loading…</p>
         ) : rows.length === 0 ? (
           <p className="text-xs text-slate-400">No records yet.</p>
+        ) : displayRows.length === 0 ? (
+          <p className="text-xs text-slate-400">No records match &quot;{search}&quot;.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-100">
-                  {columns.map((c) => <th key={c} className="py-1.5 pr-4 font-medium">{c}</th>)}
+                  {columns.map((c) => (
+                    <th key={c} className="py-1.5 pr-4 font-medium">
+                      <button type="button" onClick={() => toggleSort(c)} className="flex items-center gap-1 hover:text-slate-600">
+                        {c}
+                        {sortCol === c ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+                      </button>
+                    </th>
+                  ))}
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {displayRows.map((r) => (
                   <tr key={String(r[idKey])} className="border-b border-slate-50">
                     {columns.map((c) => <td key={c} className="py-1.5 pr-4 text-slate-700">{fmtCell(r[c])}</td>)}
-                    <td className="py-1.5 text-right">
-                      <button type="button" onClick={() => remove(String(r[idKey]))} disabled={deletingId === String(r[idKey])}>
+                    <td className="py-1.5 text-right whitespace-nowrap">
+                      <button type="button" onClick={() => startEdit(r)} className="mr-2" title="Edit">
+                        <Pencil className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 inline" />
+                      </button>
+                      <button type="button" onClick={() => remove(String(r[idKey]))} disabled={deletingId === String(r[idKey])} title="Delete">
                         <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                       </button>
                     </td>
@@ -213,6 +302,7 @@ export default function TalentManagementAdminPage() {
   const { canAdmin } = usePagePermission()
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
+  const [refreshSignal, setRefreshSignal] = useState(0)
 
   const runImport = async () => {
     setImporting(true)
@@ -225,6 +315,7 @@ export default function TalentManagementAdminPage() {
         .map((r) => r.error ? `${r.sheet}: ${r.error}` : `${r.sheet}: ${r.imported} imported, ${r.skipped} skipped${r.unresolved.length ? `, ${r.unresolved.length} unresolved (${r.unresolved.join(', ')})` : ''}`)
         .join('\n')
       setImportResult(summary)
+      setRefreshSignal((n) => n + 1)
     } catch (err) {
       setImportResult(err instanceof Error ? err.message : 'Import failed.')
     } finally {
@@ -272,6 +363,7 @@ export default function TalentManagementAdminPage() {
         icon={Users2}
         apiPath="/api/hr/talent-management/roster"
         idKey="id"
+        refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text', placeholder: 'MRL-0001' },
           { key: 'name', label: 'Name', type: 'text' },
@@ -290,6 +382,7 @@ export default function TalentManagementAdminPage() {
         title="Promotions"
         icon={TrendingUp}
         apiPath="/api/hr/talent-management/promotions"
+        refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
@@ -303,6 +396,7 @@ export default function TalentManagementAdminPage() {
         title="Internal Mobility"
         icon={Repeat}
         apiPath="/api/hr/talent-management/mobility"
+        refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
@@ -316,6 +410,7 @@ export default function TalentManagementAdminPage() {
         title="Strategic Committees"
         icon={Award}
         apiPath="/api/hr/talent-management/committees"
+        refreshSignal={refreshSignal}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
