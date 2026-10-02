@@ -568,10 +568,98 @@ function RecordSection({
 
 // ---------- page ----------
 
+interface TMImportSheetResultClient {
+  sheet: string
+  imported: number
+  skipped: number
+  skippedDetails: { identifier: string; reason: string }[]
+  unresolved: { name: string; committee?: string }[]
+  error: string | null
+}
+
+// Inline fix for one unresolved Strategic Teams name — types a Staff ID, saves straight to the
+// committees endpoint, same as editing it later from that section's table would, just without
+// having to go find the row there first.
+function ResolveUnresolvedName({ name, committee, onResolved }: { name: string; committee?: string; onResolved: () => void }) {
+  const [staffId, setStaffId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const save = async () => {
+    if (!staffId.trim() || !committee) return
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/hr/talent-management/committees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ staffId: staffId.trim(), name, committee }),
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save.') }
+      onResolved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 ml-2">
+      <input
+        value={staffId} onChange={(e) => setStaffId(e.target.value)}
+        placeholder="Staff ID"
+        className="px-1.5 py-0.5 border border-slate-300 rounded text-[11px] w-24"
+      />
+      <button type="button" onClick={save} disabled={saving || !staffId.trim()} className="px-1.5 py-0.5 bg-meristem-700 text-white text-[11px] rounded disabled:opacity-50">
+        {saving ? '…' : 'Resolve'}
+      </button>
+      {error && <span className="text-rose-600 text-[11px]">{error}</span>}
+    </span>
+  )
+}
+
+function ImportIssuesPanel({ results, onResolved }: { results: TMImportSheetResultClient[]; onResolved: () => void }) {
+  return (
+    <div className="space-y-3">
+      {results.map((r) => (
+        <div key={r.sheet} className="border border-slate-200 rounded-lg p-3">
+          <p className="text-xs font-semibold text-slate-700">
+            {r.sheet}
+            {r.error ? <span className="text-rose-600 font-normal"> — {r.error}</span> : <span className="text-slate-400 font-normal"> — {r.imported} imported, {r.skipped} skipped{r.unresolved.length ? `, ${r.unresolved.length} unresolved` : ''}</span>}
+          </p>
+          {r.skippedDetails.length > 0 && (
+            <div className="mt-1.5">
+              <p className="text-[11px] font-medium text-slate-500">Skipped:</p>
+              <ul className="text-[11px] text-slate-500 list-disc list-inside">
+                {r.skippedDetails.map((s, i) => <li key={i}>{s.identifier} — {s.reason}</li>)}
+              </ul>
+            </div>
+          )}
+          {r.unresolved.length > 0 && (
+            <div className="mt-1.5">
+              <p className="text-[11px] font-medium text-slate-500">Unresolved — couldn&apos;t match anyone in the staff directory:</p>
+              <ul className="text-[11px] text-slate-600">
+                {r.unresolved.map((u, i) => (
+                  <li key={i} className="py-0.5">
+                    {u.name}{u.committee ? ` (${u.committee})` : ''}
+                    {u.committee && <ResolveUnresolvedName name={u.name} committee={u.committee} onResolved={onResolved} />}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function TalentManagementAdminPage() {
   const { canAdmin } = usePagePermission()
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<string | null>(null)
+  const [importResults, setImportResults] = useState<TMImportSheetResultClient[] | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
   const [refreshSignal, setRefreshSignal] = useState(0)
   const [buOptions, setBuOptions] = useState<string[]>([])
 
@@ -586,25 +674,16 @@ export default function TalentManagementAdminPage() {
 
   const runImport = async () => {
     setImporting(true)
-    setImportResult(null)
+    setImportResults(null)
+    setImportError(null)
     try {
       const res = await fetch('/api/admin/talent-management/import-from-sheets', { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed.')
-      const summary = (data.results as { sheet: string; imported: number; skipped: number; unresolved: string[]; error: string | null }[])
-        .map((r) => {
-          if (r.error) return `${r.sheet}: ${r.error}`
-          let line = `${r.sheet}: ${r.imported} imported, ${r.skipped} skipped`
-          // " | " not ", " — several real names come through as "Lastname, Firstname", which would
-          // otherwise be indistinguishable from the comma separating two different names.
-          if (r.unresolved.length) line += `, ${r.unresolved.length} unresolved (${r.unresolved.join(' | ')})`
-          return line
-        })
-        .join('\n')
-      setImportResult(summary)
+      setImportResults(data.results as TMImportSheetResultClient[])
       setRefreshSignal((n) => n + 1)
     } catch (err) {
-      setImportResult(err instanceof Error ? err.message : 'Import failed.')
+      setImportError(err instanceof Error ? err.message : 'Import failed.')
     } finally {
       setImporting(false)
     }
@@ -641,8 +720,11 @@ export default function TalentManagementAdminPage() {
         </div>
       </div>
 
-      {importResult && (
-        <pre className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-3 whitespace-pre-wrap">{importResult}</pre>
+      {importError && (
+        <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{importError}</p>
+      )}
+      {importResults && (
+        <ImportIssuesPanel results={importResults} onResolved={() => setRefreshSignal((n) => n + 1)} />
       )}
 
       <RecordSection
