@@ -56,7 +56,6 @@ function tenureBucket(years: number): '0–2 yrs' | '3–5 yrs' | '6–10 yrs' |
 
 export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashboardData> {
   const filteredYear = effectiveYear(filter)
-  const promotionYears = filteredYear ? [filteredYear] : [2025, 2026]
 
   const allMembers = await prisma.talentMemberInfo.findMany()
   const activeMembers = allMembers.filter((m) => m.status !== 'Exited' && m.staffId)
@@ -64,7 +63,10 @@ export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashbo
   const totalTMPool = activeMembers.length
 
   const [promotions, mobility, performance, committees, trainingReport] = await Promise.all([
-    prisma.promotionRecord.findMany({ where: { year: { in: promotionYears } } }),
+    // No year filter at all for "All Time" (filteredYear === null) — picks up every tracked year
+    // (2023 onward, and any future year the sheet gains a column for) the same way Promotion
+    // Trends does, instead of a hardcoded [2025, 2026] that silently dropped older/newer years.
+    prisma.promotionRecord.findMany({ where: filteredYear ? { year: filteredYear } : {} }),
     prisma.mobilityRecord.findMany({ where: { employmentStatus: { not: 'Exited' }, ...(filteredYear ? { year: filteredYear } : {}) } }),
     prisma.performanceAppraisalRecord.findMany(),
     prisma.strategicCommitteeRecord.findMany(),

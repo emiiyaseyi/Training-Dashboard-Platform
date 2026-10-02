@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader2, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Pencil } from 'lucide-react'
+import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader2, Trash2, Search, ArrowUpDown, ArrowUp, ArrowDown, Pencil, ShieldAlert } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { usePagePermission } from '@/lib/use-page-permission'
 
 // ---------- shared bits ----------
@@ -57,72 +58,66 @@ function findRecordFor(rows: Row[], match: (r: Row) => boolean): Row | null {
   return rows.find(match) ?? null
 }
 
-const mobilityPivot: PivotConfig = {
-  columns: [
-    { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
-    { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
-    {
-      key: '2025',
-      label: '2025: From → To',
-      render: (rows) => {
-        const r = findRecordFor(rows, (x) => x.year === 2025)
-        if (!r) return '—'
-        const to = [r.newBusinessUnit, r.newRole].filter(Boolean).join(' / ')
-        return to ? `No prior data → ${to}` : 'No Change'
-      },
-      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2025),
-    },
-    {
-      key: '2026',
-      label: '2026: From → To',
-      render: (rows) => {
-        const r = findRecordFor(rows, (x) => x.year === 2026)
-        if (!r) return '—'
-        const from = [r.previousBusinessUnit, r.previousRole].filter(Boolean).join(' / ') || '(unchanged)'
-        const to = [r.newBusinessUnit, r.newRole].filter(Boolean).join(' / ')
-        return to ? `${from} → ${to}` : 'No Change'
-      },
-      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2026),
-    },
-    {
-      key: 'employmentStatus',
-      label: 'Employment Status',
-      render: (rows) => fmtCell(rows[0]?.employmentStatus),
-      editRecord: (rows) => rows[0] ?? null,
-    },
-  ],
+// Years present in the loaded rows, not a hardcoded [2025, 2026] — tm-sheets-import.ts now
+// detects any number of year-tagged columns on the sheet, so the admin pivot needs to track
+// whatever years actually show up in the data instead of hiding anything beyond 2026.
+function distinctYears(rows: Row[]): number[] {
+  const years = new Set<number>()
+  for (const r of rows) if (typeof r.year === 'number') years.add(r.year)
+  return [...years].sort((a, b) => a - b)
 }
 
-const promotionPivot: PivotConfig = {
-  columns: [
-    { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
-    { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
-    {
-      key: '2025',
-      label: '2025 Promotion',
-      render: (rows) => {
-        const r = findRecordFor(rows, (x) => x.year === 2025)
-        if (!r) return '—'
-        return r.promoted ? `Yes${r.newGrade ? ` → ${fmtCell(r.newGrade)}` : ''}` : 'No'
+function buildMobilityPivot(rows: Row[]): PivotConfig {
+  const years = distinctYears(rows)
+  return {
+    columns: [
+      { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
+      { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
+      ...years.map((year) => ({
+        key: String(year),
+        label: `${year}: From → To`,
+        render: (personRows: Row[]) => {
+          const r = findRecordFor(personRows, (x) => x.year === year)
+          if (!r) return '—'
+          const from = [r.previousBusinessUnit, r.previousRole].filter(Boolean).join(' / ') || 'No prior data'
+          const to = [r.newBusinessUnit, r.newRole].filter(Boolean).join(' / ')
+          return to ? `${from} → ${to}` : 'No Change'
+        },
+        editRecord: (personRows: Row[]) => findRecordFor(personRows, (x) => x.year === year),
+      })),
+      {
+        key: 'employmentStatus',
+        label: 'Employment Status',
+        render: (rows) => fmtCell(rows[0]?.employmentStatus),
+        editRecord: (rows) => rows[0] ?? null,
       },
-      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2025),
-    },
-    {
-      key: '2026',
-      label: '2026 Promotion',
-      render: (rows) => {
-        const r = findRecordFor(rows, (x) => x.year === 2026)
-        if (!r) return '—'
-        return r.promoted ? `Yes${r.newGrade ? ` → ${fmtCell(r.newGrade)}` : ''}` : 'No'
+    ],
+  }
+}
+
+function buildPromotionPivot(rows: Row[]): PivotConfig {
+  const years = distinctYears(rows)
+  return {
+    columns: [
+      { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
+      { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
+      ...years.map((year) => ({
+        key: String(year),
+        label: `${year} Promotion`,
+        render: (personRows: Row[]) => {
+          const r = findRecordFor(personRows, (x) => x.year === year)
+          if (!r) return '—'
+          return r.promoted ? `Yes${r.newGrade ? ` → ${fmtCell(r.newGrade)}` : ''}` : 'No'
+        },
+        editRecord: (personRows: Row[]) => findRecordFor(personRows, (x) => x.year === year),
+      })),
+      {
+        key: 'everPromoted',
+        label: years.length > 0 ? `Ever Promoted (${years[0]}–${years[years.length - 1]})` : 'Ever Promoted',
+        render: (rows) => (rows.some((r) => r.promoted) ? 'Yes' : 'No'),
       },
-      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2026),
-    },
-    {
-      key: 'everPromoted',
-      label: 'Ever Promoted (2025–2026)',
-      render: (rows) => (rows.some((r) => r.promoted) ? 'Yes' : 'No'),
-    },
-  ],
+    ],
+  }
 }
 
 const performancePivot: PivotConfig = {
@@ -216,7 +211,10 @@ function RecordSection({
   refreshSignal?: number
   // When set, the table renders one row per person (grouped by staffId) instead of one row per
   // underlying record — see PivotConfig above.
-  pivot?: PivotConfig
+  // A static config, or a factory that builds one from the currently-loaded rows — used by
+  // Mobility/Promotion so their year columns track whatever years are actually in the data
+  // (import now detects any number of year-tagged columns) instead of being hardcoded to two.
+  pivot?: PivotConfig | ((rows: Row[]) => PivotConfig)
   // One-time cleanup endpoint for a section whose natural key isn't DB-enforced (currently just
   // Strategic Committees) — shows a "Remove duplicates" button when set.
   dedupePath?: string
@@ -286,10 +284,12 @@ function RecordSection({
     return result
   }, [rows, search, sortCol, sortDir, columns])
 
+  const resolvedPivot = useMemo(() => (typeof pivot === 'function' ? pivot(rows) : pivot), [pivot, rows])
+
   // Grouped by staffId for pivot mode — one entry per person, carrying every underlying record
   // for them so each pivot column can pick out whichever year/period it needs.
   const displayPersons = useMemo(() => {
-    if (!pivot) return []
+    if (!resolvedPivot) return []
     const groups = new Map<string, Row[]>()
     for (const r of displayRows) {
       const key = String(r.staffId ?? r[idKey])
@@ -297,7 +297,7 @@ function RecordSection({
       groups.get(key)!.push(r)
     }
     return [...groups.entries()].map(([staffId, personRows]) => ({ staffId, personRows }))
-  }, [displayRows, pivot, idKey])
+  }, [displayRows, resolvedPivot, idKey])
 
   const startEdit = (row: Row) => {
     const next: Record<string, string> = {}
@@ -556,18 +556,18 @@ function RecordSection({
           <p className="text-xs text-slate-400">No records yet.</p>
         ) : displayRows.length === 0 ? (
           <p className="text-xs text-slate-400">No records match &quot;{search}&quot;.</p>
-        ) : pivot ? (
+        ) : resolvedPivot ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-100">
-                  {pivot.columns.map((c) => <th key={c.key} className="py-1.5 pr-4 font-medium">{c.label}</th>)}
+                  {resolvedPivot.columns.map((c) => <th key={c.key} className="py-1.5 pr-4 font-medium">{c.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {displayPersons.map(({ staffId, personRows }) => (
                   <tr key={staffId} className="border-b border-slate-50">
-                    {pivot.columns.map((c) => {
+                    {resolvedPivot.columns.map((c) => {
                       const editTarget = c.editRecord?.(personRows) ?? null
                       return (
                         <td key={c.key} className="py-1.5 pr-4 text-slate-700">
@@ -783,10 +783,14 @@ export default function TalentManagementAdminPage() {
 
   if (!canAdmin) {
     return (
-      <div className="p-8">
-        <p className="text-sm text-slate-500">You don&apos;t have admin access to Talent Management.</p>
-        <Link href="/hr/talent-management" className="text-xs text-meristem-700 mt-2 inline-block">← Back to dashboard</Link>
-      </div>
+      <ErrorState
+        icon={ShieldAlert}
+        iconClassName="text-meristem-200"
+        title="Access restricted"
+        description="You don't have admin access to Talent Management."
+        href="/hr/talent-management"
+        linkLabel="← Back to dashboard"
+      />
     )
   }
 
@@ -859,7 +863,7 @@ export default function TalentManagementAdminPage() {
         icon={TrendingUp}
         apiPath="/api/hr/talent-management/promotions"
         refreshSignal={refreshSignal}
-        pivot={promotionPivot}
+        pivot={buildPromotionPivot}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
@@ -876,7 +880,7 @@ export default function TalentManagementAdminPage() {
         apiPath="/api/hr/talent-management/mobility"
         refreshSignal={refreshSignal}
         buOptions={buOptions}
-        pivot={mobilityPivot}
+        pivot={buildMobilityPivot}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },

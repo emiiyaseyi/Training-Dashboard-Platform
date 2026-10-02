@@ -63,9 +63,15 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
 
   const isSuperAdmin = session.user.isSuperAdmin
   const canSeeHr = isSuperAdmin || hasAccess(session.user.permissions?.['hr-summary'], 'view') || HR_UNIT_KEYS.some((k) => hasAccess(session.user.permissions?.[k], 'view'))
-  const visibleItems = navItems.filter(
-    (item) => isSuperAdmin || hasAccess(session.user.permissions?.[item.page], 'view')
-  )
+  // The four admin-settings nav items (Employees, Manage Records, Survey Automation, Admin
+  // Settings) are management tools, not read-only dashboards — there's nothing useful to "view"
+  // there without the ability to act, so they need the 'admin' level, not just 'view', to show up.
+  // Every other nav item still only needs 'view'.
+  const visibleItems = navItems.filter((item) => {
+    if (isSuperAdmin) return true
+    const required = item.page === 'admin-settings' ? 'admin' : 'view'
+    return hasAccess(session.user.permissions?.[item.page], required)
+  })
   const analyticsItems = visibleItems.filter((item) => navItems.indexOf(item) < ANALYTICS_PAGE_COUNT)
   const managementItems = visibleItems.filter((item) => navItems.indexOf(item) >= ANALYTICS_PAGE_COUNT)
 

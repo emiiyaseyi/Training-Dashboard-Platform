@@ -77,7 +77,7 @@ export async function computeTMMobilityTrends(filter: PeriodFilter): Promise<TMM
     year: m.year,
     fromBU: m.previousBusinessUnit,
     toBU: m.newBusinessUnit,
-    fromRole: null,
+    fromRole: m.previousRole,
     toRole: m.newRole,
   }))
 

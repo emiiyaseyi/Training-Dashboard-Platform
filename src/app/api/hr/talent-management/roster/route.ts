@@ -19,21 +19,28 @@ interface RosterItemInput {
 }
 
 async function createOne(item: RosterItemInput) {
-  const created = await prisma.talentMemberInfo.create({
-    data: {
-      staffId: item.staffId?.trim() || null,
-      name: item.name?.trim() || null,
-      email: item.email?.trim().toLowerCase() || null,
-      businessUnit: item.businessUnit?.trim() ? normalizeBUName(item.businessUnit.trim()) : null,
-      dojMeristem: item.dojMeristem ? new Date(item.dojMeristem) : null,
-      dateJoinedTM: item.dateJoinedTM ? new Date(item.dateJoinedTM) : null,
-      currentRole: item.currentRole?.trim() || null,
-      currentGrade: item.currentGrade?.trim() || null,
-      currentTier: item.currentTier != null ? Number(item.currentTier) : null,
-      gender: item.gender?.trim() || null,
-      status: item.status === 'Exited' ? 'Exited' : 'Active',
-    },
-  })
+  const staffId = item.staffId?.trim() || null
+  const data = {
+    staffId,
+    name: item.name?.trim() || null,
+    email: item.email?.trim().toLowerCase() || null,
+    businessUnit: item.businessUnit?.trim() ? normalizeBUName(item.businessUnit.trim()) : null,
+    dojMeristem: item.dojMeristem ? new Date(item.dojMeristem) : null,
+    dateJoinedTM: item.dateJoinedTM ? new Date(item.dateJoinedTM) : null,
+    currentRole: item.currentRole?.trim() || null,
+    currentGrade: item.currentGrade?.trim() || null,
+    currentTier: item.currentTier != null ? Number(item.currentTier) : null,
+    gender: item.gender?.trim() || null,
+    status: item.status === 'Exited' ? 'Exited' : 'Active',
+  }
+  // staffId has no DB-level unique constraint (adding one now would fail the next deploy if any
+  // duplicates already exist in the live data), so this is the app-level guard against a bulk
+  // paste or double-submit silently creating a second roster row for the same person — which
+  // would double-count them in every dashboard metric that follows.
+  const existing = staffId ? await prisma.talentMemberInfo.findFirst({ where: { staffId } }) : null
+  const created = existing
+    ? await prisma.talentMemberInfo.update({ where: { id: existing.id }, data })
+    : await prisma.talentMemberInfo.create({ data })
   const result = await mirrorRosterEntryToSheet(created)
   if (result.attempted) {
     await prisma.talentMemberInfo.update({

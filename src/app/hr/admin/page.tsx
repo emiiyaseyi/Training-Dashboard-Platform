@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { ShieldAlert, Sheet, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Users, Plus, Pencil, X, Loader2 } from 'lucide-react'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { HR_UNIT_KEYS, PAGE_LABELS, PERMISSION_LEVELS, PERMISSION_LEVEL_LABELS, type PageKey, type PermissionLevel } from '@/lib/permissions'
 
 interface TaStatus {
@@ -89,11 +90,12 @@ export default function HrAdminPage() {
 
   if (!isSuperAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center px-6 py-24">
-        <ShieldAlert className="w-10 h-10 text-meristem-200 mb-3" />
-        <p className="text-slate-700 font-medium">Access restricted</p>
-        <p className="text-slate-500 text-sm mt-1 max-w-sm">HR admin settings are visible to Super Admins only.</p>
-      </div>
+      <ErrorState
+        icon={ShieldAlert}
+        iconClassName="text-meristem-200"
+        title="Access restricted"
+        description="HR admin settings are visible to Super Admins only."
+      />
     )
   }
 

@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { ShieldAlert, Menu, BookOpen } from 'lucide-react'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { IdleLogout } from '@/components/auth/IdleLogout'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { hasAccess, pageKeyForPath, PAGE_LABELS } from '@/lib/permissions'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -109,14 +110,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {allowed ? (
             children
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
-              <ShieldAlert className="w-10 h-10 text-slate-300 mb-3" />
-              <p className="text-slate-700 font-medium">Access restricted</p>
-              <p className="text-slate-500 text-sm mt-1 max-w-sm">
-                You don&apos;t have permission to view {pageKey ? PAGE_LABELS[pageKey] : 'this page'}. Contact your
-                administrator if you need access.
-              </p>
-            </div>
+            <ErrorState
+              icon={ShieldAlert}
+              title="Access restricted"
+              description={`You don't have permission to view ${pageKey ? PAGE_LABELS[pageKey] : 'this page'}. Contact your administrator if you need access.`}
+            />
           )}
         </main>
       </div>

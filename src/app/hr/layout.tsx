@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ShieldAlert, Menu } from 'lucide-react'
 import { HrSidebar } from '@/components/hr/HrSidebar'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { hasAccess, pageKeyForPath, PAGE_LABELS, HR_UNIT_KEYS } from '@/lib/permissions'
 
 // Mirrors AppShell's page-key gate (src/components/layout/AppShell.tsx), restyled for HR and
@@ -51,14 +52,12 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
           {allowed ? (
             children
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
-              <ShieldAlert className="w-10 h-10 text-meristem-200 mb-3" />
-              <p className="text-slate-700 font-medium">Access restricted</p>
-              <p className="text-slate-500 text-sm mt-1 max-w-sm">
-                You don&apos;t have permission to view {pageKey ? PAGE_LABELS[pageKey] : 'this page'}. Contact your
-                administrator if you need access.
-              </p>
-            </div>
+            <ErrorState
+              icon={ShieldAlert}
+              iconClassName="text-meristem-200"
+              title="Access restricted"
+              description={`You don't have permission to view ${pageKey ? PAGE_LABELS[pageKey] : 'this page'}. Contact your administrator if you need access.`}
+            />
           )}
         </main>
       </div>

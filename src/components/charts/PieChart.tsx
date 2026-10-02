@@ -13,6 +13,10 @@ interface PieChartProps {
   donut?: boolean
   showAmounts?: boolean
   showLegend?: boolean
+  // Vertical offset of the legend below the pie (Plotly paper coordinates — more negative pushes
+  // it further down). Per-chart override for cases with many slices/long labels that need more
+  // breathing room than the default.
+  legendY?: number
 }
 
 function fmtAmount(v: number): string {
@@ -21,7 +25,7 @@ function fmtAmount(v: number): string {
   return `₦${v.toLocaleString()}`
 }
 
-export function PieChart({ labels, values, height = 300, donut = false, showAmounts = false, showLegend = true }: PieChartProps) {
+export function PieChart({ labels, values, height = 300, donut = false, showAmounts = false, showLegend = true, legendY = -0.15 }: PieChartProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -56,7 +60,7 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
       margin: showAmounts ? { t: 40, r: 100, b: 50, l: 100 } : { t: 8, r: 8, b: 8, l: 8 },
       paper_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
-      legend: { orientation: 'h', y: -0.15, font: { size: 10 } },
+      legend: { orientation: 'h', y: legendY, font: { size: 10 } },
       showlegend: showLegend,
     }
 
@@ -73,7 +77,7 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
       })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(labels), JSON.stringify(values), height, donut, showLegend])
+  }, [JSON.stringify(labels), JSON.stringify(values), height, donut, showLegend, legendY])
 
   return (
     <div ref={ref} style={{ width: '100%', minHeight: height }} className="plotly-chart" />
