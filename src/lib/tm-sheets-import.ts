@@ -10,7 +10,7 @@
 // same key. Run it again deliberately (not on a schedule) when the sheet changes.
 import { prisma } from '@/lib/prisma'
 import { connectToSpreadsheet } from '@/lib/google-sheets'
-import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaffLooseFuzzy } from '@/lib/staff-directory'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 
 async function fetchRangeUnformatted(spreadsheetId: string, sheetName: string, accessToken: string): Promise<unknown[][]> {
@@ -271,7 +271,7 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
     const name = iName != null ? s(row[iName]) : ''
     const committee = iCommittee != null ? s(row[iCommittee]) : ''
     if (!name || !committee) { skipped++; return }
-    const match = resolveStaffLoose(name, directory)
+    const match = resolveStaffLooseFuzzy(name, directory)
     if (!match) unresolved.push(name)
     const staffId = match?.staffId ?? null
 

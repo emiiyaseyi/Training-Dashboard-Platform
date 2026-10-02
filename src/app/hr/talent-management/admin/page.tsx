@@ -364,7 +364,14 @@ export default function TalentManagementAdminPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed.')
       const summary = (data.results as { sheet: string; imported: number; skipped: number; unresolved: string[]; error: string | null }[])
-        .map((r) => r.error ? `${r.sheet}: ${r.error}` : `${r.sheet}: ${r.imported} imported, ${r.skipped} skipped${r.unresolved.length ? `, ${r.unresolved.length} unresolved (${r.unresolved.join(', ')})` : ''}`)
+        .map((r) => {
+          if (r.error) return `${r.sheet}: ${r.error}`
+          let line = `${r.sheet}: ${r.imported} imported, ${r.skipped} skipped`
+          // " | " not ", " — several real names come through as "Lastname, Firstname", which would
+          // otherwise be indistinguishable from the comma separating two different names.
+          if (r.unresolved.length) line += `, ${r.unresolved.length} unresolved (${r.unresolved.join(' | ')})`
+          return line
+        })
         .join('\n')
       setImportResult(summary)
       setRefreshSignal((n) => n + 1)

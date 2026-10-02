@@ -207,10 +207,22 @@ function normalizeNameKey(name: string): string {
     .trim()
 }
 
+// First and last whitespace-separated tokens only, tolerating a present/absent middle name on
+// either side — "Damilola Hassan" vs. a roster record stored as "Damilola Ovie Hassan" are
+// obviously the same person, but neither the exact nor normalizeNameKey comparison above will
+// ever say so.
+function firstLastTokenKey(name: string): string {
+  const tokens = normalizeNameKey(name).split(' ').filter(Boolean)
+  if (tokens.length < 2) return normalizeNameKey(name)
+  return `${tokens[0]} ${tokens[tokens.length - 1]}`
+}
+
 // Like resolveStaff, but also falls back to a name match — used where the admin enters a bare
 // identifier that could be a Staff ID, email, or full name (Talent Member roster entries, TM
-// exemptions), rather than a form field that's known to be one or the other. Tries an exact
-// (case-insensitive) match first, then a dash/whitespace-normalized one (see normalizeNameKey).
+// exemptions), rather than a form field that's known to be one or the other. Tries, in order: an
+// exact (case-insensitive) match, a dash/whitespace-normalized one (normalizeNameKey), "Lastname,
+// Firstname" un-reversed (common in sheets exported/sorted by surname), then first+last token
+// only (tolerating a middle name present on one side but not the other).
 export function resolveStaffLoose(identifier: string, directory: Map<string, ResolvedStaff>): ResolvedStaff | null {
   const byIdOrEmail = resolveStaff(identifier, directory)
   if (byIdOrEmail) return byIdOrEmail
@@ -223,6 +235,33 @@ export function resolveStaffLoose(identifier: string, directory: Map<string, Res
   if (!normalizedQuery) return null
   for (const staff of directory.values()) {
     if (normalizeNameKey(staff.name) === normalizedQuery) return staff
+  }
+  if (identifier.includes(',')) {
+    const [last, first] = identifier.split(',', 2).map((p) => p.trim())
+    if (last && first) {
+      const reversed = normalizeNameKey(`${first} ${last}`)
+      for (const staff of directory.values()) {
+        if (normalizeNameKey(staff.name) === reversed) return staff
+      }
+    }
+  }
+  return null
+}
+
+// Looser than resolveStaffLoose: also matches on first+last token only, tolerating a middle name
+// present on one side but not the other (see firstLastTokenKey). Deliberately NOT folded into
+// resolveStaffLoose itself, which is used all over the app (survey attendee matching, training
+// records, etc.) where collapsing two different people who share a first+last name into one would
+// be a real, silent harm (crediting/surveying the wrong person). This fuzzier match is only safe
+// where a human reviews "resolved" vs. "not resolved" before anything is acted on — currently just
+// the Talent Member roster and the TM sheet import's Strategic Teams resolution.
+export function resolveStaffLooseFuzzy(identifier: string, directory: Map<string, ResolvedStaff>): ResolvedStaff | null {
+  const exact = resolveStaffLoose(identifier, directory)
+  if (exact) return exact
+  const queryTokenKey = firstLastTokenKey(identifier.includes(',') ? identifier.split(',').reverse().join(' ') : identifier)
+  if (!queryTokenKey) return null
+  for (const staff of directory.values()) {
+    if (firstLastTokenKey(staff.name) === queryTokenKey) return staff
   }
   return null
 }
@@ -242,7 +281,7 @@ export function resolveStaffLooseAny(
     if (match) return match
   }
   if (e.name) {
-    const match = resolveStaffLoose(e.name, directory)
+    const match = resolveStaffLooseFuzzy(e.name, directory)
     if (match) return match
   }
   if (e.email) {
