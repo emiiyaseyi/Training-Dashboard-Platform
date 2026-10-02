@@ -619,7 +619,7 @@ function ResolveUnresolvedName({ name, committee, onResolved }: { name: string; 
   )
 }
 
-function ImportIssuesPanel({ results, onResolved }: { results: TMImportSheetResultClient[]; onResolved: () => void }) {
+function ImportIssuesPanel({ results, onResolved }: { results: TMImportSheetResultClient[]; onResolved: (sheet: string, name: string, committee?: string) => void }) {
   return (
     <div className="space-y-3">
       {results.map((r) => (
@@ -643,7 +643,7 @@ function ImportIssuesPanel({ results, onResolved }: { results: TMImportSheetResu
                 {r.unresolved.map((u, i) => (
                   <li key={i} className="py-0.5">
                     {u.name}{u.committee ? ` (${u.committee})` : ''}
-                    {u.committee && <ResolveUnresolvedName name={u.name} committee={u.committee} onResolved={onResolved} />}
+                    {u.committee && <ResolveUnresolvedName name={u.name} committee={u.committee} onResolved={() => onResolved(r.sheet, u.name, u.committee)} />}
                   </li>
                 ))}
               </ul>
@@ -724,7 +724,15 @@ export default function TalentManagementAdminPage() {
         <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{importError}</p>
       )}
       {importResults && (
-        <ImportIssuesPanel results={importResults} onResolved={() => setRefreshSignal((n) => n + 1)} />
+        <ImportIssuesPanel
+          results={importResults}
+          onResolved={(sheet, name, committee) => {
+            setImportResults((prev) =>
+              prev?.map((r) => r.sheet !== sheet ? r : { ...r, unresolved: r.unresolved.filter((u) => !(u.name === name && u.committee === committee)) }) ?? null
+            )
+            setRefreshSignal((n) => n + 1)
+          }}
+        />
       )}
 
       <RecordSection

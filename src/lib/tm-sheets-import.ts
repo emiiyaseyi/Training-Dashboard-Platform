@@ -298,6 +298,7 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
   if (rows.length === 0) return { sheet: 'TM Strategic Teams', tabName: sheetName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: null }
   const [header, ...body] = rows
   const idx = headerIndex(header)
+  const iEmpId = idx.get('emp. id') ?? idx.get('emp id')
   const iName = idx.get('name')
   const iCommittee = idx.get('strategic committee')
 
@@ -331,10 +332,11 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
       skippedDetails.push({ identifier: name || '(blank row)', reason: !name ? 'No Name in this row' : 'No Strategic Committee value' })
       return Promise.resolve()
     }
-    // Resolved name is already canonical (comes straight from the matched directory record) —
-    // this sheet has no Staff ID of its own to borrow from, so name-matching (with the comma-
-    // reversal/middle-name fallbacks in resolveStaffLooseFuzzy) is still how this one resolves.
-    const match = resolveStaffLooseFuzzy(name, directory)
+    // Prefer a Staff ID on this row if the sheet has one — exact and reliable, unlike matching by
+    // name — falling back to name-matching (comma-reversal/middle-name tolerant) only when there's
+    // no ID column or this row's ID doesn't resolve to anyone.
+    const rowStaffId = iEmpId != null ? s(row[iEmpId]) : ''
+    const match = (rowStaffId && resolveStaff(rowStaffId, directory)) || resolveStaffLooseFuzzy(name, directory)
     if (!match) unresolved.push({ name, committee })
     const staffId = match?.staffId ?? null
     const lockKey = `${staffId ?? name.trim().toLowerCase()}|${committee}`
@@ -351,7 +353,17 @@ async function importStrategicTeams(spreadsheetId: string, sheetName: string, ac
       imported++
     })
   }))
-  return { sheet: 'TM Strategic Teams', tabName: sheetName, imported, skipped, skippedDetails, unresolved, error: null }
+  // Collapse exact duplicate (name, committee) pairs in the report — the sheet itself sometimes
+  // has the same person listed twice for the same committee, which otherwise shows up as two
+  // identical entries in the unresolved list for no obvious reason.
+  const seenUnresolved = new Set<string>()
+  const dedupedUnresolved = unresolved.filter((u) => {
+    const key = `${u.name.trim().toLowerCase()}|${u.committee}`
+    if (seenUnresolved.has(key)) return false
+    seenUnresolved.add(key)
+    return true
+  })
+  return { sheet: 'TM Strategic Teams', tabName: sheetName, imported, skipped, skippedDetails, unresolved: dedupedUnresolved, error: null }
 }
 
 // TM Performance Appraisal -> PerformanceAppraisalRecord. One row in -> up to 3 rows out (H1 2025,
@@ -419,18 +431,20 @@ export async function importTMDataFromSheets(): Promise<TMImportResult> {
     { label: 'TM Performance Appraisal', tabName: config.tmPerformanceAppraisalSheetName, run: importPerformanceAppraisal },
   ]
 
-  const results: TMImportSheetResult[] = []
-  for (const sheet of sheets) {
+  // Each sheet is independent (none reads another's just-written data — all five resolve against
+  // the same `directory` loaded once above, not against each other's output), so they run
+  // concurrently instead of one at a time. Five sequential Sheets-API reads plus their processing
+  // was the main remaining contributor to the import exceeding Vercel's 60s limit.
+  const results = await Promise.all(sheets.map(async (sheet): Promise<TMImportSheetResult> => {
     if (!sheet.tabName) {
-      results.push({ sheet: sheet.label, tabName: null, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: 'No tab name configured under Admin -> Live Data Source.' })
-      continue
+      return { sheet: sheet.label, tabName: null, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: 'No tab name configured under Admin -> Live Data Source.' }
     }
     try {
-      results.push(await sheet.run(connection.spreadsheetId, sheet.tabName, connection.accessToken, directory))
+      return await sheet.run(connection.spreadsheetId, sheet.tabName, connection.accessToken, directory)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error.'
-      results.push({ sheet: sheet.label, tabName: sheet.tabName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: message })
+      return { sheet: sheet.label, tabName: sheet.tabName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: message }
     }
-  }
+  }))
   return { results }
 }

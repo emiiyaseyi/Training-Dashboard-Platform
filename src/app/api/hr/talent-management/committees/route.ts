@@ -41,11 +41,15 @@ export async function POST(req: NextRequest) {
     const saved = []
     for (const item of valid) {
       const staffId = item.staffId?.trim() || null
-      const existing = staffId
-        ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee: item.committee.trim() } })
-        : await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name: item.name.trim(), committee: item.committee.trim() } })
+      // Always check for a previously-unresolved row (staffId: null) for this exact name+committee
+      // FIRST, even when a new Staff ID is being supplied — that's exactly the "resolve an
+      // unresolved name" case, and searching only by the new staffId would never find that row
+      // (it doesn't have that staffId yet), creating a stray duplicate instead of fixing it.
+      const existing =
+        (await prisma.strategicCommitteeRecord.findFirst({ where: { staffId: null, name: item.name.trim(), committee: item.committee.trim() } })) ??
+        (staffId ? await prisma.strategicCommitteeRecord.findFirst({ where: { staffId, committee: item.committee.trim() } }) : null)
       const record = existing
-        ? await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { name: item.name.trim() } })
+        ? await prisma.strategicCommitteeRecord.update({ where: { id: existing.id }, data: { staffId, name: item.name.trim() } })
         : await prisma.strategicCommitteeRecord.create({ data: { staffId, name: item.name.trim(), committee: item.committee.trim() } })
       saved.push(await syncToSheet(record))
     }
