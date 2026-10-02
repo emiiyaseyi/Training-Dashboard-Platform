@@ -672,21 +672,40 @@ export default function TalentManagementAdminPage() {
       .catch(() => {})
   }, [])
 
+  // One request per sheet, run one at a time — each gets its own fresh Vercel time budget instead
+  // of all 5 sheets having to finish inside one request's 60s window. Results stream into the
+  // panel as each sheet finishes, so the admin isn't staring at nothing until the whole run ends.
+  const TM_SHEET_KEYS: { key: string; label: string }[] = [
+    { key: 'talentMembersInfo', label: 'Talent Members Info' },
+    { key: 'mobility', label: 'TM Internal Mobility' },
+    { key: 'promotion', label: 'TM Promotion' },
+    { key: 'strategicTeams', label: 'TM Strategic Teams' },
+    { key: 'performanceAppraisal', label: 'TM Performance Appraisal' },
+  ]
+
   const runImport = async () => {
     setImporting(true)
-    setImportResults(null)
+    setImportResults([])
     setImportError(null)
-    try {
-      const res = await fetch('/api/admin/talent-management/import-from-sheets', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Import failed.')
-      setImportResults(data.results as TMImportSheetResultClient[])
-      setRefreshSignal((n) => n + 1)
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Import failed.')
-    } finally {
-      setImporting(false)
+    for (const sheet of TM_SHEET_KEYS) {
+      try {
+        const res = await fetch('/api/admin/talent-management/import-from-sheets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheet: sheet.key }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Import failed.')
+        setImportResults((prev) => [...(prev ?? []), data as TMImportSheetResultClient])
+      } catch (err) {
+        setImportResults((prev) => [...(prev ?? []), {
+          sheet: sheet.label, imported: 0, skipped: 0, skippedDetails: [], unresolved: [],
+          error: err instanceof Error ? err.message : 'Import failed.',
+        }])
+      }
     }
+    setRefreshSignal((n) => n + 1)
+    setImporting(false)
   }
 
   if (!canAdmin) {

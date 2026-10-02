@@ -114,10 +114,6 @@ export interface TMImportSheetResult {
   error: string | null
 }
 
-export interface TMImportResult {
-  results: TMImportSheetResult[]
-}
-
 // Talent Members Info -> TalentMemberInfo. Upserted by Staff ID (created if new). A row with no
 // Emp. ID at all is skipped — this table is the roster itself, so an unidentifiable row can't be
 // usefully stored.
@@ -450,41 +446,39 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
   return { sheet: 'TM Performance Appraisal', tabName: sheetName, imported, skipped, skippedDetails, unresolved: [], error: null }
 }
 
-export async function importTMDataFromSheets(): Promise<TMImportResult> {
+export const TM_SHEET_KEYS = ['talentMembersInfo', 'mobility', 'promotion', 'strategicTeams', 'performanceAppraisal'] as const
+export type TMSheetKey = (typeof TM_SHEET_KEYS)[number]
+
+const SHEET_DEFS: Record<TMSheetKey, { label: string; tabNameField: 'talentMemberSheetName' | 'tmInternalMobilitySheetName' | 'tmPromotionSheetName' | 'tmStrategicTeamsSheetName' | 'tmPerformanceAppraisalSheetName'; run: (spreadsheetId: string, tabName: string, accessToken: string, directory: Map<string, ResolvedStaff>) => Promise<TMImportSheetResult> }> = {
+  talentMembersInfo: { label: 'Talent Members Info', tabNameField: 'talentMemberSheetName', run: importTalentMembersInfo },
+  mobility: { label: 'TM Internal Mobility', tabNameField: 'tmInternalMobilitySheetName', run: importMobility },
+  promotion: { label: 'TM Promotion', tabNameField: 'tmPromotionSheetName', run: importPromotions },
+  strategicTeams: { label: 'TM Strategic Teams', tabNameField: 'tmStrategicTeamsSheetName', run: importStrategicTeams },
+  performanceAppraisal: { label: 'TM Performance Appraisal', tabNameField: 'tmPerformanceAppraisalSheetName', run: importPerformanceAppraisal },
+}
+
+// Imports exactly ONE sheet, as its own independent unit of work — the admin page calls this once
+// per sheet (5 separate requests) instead of one request doing all 5, because even with DB writes
+// bounded to the connection pool, all 5 sheets' reads + writes back-to-back in a single HTTP
+// request still didn't reliably fit Vercel's 60s function limit. One sheet at a time does, with
+// headroom, and the admin page shows each sheet's result as soon as it lands instead of waiting
+// for every sheet to finish before showing anything.
+export async function importOneTMSheet(key: TMSheetKey): Promise<TMImportSheetResult> {
+  const def = SHEET_DEFS[key]
   const config = await prisma.googleSheetsConfig.findFirst()
   if (!config?.spreadsheetUrl) {
     throw new Error('No spreadsheet configured under Admin -> Live Data Source.')
   }
-  const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-  // Loaded once and passed to every importer — each one resolves its sheet's Staff ID against
-  // this to pull the canonical name from the Staff Roster, instead of trusting whatever got typed
-  // into the TM sheet's own Name column (a nickname, a different word order, an old surname).
-  const directory = await loadRosterDirectory()
-
-  const sheets: { label: string; tabName: string | null; run: (spreadsheetId: string, tabName: string, accessToken: string, directory: Map<string, ResolvedStaff>) => Promise<TMImportSheetResult> }[] = [
-    { label: 'Talent Members Info', tabName: config.talentMemberSheetName, run: importTalentMembersInfo },
-    { label: 'TM Internal Mobility', tabName: config.tmInternalMobilitySheetName, run: importMobility },
-    { label: 'TM Promotion', tabName: config.tmPromotionSheetName, run: importPromotions },
-    { label: 'TM Strategic Teams', tabName: config.tmStrategicTeamsSheetName, run: importStrategicTeams },
-    { label: 'TM Performance Appraisal', tabName: config.tmPerformanceAppraisalSheetName, run: importPerformanceAppraisal },
-  ]
-
-  // Sequential, not concurrent — each sheet's own row processing is already bounded to 3 at a
-  // time (mapWithConcurrency); running all 5 sheets at once on TOP of that would still multiply
-  // past the DB pool's 5 connections. Sheets-API reads (not pool-limited) stay the only cost of
-  // sequencing this way, which is small next to the DB write volume.
-  const results: TMImportSheetResult[] = []
-  for (const sheet of sheets) {
-    if (!sheet.tabName) {
-      results.push({ sheet: sheet.label, tabName: null, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: 'No tab name configured under Admin -> Live Data Source.' })
-      continue
-    }
-    try {
-      results.push(await sheet.run(connection.spreadsheetId, sheet.tabName, connection.accessToken, directory))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error.'
-      results.push({ sheet: sheet.label, tabName: sheet.tabName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: message })
-    }
+  const tabName = config[def.tabNameField]
+  if (!tabName) {
+    return { sheet: def.label, tabName: null, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: 'No tab name configured under Admin -> Live Data Source.' }
   }
-  return { results }
+  const connection = await connectToSpreadsheet(config.spreadsheetUrl)
+  const directory = await loadRosterDirectory()
+  try {
+    return await def.run(connection.spreadsheetId, tabName, connection.accessToken, directory)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error.'
+    return { sheet: def.label, tabName, imported: 0, skipped: 0, skippedDetails: [], unresolved: [], error: message }
+  }
 }
