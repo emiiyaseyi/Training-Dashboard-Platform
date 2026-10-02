@@ -259,7 +259,7 @@ export default function TalentManagementAdminPage() {
             {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
             Import from Sheets
           </button>
-          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">One-time/occasional bootstrap from the configured Talent Management tabs — safe to re-run, never overwrites a record you've since corrected here with stale sheet data for a different key.</p>
+          <p className="text-[10px] text-slate-400 mt-1 max-w-xs">One-time/occasional bootstrap from the configured Talent Management tabs — safe to re-run, never overwrites a record you&apos;ve since corrected here with stale sheet data for a different key.</p>
         </div>
       </div>
 
