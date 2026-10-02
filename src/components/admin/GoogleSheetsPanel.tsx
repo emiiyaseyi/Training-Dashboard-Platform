@@ -13,6 +13,10 @@ interface ConfigState {
   rosterSheetName: string
   comprehensiveStaffListSheetName: string
   talentMemberSheetName: string
+  tmInternalMobilitySheetName: string
+  tmPromotionSheetName: string
+  tmStrategicTeamsSheetName: string
+  tmPerformanceAppraisalSheetName: string
   autoSyncEnabled: boolean
   syncFrequencyMinutes: number
 }
@@ -73,6 +77,10 @@ const DEFAULT_STATE: ConfigState = {
   rosterSheetName: '',
   comprehensiveStaffListSheetName: '',
   talentMemberSheetName: '',
+  tmInternalMobilitySheetName: '',
+  tmPromotionSheetName: '',
+  tmStrategicTeamsSheetName: '',
+  tmPerformanceAppraisalSheetName: '',
   autoSyncEnabled: false,
   syncFrequencyMinutes: 60,
 }
@@ -117,6 +125,10 @@ export function GoogleSheetsPanel() {
         rosterSheetName: data.rosterSheetName || '',
         comprehensiveStaffListSheetName: data.comprehensiveStaffListSheetName || '',
         talentMemberSheetName: data.talentMemberSheetName || '',
+        tmInternalMobilitySheetName: data.tmInternalMobilitySheetName || '',
+        tmPromotionSheetName: data.tmPromotionSheetName || '',
+        tmStrategicTeamsSheetName: data.tmStrategicTeamsSheetName || '',
+        tmPerformanceAppraisalSheetName: data.tmPerformanceAppraisalSheetName || '',
         autoSyncEnabled: !!data.autoSyncEnabled,
         syncFrequencyMinutes: data.syncFrequencyMinutes || 60,
       })
@@ -387,12 +399,66 @@ export function GoogleSheetsPanel() {
             <input
               value={state.talentMemberSheetName}
               onChange={(e) => setState({ ...state, talentMemberSheetName: e.target.value })}
-              placeholder="Talent Members"
+              placeholder="Talent Members Info"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
             />
             <p className="text-[11px] text-slate-400 mt-1">
-              Not read from — this is a one-way export. The Talent Member roster itself is managed from the Talent Members page (add by
-              name/Staff ID/email); every addition there is mirrored into this tab so you have an external copy.
+              Not read from day-to-day — this is a one-way export. The Talent Member roster itself is managed from the Talent Management
+              admin page (/hr/talent-management/admin); every add/edit there is mirrored into this tab so you have an external copy. The
+              one exception is the one-time &quot;Import from Sheets&quot; action on that admin page, which reads this tab to bootstrap the
+              roster the first time.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              TM Internal Mobility tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.tmInternalMobilitySheetName}
+              onChange={(e) => setState({ ...state, tmInternalMobilitySheetName: e.target.value })}
+              placeholder="TM Internal Mobility"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              TM Promotion tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.tmPromotionSheetName}
+              onChange={(e) => setState({ ...state, tmPromotionSheetName: e.target.value })}
+              placeholder="TM Promotion"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              TM Strategic Teams tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.tmStrategicTeamsSheetName}
+              onChange={(e) => setState({ ...state, tmStrategicTeamsSheetName: e.target.value })}
+              placeholder="TM Strategic Teams"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              TM Performance Appraisal tab name <span className="text-slate-400 font-normal">(optional)</span>
+            </label>
+            <input
+              value={state.tmPerformanceAppraisalSheetName}
+              onChange={(e) => setState({ ...state, tmPerformanceAppraisalSheetName: e.target.value })}
+              placeholder="TM Performance Appraisal"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              These four TM tabs are only read by the one-time &quot;Import from Sheets&quot; action on the Talent Management admin page —
+              not part of Sync Now/Preview, and not auto-synced on a schedule.
             </p>
           </div>
 

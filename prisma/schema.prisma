@@ -163,24 +163,29 @@ model PromotionRecord {
   sheetSyncedAt  DateTime?
   sheetSyncError String?
 
+  @@unique([staffId, year])
   @@index([staffId])
   @@index([year])
 }
 
 // One row per year a TM member's BU/role was reviewed for a move — replaces the old sheet's wide
 // "2025 New BU / 2025 New Role, 2026 New BU / 2026 New Role" column layout, same reasoning as
-// PromotionRecord above.
+// PromotionRecord above. employmentStatus carries the sheet's own "Employment Status" (Active/
+// Exited) per row — a person can leave the org without ever being removed from TalentMemberInfo's
+// own Status in sync, so this is checked independently when the dashboard decides who counts.
 model MobilityRecord {
-  id              String    @id @default(cuid())
-  staffId         String
-  year            Int
-  newBusinessUnit String?
-  newRole         String?
-  changeStatus    String? // e.g. "Changed", "No Change"
-  createdAt       DateTime  @default(now())
-  sheetSyncedAt   DateTime?
-  sheetSyncError  String?
+  id               String    @id @default(cuid())
+  staffId          String
+  year             Int
+  newBusinessUnit  String?
+  newRole          String?
+  changeStatus     String? // "Changed" | "No Change", derived per year
+  employmentStatus String    @default("Active") // "Active" | "Exited"
+  createdAt        DateTime  @default(now())
+  sheetSyncedAt    DateTime?
+  sheetSyncError   String?
 
+  @@unique([staffId, year])
   @@index([staffId])
   @@index([year])
 }
@@ -197,6 +202,7 @@ model PerformanceAppraisalRecord {
   sheetSyncedAt  DateTime?
   sheetSyncError String?
 
+  @@unique([staffId, period])
   @@index([staffId])
   @@index([period])
 }

@@ -33,6 +33,10 @@ export async function POST(req: NextRequest) {
       rosterSheetName: body.rosterSheetName || null,
       comprehensiveStaffListSheetName: body.comprehensiveStaffListSheetName || null,
       talentMemberSheetName: body.talentMemberSheetName || null,
+      tmInternalMobilitySheetName: body.tmInternalMobilitySheetName || null,
+      tmPromotionSheetName: body.tmPromotionSheetName || null,
+      tmStrategicTeamsSheetName: body.tmStrategicTeamsSheetName || null,
+      tmPerformanceAppraisalSheetName: body.tmPerformanceAppraisalSheetName || null,
       autoSyncEnabled: !!body.autoSyncEnabled,
       syncFrequencyMinutes: body.syncFrequencyMinutes ? parseInt(body.syncFrequencyMinutes) : 60,
     }
