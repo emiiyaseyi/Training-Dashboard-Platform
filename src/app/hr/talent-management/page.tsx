@@ -151,15 +151,14 @@ export default function TalentManagementPage() {
             <p className="text-sm font-bold text-slate-800 mb-1">Average Performance Score</p>
             <p className="text-xs text-slate-400 mb-3">TM pool, by half-year</p>
             {data && (
-              <div className="grid grid-cols-3 gap-3">
-                {data.performanceByPeriod.map((p) => (
-                  <div key={p.period} className="text-center">
-                    <p className="text-lg font-bold text-slate-800 tabular-nums">{pct(p.avgScorePct)}</p>
-                    <p className="text-[11px] text-slate-400">{Math.round(p.avgScoreOutOf5 * 10) / 10}/5</p>
-                    <p className="text-[11px] text-slate-500 mt-1">{p.period}</p>
-                  </div>
-                ))}
-              </div>
+              <BarChart
+                labels={data.performanceByPeriod.map((p) => p.period)}
+                values={data.performanceByPeriod.map((p) => p.avgScorePct)}
+                labelText={data.performanceByPeriod.map((p) => `${pct(p.avgScorePct)} (${Math.round(p.avgScoreOutOf5 * 10) / 10}/5)`)}
+                color="#9A4A2E"
+                showLabels
+                height={220}
+              />
             )}
           </div>
         </div>
