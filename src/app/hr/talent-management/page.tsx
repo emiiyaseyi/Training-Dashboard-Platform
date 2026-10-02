@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Users2, TrendingUp, Repeat, Award, GraduationCap, Settings } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
+import { TmSubNav } from '@/components/hr/tm/TmSubNav'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -74,6 +75,7 @@ export default function TalentManagementPage() {
           </div>
         }
       />
+      <TmSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
