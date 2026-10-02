@@ -66,7 +66,12 @@ export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashbo
   const promotionRatePct = totalTMPool > 0 ? (promotedCount / totalTMPool) * 100 : 0
 
   // --- Internal Mobility Rate ---
-  const movedStaffIds = new Set(mobility.filter((m) => activeStaffIds.has(m.staffId)).map((m) => m.staffId))
+  // Every active member now gets a MobilityRecord for both years (see tm-sheets-import.ts), "No
+  // Change" included, so this must filter to changeStatus === 'Changed' — without it, everyone
+  // having a row at all would read as 100% moved.
+  const movedStaffIds = new Set(
+    mobility.filter((m) => m.changeStatus === 'Changed' && activeStaffIds.has(m.staffId)).map((m) => m.staffId)
+  )
   const mobilityCount = movedStaffIds.size
   const mobilityRatePct = totalTMPool > 0 ? (mobilityCount / totalTMPool) * 100 : 0
 
@@ -88,12 +93,12 @@ export async function computeTMDashboard(filter: PeriodFilter): Promise<TMDashbo
     values: ['0–2 yrs', '3–5 yrs', '6–10 yrs', '10+ yrs'].map((l) => bucketCounts[l]),
   }
 
-  // --- Performance (0–1 scale from the sheet; displayed as % bold + /5 small) ---
+  // --- Performance (stored 0–100; displayed as % bold + /5 small) ---
   const periods = ['H1 2025', 'H2 2025', 'H1 2026']
   const performanceByPeriod = periods.map((period) => {
     const scores = performance.filter((p) => p.period === period && activeStaffIds.has(p.staffId) && p.score != null).map((p) => p.score as number)
     const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-    return { period, avgScorePct: avg * 100, avgScoreOutOf5: avg * 5 }
+    return { period, avgScorePct: avg, avgScoreOutOf5: avg / 20 }
   })
 
   // --- Strategic Committee Involvement ---

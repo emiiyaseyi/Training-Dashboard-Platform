@@ -75,10 +75,14 @@ export async function mirrorPerformanceToSheet(record: PerformanceAppraisalRecor
   if (!target) return { attempted: false, success: false, message: 'No TM Performance Appraisal sheet configured under Admin -> Live Data Source.' }
 
   try {
+    // Database stores 0-100 throughout; the sheet keeps its own original 0-1 decimal convention —
+    // this is the one place that gets converted back on the way out (see tm-sheets-import.ts's
+    // importPerformanceAppraisal for the matching *100 on the way in).
+    const sheetScore = record.score != null ? String(record.score / 100) : ''
     const periodCandidates = [record.period.toLowerCase()]
     const updates = [
       { columnCandidates: NAME_CANDIDATES, value: record.name || '' },
-      { columnCandidates: periodCandidates, value: record.score != null ? String(record.score) : '' },
+      { columnCandidates: periodCandidates, value: sheetScore },
     ]
     const result = await updateRowByKey(target.spreadsheetId, target.sheetName, target.accessToken, STAFFID_CANDIDATES, record.staffId, updates)
     if (result.rowFound) return { attempted: true, success: true, message: `Updated existing row in "${target.sheetName}".` }
@@ -86,7 +90,7 @@ export async function mirrorPerformanceToSheet(record: PerformanceAppraisalRecor
     const fields: MirrorField[] = [
       { label: 'Emp. ID', candidates: STAFFID_CANDIDATES, value: record.staffId },
       { label: 'Name', candidates: NAME_CANDIDATES, value: record.name || '' },
-      { label: record.period, candidates: periodCandidates, value: record.score != null ? String(record.score) : '' },
+      { label: record.period, candidates: periodCandidates, value: sheetScore },
     ]
     await appendMirrorRow(target.spreadsheetId, target.sheetName, target.accessToken, fields)
     return { attempted: true, success: true, message: `Synced to "${target.sheetName}".` }

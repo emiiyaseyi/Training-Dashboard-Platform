@@ -14,7 +14,9 @@ export async function GET() {
 }
 
 interface MobilityItemInput {
-  staffId: string; name?: string; year: number; newBusinessUnit?: string; newRole?: string; employmentStatus?: string
+  staffId: string; name?: string; year: number
+  previousBusinessUnit?: string; previousRole?: string
+  newBusinessUnit?: string; newRole?: string; employmentStatus?: string
 }
 
 const bu = (v?: string) => (v?.trim() ? normalizeBUName(v.trim()) : null)
@@ -42,16 +44,20 @@ export async function POST(req: NextRequest) {
     const saved = []
     for (const item of valid) {
       const newBusinessUnit = bu(item.newBusinessUnit)
+      const previousBusinessUnit = bu(item.previousBusinessUnit)
       const record = await prisma.mobilityRecord.upsert({
         where: { staffId_year: { staffId: item.staffId.trim(), year: Number(item.year) } },
         create: {
           staffId: item.staffId.trim(), name: item.name?.trim() || null, year: Number(item.year),
+          previousBusinessUnit, previousRole: item.previousRole?.trim() || null,
           newBusinessUnit, newRole: item.newRole?.trim() || null,
           changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
           employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
         },
         update: {
-          name: item.name?.trim() || null, newBusinessUnit, newRole: item.newRole?.trim() || null,
+          name: item.name?.trim() || null,
+          previousBusinessUnit, previousRole: item.previousRole?.trim() || null,
+          newBusinessUnit, newRole: item.newRole?.trim() || null,
           changeStatus: (newBusinessUnit || item.newRole?.trim()) ? 'Changed' : 'No Change',
           employmentStatus: item.employmentStatus === 'Exited' ? 'Exited' : 'Active',
         },
@@ -77,10 +83,12 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Staff ID and Year are required.' }, { status: 400 })
     }
     const newBusinessUnit = bu(body.newBusinessUnit)
+    const previousBusinessUnit = bu(body.previousBusinessUnit)
     const updated = await prisma.mobilityRecord.update({
       where: { id: body.id },
       data: {
         staffId: body.staffId.trim(), name: body.name?.trim() || null, year: Number(body.year),
+        previousBusinessUnit, previousRole: body.previousRole?.trim() || null,
         newBusinessUnit, newRole: body.newRole?.trim() || null,
         changeStatus: (newBusinessUnit || body.newRole?.trim()) ? 'Changed' : 'No Change',
         employmentStatus: body.employmentStatus === 'Exited' ? 'Exited' : 'Active',

@@ -15,6 +15,13 @@ interface FieldConfig {
   placeholder?: string
   options?: string[] // for type: 'select' — a static list, or left empty to use `dynamicOptions` (BU list)
   dynamicOptions?: 'businessUnit' // fetched once and shared across all sections that need it
+  defaultValue?: () => string // actual pre-filled value for a fresh Add form, not just a placeholder
+}
+
+function defaultForm(fields: FieldConfig[]): Record<string, string> {
+  const form: Record<string, string> = {}
+  for (const f of fields) if (f.defaultValue) form[f.key] = f.defaultValue()
+  return form
 }
 
 type Row = Record<string, unknown>
@@ -37,11 +44,141 @@ function fmtYears(years: number | null): string {
   return `${Math.round(years * 10) / 10} yrs`
 }
 
+// H1 if the current month is Jan-Jun, H2 if Jul-Dec — matches the calendar halves already used
+// throughout this sheet (H1 2025 / H2 2025 / H1 2026), so a new appraisal record defaults to the
+// period that's actually current instead of an arbitrary placeholder.
+function currentHalfYearPeriod(): string {
+  const now = new Date()
+  const half = now.getMonth() < 6 ? 'H1' : 'H2'
+  return `${half} ${now.getFullYear()}`
+}
+
+function findRecordFor(rows: Row[], match: (r: Row) => boolean): Row | null {
+  return rows.find(match) ?? null
+}
+
+const mobilityPivot: PivotConfig = {
+  columns: [
+    { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
+    { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
+    {
+      key: '2025',
+      label: '2025: From → To',
+      render: (rows) => {
+        const r = findRecordFor(rows, (x) => x.year === 2025)
+        if (!r) return '—'
+        const to = [r.newBusinessUnit, r.newRole].filter(Boolean).join(' / ')
+        return to ? `No prior data → ${to}` : 'No Change'
+      },
+      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2025),
+    },
+    {
+      key: '2026',
+      label: '2026: From → To',
+      render: (rows) => {
+        const r = findRecordFor(rows, (x) => x.year === 2026)
+        if (!r) return '—'
+        const from = [r.previousBusinessUnit, r.previousRole].filter(Boolean).join(' / ') || '(unchanged)'
+        const to = [r.newBusinessUnit, r.newRole].filter(Boolean).join(' / ')
+        return to ? `${from} → ${to}` : 'No Change'
+      },
+      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2026),
+    },
+    {
+      key: 'employmentStatus',
+      label: 'Employment Status',
+      render: (rows) => fmtCell(rows[0]?.employmentStatus),
+      editRecord: (rows) => rows[0] ?? null,
+    },
+  ],
+}
+
+const promotionPivot: PivotConfig = {
+  columns: [
+    { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
+    { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
+    {
+      key: '2025',
+      label: '2025 Promotion',
+      render: (rows) => {
+        const r = findRecordFor(rows, (x) => x.year === 2025)
+        if (!r) return '—'
+        return r.promoted ? `Yes${r.newGrade ? ` → ${fmtCell(r.newGrade)}` : ''}` : 'No'
+      },
+      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2025),
+    },
+    {
+      key: '2026',
+      label: '2026 Promotion',
+      render: (rows) => {
+        const r = findRecordFor(rows, (x) => x.year === 2026)
+        if (!r) return '—'
+        return r.promoted ? `Yes${r.newGrade ? ` → ${fmtCell(r.newGrade)}` : ''}` : 'No'
+      },
+      editRecord: (rows) => findRecordFor(rows, (x) => x.year === 2026),
+    },
+    {
+      key: 'everPromoted',
+      label: 'Ever Promoted (2025–2026)',
+      render: (rows) => (rows.some((r) => r.promoted) ? 'Yes' : 'No'),
+    },
+  ],
+}
+
+const performancePivot: PivotConfig = {
+  columns: [
+    { key: 'staffId', label: 'Emp. ID', render: (rows) => fmtCell(rows[0]?.staffId) },
+    { key: 'name', label: 'Name', render: (rows) => fmtCell(rows[0]?.name) },
+    ...['H1 2025', 'H2 2025', 'H1 2026'].map((period) => ({
+      key: period,
+      label: period,
+      render: (rows: Row[]) => {
+        const r = findRecordFor(rows, (x) => x.period === period)
+        return r?.score != null ? `${Math.round(Number(r.score) * 10) / 10}` : '—'
+      },
+      editRecord: (rows: Row[]) => findRecordFor(rows, (x) => x.period === period),
+    })),
+    {
+      key: 'trend',
+      label: 'Trend',
+      render: (rows) => {
+        const scores = ['H1 2025', 'H2 2025', 'H1 2026']
+          .map((p) => findRecordFor(rows, (x) => x.period === p)?.score)
+          .filter((s): s is number => s != null)
+        if (scores.length < 2) return '—'
+        const delta = Number(scores[scores.length - 1]) - Number(scores[0])
+        if (Math.abs(delta) < 0.5) return 'Flat'
+        return delta > 0 ? `▲ +${Math.round(delta * 10) / 10}` : `▼ ${Math.round(delta * 10) / 10}`
+      },
+    },
+  ],
+}
+
 function fmtCell(value: unknown): string {
   if (value == null) return ''
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10)
   return String(value)
+}
+
+// One row per PERSON instead of one row per underlying record — "retain the sheet format" for
+// Mobility/Promotion/Performance, which were originally one-row-per-person-per-year/period wide
+// sheets. Groups the flat records by staffId; each pivot column renders from that person's own
+// records (e.g. "find the 2025 row and show its newBusinessUnit"), with its own Edit pencil that
+// opens the one underlying record it came from — editing itself still happens exactly like every
+// other section (one year/period record at a time), only the listing is pivoted.
+interface PivotColumn {
+  key: string
+  label: string
+  render: (rowsForPerson: Row[]) => string
+  // Which single underlying record (if any) this column's Edit pencil should open — distinct from
+  // render() because a cell can summarize more than one record (e.g. "Ever Promoted" from both
+  // years) while still needing one specific record to edit.
+  editRecord?: (rowsForPerson: Row[]) => Row | null
+}
+
+interface PivotConfig {
+  columns: PivotColumn[]
 }
 
 // One section = one table of existing rows (with per-row delete), one "add one" form, and one
@@ -50,7 +187,7 @@ function fmtCell(value: unknown): string {
 // same endpoint the single form posts a bare object to; the API upserts by its own natural key so
 // re-pasting a correction never duplicates a row.
 function RecordSection({
-  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0,
+  title, icon: Icon, apiPath, fields, idKey = 'id', extraColumns = [], computedColumns = [], buOptions = [], refreshSignal = 0, pivot,
 }: {
   title: string
   icon: React.ComponentType<{ className?: string }>
@@ -69,11 +206,14 @@ function RecordSection({
   // fetched) once, before that import happened, so without this it would keep showing stale
   // (often empty) data until the admin manually reloads the whole page.
   refreshSignal?: number
+  // When set, the table renders one row per person (grouped by staffId) instead of one row per
+  // underlying record — see PivotConfig above.
+  pivot?: PivotConfig
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [form, setForm] = useState<Record<string, string>>({})
+  const [form, setForm] = useState<Record<string, string>>(() => defaultForm(fields))
   const [bulkText, setBulkText] = useState('')
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -121,6 +261,19 @@ function RecordSection({
     return result
   }, [rows, search, sortCol, sortDir, columns])
 
+  // Grouped by staffId for pivot mode — one entry per person, carrying every underlying record
+  // for them so each pivot column can pick out whichever year/period it needs.
+  const displayPersons = useMemo(() => {
+    if (!pivot) return []
+    const groups = new Map<string, Row[]>()
+    for (const r of displayRows) {
+      const key = String(r.staffId ?? r[idKey])
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(r)
+    }
+    return [...groups.entries()].map(([staffId, personRows]) => ({ staffId, personRows }))
+  }, [displayRows, pivot, idKey])
+
   const startEdit = (row: Row) => {
     const next: Record<string, string> = {}
     for (const f of fields) {
@@ -135,7 +288,7 @@ function RecordSection({
   }
 
   const cancelEdit = () => {
-    setForm({})
+    setForm(defaultForm(fields))
     setEditingId(null)
   }
 
@@ -155,7 +308,7 @@ function RecordSection({
         body: JSON.stringify(body),
       })
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to save.') }
-      setForm({})
+      setForm(defaultForm(fields))
       setEditingId(null)
       load()
     } catch (err) {
@@ -295,6 +448,35 @@ function RecordSection({
           <p className="text-xs text-slate-400">No records yet.</p>
         ) : displayRows.length === 0 ? (
           <p className="text-xs text-slate-400">No records match &quot;{search}&quot;.</p>
+        ) : pivot ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-400 border-b border-slate-100">
+                  {pivot.columns.map((c) => <th key={c.key} className="py-1.5 pr-4 font-medium">{c.label}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {displayPersons.map(({ staffId, personRows }) => (
+                  <tr key={staffId} className="border-b border-slate-50">
+                    {pivot.columns.map((c) => {
+                      const editTarget = c.editRecord?.(personRows) ?? null
+                      return (
+                        <td key={c.key} className="py-1.5 pr-4 text-slate-700">
+                          <span>{c.render(personRows)}</span>
+                          {editTarget && (
+                            <button type="button" onClick={() => startEdit(editTarget)} className="ml-1.5 align-middle" title="Edit">
+                              <Pencil className="w-3 h-3 text-slate-300 hover:text-slate-600 inline" />
+                            </button>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -332,6 +514,9 @@ function RecordSection({
               </tbody>
             </table>
           </div>
+        )}
+        {pivot && (
+          <p className="text-[11px] text-slate-400">Pivoted for readability — delete isn&apos;t available here; use the search box above to narrow down, then edit or clear a value via the pencil icon.</p>
         )}
       </div>
     </SectionCard>
@@ -448,6 +633,7 @@ export default function TalentManagementAdminPage() {
         icon={TrendingUp}
         apiPath="/api/hr/talent-management/promotions"
         refreshSignal={refreshSignal}
+        pivot={promotionPivot}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
@@ -464,10 +650,13 @@ export default function TalentManagementAdminPage() {
         apiPath="/api/hr/talent-management/mobility"
         refreshSignal={refreshSignal}
         buOptions={buOptions}
+        pivot={mobilityPivot}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
           { key: 'year', label: 'Year', type: 'number', placeholder: '2026' },
+          { key: 'previousBusinessUnit', label: 'Previous BU', type: 'select', dynamicOptions: 'businessUnit' },
+          { key: 'previousRole', label: 'Previous Role', type: 'text' },
           { key: 'newBusinessUnit', label: 'New BU', type: 'select', dynamicOptions: 'businessUnit' },
           { key: 'newRole', label: 'New Role', type: 'text' },
           { key: 'employmentStatus', label: 'Employment Status', type: 'select', options: ['Active', 'Exited'] },
@@ -491,11 +680,12 @@ export default function TalentManagementAdminPage() {
         icon={Star}
         apiPath="/api/hr/talent-management/performance"
         refreshSignal={refreshSignal}
+        pivot={performancePivot}
         fields={[
           { key: 'staffId', label: 'Emp. ID', type: 'text' },
           { key: 'name', label: 'Name', type: 'text' },
-          { key: 'period', label: 'Period', type: 'text', placeholder: 'H1 2026' },
-          { key: 'score', label: 'Score (0–1)', type: 'number', placeholder: '0.78' },
+          { key: 'period', label: 'Period', type: 'text', defaultValue: currentHalfYearPeriod },
+          { key: 'score', label: 'Score (0–100)', type: 'number', placeholder: '78' },
         ]}
       />
     </div>

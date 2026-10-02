@@ -175,13 +175,17 @@ model PromotionRecord {
 // Exited) per row — a person can leave the org without ever being removed from TalentMemberInfo's
 // own Status in sync, so this is checked independently when the dashboard decides who counts.
 model MobilityRecord {
-  id               String    @id @default(cuid())
-  staffId          String
-  name             String? // denormalized for display in the admin table
-  year             Int
-  newBusinessUnit  String?
-  newRole          String?
-  changeStatus     String? // "Changed" | "No Change", derived per year
+  id                String    @id @default(cuid())
+  staffId           String
+  name              String? // denormalized for display in the admin table
+  year              Int
+  previousBusinessUnit String? // where they moved FROM — chained from the prior tracked year's
+  // newBusinessUnit where available (e.g. 2026's previous = 2025's new); null for 2025 itself,
+  // since nothing before 2025 was ever tracked in the source sheet — left blank rather than guessed.
+  previousRole      String?
+  newBusinessUnit   String?
+  newRole           String?
+  changeStatus      String? // "Changed" | "No Change", derived per year
   employmentStatus String    @default("Active") // "Active" | "Exited"
   createdAt        DateTime  @default(now())
   sheetSyncedAt    DateTime?

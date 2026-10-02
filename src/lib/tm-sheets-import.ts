@@ -166,25 +166,38 @@ async function importMobility(spreadsheetId: string, sheetName: string, accessTo
       { year: 2025, bu: i2025BU != null ? s(row[i2025BU]) : '', role: i2025Role != null ? s(row[i2025Role]) : '' },
       { year: 2026, bu: i2026BU != null ? s(row[i2026BU]) : '', role: i2026Role != null ? s(row[i2026Role]) : '' },
     ]
-    await Promise.all(years.map(async (y) => {
-      if (!y.bu && !y.role) return // nothing recorded for this person this year — don't create an empty row
+    // Every tracked person gets a record for both years, changed or not — the sheet itself covers
+    // everyone (its own "Total Staff" count), so dropping the "No Change" rows during import was
+    // why only 34 of 43 showed up instead of the full roster. Processed in year order (not
+    // Promise.all, unlike the other importers) so 2026's previousBusinessUnit/previousRole can
+    // chain from 2025's resolved values — 2025 itself has no earlier year to chain from, so its
+    // previous fields stay null rather than guessed.
+    let previousBU: string | null = null
+    let previousRole: string | null = null
+    for (const y of years) {
       const newBusinessUnit = y.bu ? normalizeBUName(y.bu) : null
+      const newRole = y.role || null
+      const changeStatus = (newBusinessUnit || newRole) ? 'Changed' : 'No Change'
       await prisma.mobilityRecord.upsert({
         where: { staffId_year: { staffId, year: y.year } },
         create: {
           staffId, name, year: y.year,
-          newBusinessUnit, newRole: y.role || null,
-          changeStatus: 'Changed', employmentStatus,
+          previousBusinessUnit: previousBU, previousRole,
+          newBusinessUnit, newRole,
+          changeStatus, employmentStatus,
           sheetSyncedAt: new Date(), sheetSyncError: null,
         },
         update: {
-          name, newBusinessUnit, newRole: y.role || null,
-          changeStatus: 'Changed', employmentStatus,
+          name, previousBusinessUnit: previousBU, previousRole,
+          newBusinessUnit, newRole,
+          changeStatus, employmentStatus,
           sheetSyncedAt: new Date(), sheetSyncError: null,
         },
       })
       imported++
-    }))
+      previousBU = newBusinessUnit ?? previousBU
+      previousRole = newRole ?? previousRole
+    }
   }))
   return { sheet: 'TM Internal Mobility', tabName: sheetName, imported, skipped, unresolved: [], error: null }
 }
@@ -312,8 +325,12 @@ async function importPerformanceAppraisal(spreadsheetId: string, sheetName: stri
     const name = iName != null ? s(row[iName]) || null : null
     await Promise.all(periodCols.map(async (p) => {
       if (p.idx == null) return
-      const score = parseScore(row[p.idx])
-      if (score == null) return
+      const rawScore = parseScore(row[p.idx])
+      if (rawScore == null) return
+      // The sheet stores a 0-1 decimal (e.g. 0.78); the database stores 0-100 throughout, so this
+      // is the one place the conversion happens on the way in — see mirrorPerformanceToSheet for
+      // the matching /100 on the way back out.
+      const score = rawScore * 100
       await prisma.performanceAppraisalRecord.upsert({
         where: { staffId_period: { staffId, period: p.period } },
         create: { staffId, name, period: p.period, score, sheetSyncedAt: new Date(), sheetSyncError: null },
