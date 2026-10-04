@@ -124,13 +124,13 @@ function resolveAgainstRoster(
 // Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
 // postgres (production) connectors — sqlite has no case-insensitive `mode` filter. Whitespace is
 // stripped entirely (not just trimmed) so a stray non-breaking space or double space from manual
-// data entry in the Training Type column still matches. Recognizes both "TM" (the original Training
-// Type taxonomy name) and "Talent Member" (what it was later renamed to) — the taxonomy entry can
-// be renamed freely from Admin → Training Types, but that only changes the label going forward; old
-// TrainingRecord/TrainingSchedule rows keep whatever string was stored on them at the time, so both
-// spellings can genuinely coexist in the data indefinitely.
+// data entry in the Training Type column still matches. Recognizes "TM" (the original Training
+// Type taxonomy name), "Talent Member", and "Talent Members" (both renames seen in practice) —
+// the taxonomy entry can be renamed freely from Admin → Training Types, but that only changes the
+// label going forward; old TrainingRecord/TrainingSchedule rows keep whatever string was stored on
+// them at the time, so any of these spellings can genuinely coexist in the data indefinitely.
 const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
-const TM_TRAINING_TYPE_ALIASES = new Set(['tm', 'talentmember'])
+const TM_TRAINING_TYPE_ALIASES = new Set(['tm', 'talentmember', 'talentmembers'])
 const isTMTrainingType = (v: string | null) => TM_TRAINING_TYPE_ALIASES.has(normTM(v))
 
 export async function computeTalentMemberReport(filter: PeriodFilter): Promise<TalentMemberFullReport> {
