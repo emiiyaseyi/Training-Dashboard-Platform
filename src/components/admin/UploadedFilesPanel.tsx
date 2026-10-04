@@ -25,7 +25,8 @@ const UNASSIGNED_BU = 'Custom Surveys / No Business Unit'
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 interface DownloadJob {
@@ -114,6 +115,13 @@ export function UploadedFilesPanel() {
       return true
     })
   }, [files, sourceFilter, trainingFilter, questionFilter, query])
+
+  // Every uploaded file lives as bytes in the database (see UploadedFile.data in schema.prisma),
+  // not in Vercel — so this is the number that actually matters for Postgres storage usage, which
+  // the admin would otherwise have to go check the Supabase dashboard directly to see.
+  const totalSize = useMemo(() => files.reduce((sum, f) => sum + f.fileSize, 0), [files])
+  const filteredSize = useMemo(() => filtered.reduce((sum, f) => sum + f.fileSize, 0), [filtered])
+  const isFiltered = filtered.length !== files.length
 
   // Business Unit -> Training name -> files, each level sorted for a stable, predictable order
   // (most files first, so the busiest group surfaces at the top of a long list).
@@ -236,6 +244,17 @@ export function UploadedFilesPanel() {
         <p className="text-xs text-slate-400">Loading…</p>
       ) : (
         <>
+          <div className="flex items-center gap-2 mb-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <FolderOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <p className="text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">{formatSize(totalSize)}</span> used in the database across{' '}
+              <span className="font-semibold text-slate-800">{files.length}</span> file{files.length === 1 ? '' : 's'}
+              {isFiltered && (
+                <span className="text-slate-400"> — showing {formatSize(filteredSize)} across {filtered.length} filtered</span>
+              )}
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
