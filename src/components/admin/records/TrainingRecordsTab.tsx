@@ -229,6 +229,8 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     }[]
   }[]>([])
   const [resolvingDuplicateKey, setResolvingDuplicateKey] = useState<string | null>(null)
+  const [selectedDuplicateIds, setSelectedDuplicateIds] = useState<Set<string>>(new Set())
+  const [bulkDeletingDuplicates, setBulkDeletingDuplicates] = useState(false)
 
   // Per-schedule question exclusion — same feature/state shape as Survey Automation's own Add
   // Schedule form: untick a question (from the shared, global bank) to hide it from THIS
@@ -644,6 +646,39 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       }
     } finally {
       setResolvingDuplicateKey(null)
+    }
+  }
+
+  const toggleDuplicateSelection = (id: string) => {
+    setSelectedDuplicateIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const bulkDeleteSelectedDuplicates = async () => {
+    if (selectedDuplicateIds.size === 0) return
+    if (!confirm(`Delete ${selectedDuplicateIds.size} selected record(s)? This can't be undone from here (they're archived under Deleted Trainings).`)) return
+    setBulkDeletingDuplicates(true)
+    try {
+      const ids = [...selectedDuplicateIds]
+      const res = await fetch('/api/admin/records/training/possible-duplicates/bulk-delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+      })
+      if (res.ok) {
+        setDuplicateGroups((prev) => prev
+          .map((g) => ({ ...g, records: g.records.filter((r) => !selectedDuplicateIds.has(r.id)) }))
+          .filter((g) => g.records.length > 1))
+        setSelectedDuplicateIds(new Set())
+        await load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to bulk delete the selected records.')
+      }
+    } finally {
+      setBulkDeletingDuplicates(false)
     }
   }
 
@@ -1452,8 +1487,31 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           <p className="text-[11px] text-slate-400">
             Same person (by Staff ID, or by first + last name when there&apos;s no Staff ID — a missing/extra middle name doesn&apos;t
             stop a match), same training name — whether or not the records share a Month/Year. Pick which record to keep; the
-            other(s) are deleted (any linked schedule keeps pointing to the one you keep).
+            other(s) are deleted (any linked schedule keeps pointing to the one you keep). Or tick the checkbox on any row(s) across
+            any group(s) and bulk delete them directly.
           </p>
+
+          {selectedDuplicateIds.size > 0 && (
+            <div className="flex items-center justify-between bg-amber-100 border border-amber-300 rounded-lg px-3 py-2">
+              <span className="text-xs font-medium text-amber-800">{selectedDuplicateIds.size} selected</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedDuplicateIds(new Set())}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={bulkDeleteSelectedDuplicates}
+                  disabled={bulkDeletingDuplicates}
+                  className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+                >
+                  {bulkDeletingDuplicates ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Delete selected
+                </button>
+              </div>
+            </div>
+          )}
 
           {loadingDuplicates ? (
             <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
@@ -1471,6 +1529,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="text-slate-400 border-b border-slate-100">
+                            <th className="py-1 pr-2"></th>
                             <th className="text-left font-medium py-1 pr-3">Month/Year</th>
                             <th className="text-left font-medium py-1 pr-3">Business Unit</th>
                             <th className="text-right font-medium py-1 pr-3">Cost</th>
@@ -1484,6 +1543,14 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
                         <tbody>
                           {g.records.map((r) => (
                             <tr key={r.id} className="border-b border-slate-50 last:border-0">
+                              <td className="py-1.5 pr-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDuplicateIds.has(r.id)}
+                                  onChange={() => toggleDuplicateSelection(r.id)}
+                                  className="w-3.5 h-3.5"
+                                />
+                              </td>
                               <td className="py-1.5 pr-3 text-slate-600 whitespace-nowrap">{r.month} {r.year}</td>
                               <td className="py-1.5 pr-3 text-slate-600">{r.businessUnit}</td>
                               <td className="py-1.5 pr-3 text-slate-600 text-right">{r.cost ? `₦${r.cost.toLocaleString()}` : '—'}</td>

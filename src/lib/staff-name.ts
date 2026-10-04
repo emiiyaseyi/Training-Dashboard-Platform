@@ -11,3 +11,15 @@ function isBlankNamePart(part: string | null | undefined): boolean {
 export function buildFullName(firstName: string, middleName: string | null | undefined, lastName: string): string {
   return [firstName, isBlankNamePart(middleName) ? null : middleName, lastName].filter(Boolean).join(' ')
 }
+
+// Same real person named differently across two rows (a middle name present on one, dropped on
+// the other — "Olabanjo John Igunnu" vs "Olabanjo Igunnu") still needs to match when there's no
+// Staff ID to key off instead. Only the FIRST and LAST whitespace-separated tokens have to match —
+// anything in between is treated as an optional middle name, same tolerance buildFullName gives
+// dash-only middle names above.
+export function firstLastNameKey(fullName: string): string {
+  const tokens = fullName.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return ''
+  if (tokens.length === 1) return tokens[0]
+  return `${tokens[0]}|${tokens[tokens.length - 1]}`
+}

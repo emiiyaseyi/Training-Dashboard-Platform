@@ -3,18 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { normalizeTrainingNameKey } from '@/lib/training-name'
-
-// Same real person named differently across the two rows (a middle name present on one, dropped
-// on the other — "Olabanjo John Igunnu" vs "Olabanjo Igunnu") still needs to land in the same
-// group when there's no Staff ID to key off instead. Only the FIRST and LAST whitespace-separated
-// tokens have to match — anything in between is treated as an optional middle name, same
-// tolerance buildFullName (staff-name.ts) already gives dash-only middle names elsewhere.
-function firstLastNameKey(fullName: string): string {
-  const tokens = fullName.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  if (tokens.length === 0) return ''
-  if (tokens.length === 1) return tokens[0]
-  return `${tokens[0]}|${tokens[tokens.length - 1]}`
-}
+import { firstLastNameKey } from '@/lib/staff-name'
 
 // Same person, same training name — almost always the same real attendance recorded twice (a
 // re-sync, a manual re-add, or a literal duplicate row from an import) rather than two genuinely
