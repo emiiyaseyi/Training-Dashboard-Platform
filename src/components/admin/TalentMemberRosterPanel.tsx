@@ -237,7 +237,7 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     <SectionCard
       icon={Users}
       title={`Talent Member Roster (${entries.length})`}
-      description="Add or remove Talent Members here — search the staff directory (including exited staff, tagged \"Exited\") and select as many as needed, or paste a list. Click an entry's Active/Exited badge to toggle it. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
+      description={'Add or remove Talent Members here — search the staff directory (including exited staff, tagged "Exited") and select as many as needed, or paste a list. Click an entry\'s Active/Exited badge to toggle it. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source.'}
       headerActions={
         <button
           onClick={(e) => { e.stopPropagation(); refreshFromDirectory() }}
