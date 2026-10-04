@@ -33,7 +33,7 @@ interface CSVRow { name: string; staffCount: number; budget: number }
 interface CSVImportResult { imported: number; skipped: number; errors: string[] }
 interface YearConfig { id: string; buName: string; year: number; budget: number; staffCount: number }
 
-type TabKey = 'business-units' | 'taxonomies' | 'data-quality' | 'people' | 'communication'
+type TabKey = 'business-units' | 'taxonomies' | 'data-quality' | 'people' | 'communication' | 'integrations'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'business-units', label: 'Business Units & Budget' },
@@ -41,6 +41,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'data-quality', label: 'Data & Quality' },
   { key: 'people', label: 'People & Talent' },
   { key: 'communication', label: 'Communication & Security' },
+  { key: 'integrations', label: 'Integrations' },
 ]
 
 // Search index — one entry per section on the page, used only to jump to (and briefly highlight)
@@ -66,7 +67,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'security-settings', label: 'Security Settings', tab: 'communication' },
   { id: 'audit-log', label: 'Audit Trail', tab: 'communication' },
   { id: 'pdf-signature', label: 'PDF Signature Block', tab: 'communication' },
-  { id: 'seamlesshr-test', label: 'SeamlessHR Sandbox Test', tab: 'communication' },
+  { id: 'seamlesshr-test', label: 'SeamlessHR Sandbox Test', tab: 'integrations' },
 ]
 
 export default function AdminPage() {
@@ -809,24 +810,6 @@ export default function AdminPage() {
               </Link>
             </div>
 
-            <div id="seamlesshr-test" className={sectionWrapClass('seamlesshr-test')}>
-              <Link
-                href="/admin/seamlesshr-test"
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start gap-3">
-                  <PlugZap className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">SeamlessHR Sandbox Test</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Exploratory — checks whether the SeamlessHR HRMS sandbox API credentials work. Not a live feature yet.
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
-              </Link>
-            </div>
-
             <div id="pdf-signature" className={sectionWrapClass('pdf-signature')}>
               <SectionCard
                 icon={PenLine}
@@ -872,6 +855,28 @@ export default function AdminPage() {
                   </div>
                 </div>
               </SectionCard>
+            </div>
+          </div>
+        )}
+
+        {tab === 'integrations' && (
+          <div className="space-y-8">
+            <div id="seamlesshr-test" className={sectionWrapClass('seamlesshr-test')}>
+              <Link
+                href="/admin/seamlesshr-test"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <PlugZap className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">SeamlessHR Sandbox Test</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Exploratory — checks whether the SeamlessHR HRMS sandbox API credentials work. Not a live feature yet.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+              </Link>
             </div>
           </div>
         )}
