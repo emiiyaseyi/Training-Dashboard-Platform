@@ -618,6 +618,12 @@ model TrainingRecord {
   month        String
   year         Int
   cost         Float
+  // Cost itself stays a required, non-nullable number (0 for both "never entered" and "genuinely
+  // free") so every existing sum/average over cost keeps working unchanged — this flag is the only
+  // thing that distinguishes the two cases, set true when the source cell was blank at import/sync
+  // time, and cleared the moment anyone (bulk-set, the row edit, apply-to-similar) explicitly saves
+  // a cost value for this record, including a deliberate 0.
+  costMissing  Boolean  @default(false)
   hours        Float?   // Learning Hours (optional — populated when provided)
   trainingType String?  // References TrainingType.name — null = legacy row, treated as "Internal Training"
   capability   String?  // References DifferentiatingCapability.name

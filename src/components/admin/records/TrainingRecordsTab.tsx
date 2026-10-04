@@ -191,12 +191,12 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
   // "Trainings Missing Vendor" — every training cohort with no vendor on any attendee's record,
   // so it's fixable in bulk (one vendor for the whole cohort) or per-attendee, instead of hunting
   // for them one page of the main table at a time. Broadened beyond just Vendor — any of
-  // Vendor/Hours/Type/Capability missing for a WHOLE cohort shows up here. Cost is deliberately
-  // excluded (see the missing-vendor GET route) — 0 is ambiguous between "unset" and "genuinely
-  // free", so checking it caused already-fixed trainings to keep reappearing here forever. Fix
-  // Cost the normal way, via the row edit in the table below.
-  const MISSING_DETAIL_FIELDS: { key: 'vendor' | 'hours' | 'trainingType' | 'capability'; label: string }[] = [
+  // Vendor/Cost/Hours/Type/Capability missing for a WHOLE cohort shows up here. Cost uses the
+  // costMissing flag (see the missing-vendor GET route), never cost === 0 — a training explicitly
+  // confirmed as free never re-surfaces here, only one whose cost was truly never entered.
+  const MISSING_DETAIL_FIELDS: { key: 'vendor' | 'cost' | 'hours' | 'trainingType' | 'capability'; label: string }[] = [
     { key: 'vendor', label: 'Vendor' },
+    { key: 'cost', label: 'Cost' },
     { key: 'hours', label: 'Hours' },
     { key: 'trainingType', label: 'Type' },
     { key: 'capability', label: 'Capability' },
@@ -1335,7 +1335,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           {loadingMissingVendor ? (
             <p className="text-xs text-slate-400 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</p>
           ) : missingVendorGroups.length === 0 ? (
-            <p className="text-xs text-slate-400">Every training has Vendor, Hours, Type, and Capability on file. Nothing to fix.</p>
+            <p className="text-xs text-slate-400">Every training has Vendor, Cost, Hours, Type, and Capability on file. Nothing to fix.</p>
           ) : (
             <div className="space-y-2">
               {missingVendorGroups.map((g) => {

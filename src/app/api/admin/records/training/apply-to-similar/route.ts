@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const data: Record<string, unknown> = {}
     if (changes.training !== undefined) data.training = changes.training.trim()
     if (changes.trainingType !== undefined) data.trainingType = changes.trainingType || null
-    if (changes.cost !== undefined) data.cost = Number(changes.cost)
+    if (changes.cost !== undefined) { data.cost = Number(changes.cost); data.costMissing = false }
     if (changes.vendor !== undefined) data.vendor = changes.vendor || null
 
     const result = await prisma.trainingRecord.updateMany({ where: { id: { in: ids } }, data })

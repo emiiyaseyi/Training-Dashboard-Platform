@@ -81,6 +81,7 @@ export async function backfillTrainingRecordsFromSchedules(): Promise<BackfillRe
           month,
           year,
           cost: a.schedule.costPerAttendee ?? 0,
+          costMissing: a.schedule.costPerAttendee == null,
           hours: a.schedule.hours,
           trainingType: a.schedule.trainingType,
           capability: a.schedule.capability,

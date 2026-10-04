@@ -122,6 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               month: MONTHS[schedule.startDate.getMonth()],
               year: new Date().getFullYear(),
               cost: schedule.costPerAttendee ?? 0,
+              costMissing: schedule.costPerAttendee == null,
               hours: schedule.hours,
               trainingType: schedule.trainingType,
               capability: schedule.capability,

@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'recordIds is required.' }, { status: 400 })
     }
 
-    const data: { vendor?: string; cost?: number; hours?: number; trainingType?: string; capability?: string } = {}
+    const data: { vendor?: string; cost?: number; costMissing?: boolean; hours?: number; trainingType?: string; capability?: string } = {}
     if (body.vendor?.trim()) data.vendor = body.vendor.trim()
-    if (body.cost !== undefined && !isNaN(body.cost)) data.cost = body.cost
+    if (body.cost !== undefined && !isNaN(body.cost)) { data.cost = body.cost; data.costMissing = false }
     if (body.hours !== undefined && !isNaN(body.hours)) data.hours = body.hours
     if (body.trainingType?.trim()) data.trainingType = body.trainingType.trim()
     if (body.capability?.trim()) data.capability = body.capability.trim()

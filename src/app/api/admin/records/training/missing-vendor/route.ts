@@ -4,16 +4,14 @@ import { requirePermission } from '@/lib/session-guard'
 import { normalizeTrainingNameKey } from '@/lib/training-name'
 
 // Every training cohort (same training+month+year grouping as the main records list) where NOT A
-// SINGLE attendee has one or more of Vendor/Hours/Training Type/Capability on file — all four are
-// normally set once per schedule and apply to everyone in it, so "missing for the whole cohort" is
-// the actual gap to fix, not one stray record diverging from the rest of its group.
+// SINGLE attendee has one or more of Vendor/Cost/Hours/Training Type/Capability on file — all five
+// are normally set once per schedule and apply to everyone in it, so "missing for the whole
+// cohort" is the actual gap to fix, not one stray record diverging from the rest of its group.
 //
-// Cost is deliberately NOT checked here (it used to be, flagged whenever it was exactly 0) — the
-// field has no way to distinguish "a genuinely free training" from "never set", both store 0, and
-// that ambiguity meant a training an admin had correctly confirmed as free kept getting re-flagged
-// forever, no matter how many times they "fixed" it. Better to miss a genuinely-unset ₦0 than to
-// force the same already-resolved trainings back onto this list every time it's reopened. Cost
-// still gets fixed the normal way, via the row edit in the table below.
+// Cost uses the costMissing flag (set at import/sync time from whether the source cell was
+// genuinely blank), never cost === 0 — a training an admin has explicitly confirmed as free (cost
+// saved as 0, which clears costMissing — see the row edit / bulk-set / apply-to-similar routes)
+// must never re-surface here, only a cost that was truly never entered.
 export async function GET() {
   const gate = await requirePermission('admin-settings', 'view')
   if (gate instanceof NextResponse) return gate
@@ -22,7 +20,7 @@ export async function GET() {
     const all = await prisma.trainingRecord.findMany({
       select: {
         id: true, staffName: true, staffId: true, businessUnit: true, training: true, month: true, year: true,
-        vendor: true, cost: true, hours: true, trainingType: true, capability: true,
+        vendor: true, cost: true, costMissing: true, hours: true, trainingType: true, capability: true,
       },
       orderBy: [{ year: 'desc' }, { staffName: 'asc' }],
     })
@@ -34,8 +32,9 @@ export async function GET() {
       groups.get(key)!.push(r)
     }
 
-    const FIELD_CHECKS: { key: 'vendor' | 'hours' | 'trainingType' | 'capability'; label: string; isMissing: (r: (typeof all)[number]) => boolean }[] = [
+    const FIELD_CHECKS: { key: 'vendor' | 'cost' | 'hours' | 'trainingType' | 'capability'; label: string; isMissing: (r: (typeof all)[number]) => boolean }[] = [
       { key: 'vendor', label: 'Vendor', isMissing: (r) => !r.vendor?.trim() },
+      { key: 'cost', label: 'Cost', isMissing: (r) => r.costMissing },
       { key: 'hours', label: 'Hours', isMissing: (r) => r.hours == null },
       { key: 'trainingType', label: 'Type', isMissing: (r) => !r.trainingType?.trim() },
       { key: 'capability', label: 'Capability', isMissing: (r) => !r.capability?.trim() },

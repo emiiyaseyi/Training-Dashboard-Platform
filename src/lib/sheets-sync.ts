@@ -43,6 +43,13 @@ export interface TrainingRecordSnapshot {
   month: string
 }
 
+// costMissing is deliberately NOT tracked here — same reasoning the missing-vendor GET route
+// documents for cost itself: once an admin confirms a training is genuinely free (sets cost to 0,
+// clearing costMissing), the source sheet cell is very often still blank, since fixing it here
+// doesn't retroactively edit the sheet. If costMissing were compared like every other field, that
+// already-resolved record would re-surface as a "change" (costMissing false → true) on every
+// future sync forever. A brand-new row's costMissing is still set correctly on first import —
+// this only skips RE-deriving it for a row that already exists and was already resolved.
 const TRACKED_TRAINING_FIELDS: (keyof TrainingRecordSnapshot)[] = [
   'staffId', 'staffName', 'businessUnit', 'cost', 'hours', 'trainingType', 'capability', 'vendor', 'month',
 ]
@@ -124,9 +131,10 @@ async function reconcileTraining(
 // ID — not just the one flagged row — since the same malformed ID (e.g. a full company name
 // instead of its short code) tends to appear on every record for that person, not only the one
 // that happened to get re-synced and flagged.
-export async function applyTrainingRecordChange(change: { existingRecordId: string; newData: string; oldData: string }) {
+export async function applyTrainingRecordChange(change: { existingRecordId: string; newData: string; oldData: string; changedFields: string }) {
   const newData = JSON.parse(change.newData) as TrainingRecordSnapshot
   const oldData = JSON.parse(change.oldData) as TrainingRecordSnapshot
+  const changedFields = JSON.parse(change.changedFields) as string[]
 
   if (oldData.staffId !== newData.staffId) {
     await Promise.all([
@@ -136,7 +144,12 @@ export async function applyTrainingRecordChange(change: { existingRecordId: stri
     ])
   }
 
-  await prisma.trainingRecord.update({ where: { id: change.existingRecordId }, data: newData })
+  // An accepted change that actually touches Cost means the admin reviewed and confirmed this
+  // specific value (even if it's 0) — same as any other explicit cost save, that resolves the
+  // missing/not-missing ambiguity for this record.
+  const data = changedFields.includes('cost') ? { ...newData, costMissing: false } : newData
+
+  await prisma.trainingRecord.update({ where: { id: change.existingRecordId }, data })
 }
 
 // Bulk "Accept All" for a potentially large pending list, redesigned around one constraint: a
@@ -175,6 +188,7 @@ export async function applyNextTrainingRecordChangeChunk(): Promise<ApplyChunkRe
     existingRecordId: c.existingRecordId,
     oldData: JSON.parse(c.oldData) as TrainingRecordSnapshot,
     newData: JSON.parse(c.newData) as TrainingRecordSnapshot,
+    changedFields: JSON.parse(c.changedFields) as string[],
   }))
 
   const idPairs = new Map<string, string>()
@@ -194,7 +208,10 @@ export async function applyNextTrainingRecordChangeChunk(): Promise<ApplyChunkRe
   }
 
   const results = await Promise.allSettled(
-    parsed.map((c) => prisma.trainingRecord.update({ where: { id: c.existingRecordId }, data: c.newData }))
+    parsed.map((c) => prisma.trainingRecord.update({
+      where: { id: c.existingRecordId },
+      data: c.changedFields.includes('cost') ? { ...c.newData, costMissing: false } : c.newData,
+    }))
   )
 
   let appliedThisChunk = 0

@@ -13,6 +13,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (!change) return NextResponse.json({ error: 'Change not found — it may have already been resolved.' }, { status: 404 })
 
     await applyTrainingRecordChange(change)
+
     await prisma.trainingRecordChange.delete({ where: { id } })
 
     return NextResponse.json({ success: true })

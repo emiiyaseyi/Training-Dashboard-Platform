@@ -29,7 +29,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(body.training !== undefined && { training: body.training.trim() }),
         ...(body.month !== undefined && { month: body.month }),
         ...(body.year !== undefined && { year: Number(body.year) }),
-        ...(body.cost !== undefined && { cost: Number(body.cost) }),
+        ...(body.cost !== undefined && { cost: Number(body.cost), costMissing: false }),
         ...(body.hours !== undefined && { hours: body.hours === null ? null : Number(body.hours) }),
         ...(body.trainingType !== undefined && { trainingType: body.trainingType || null }),
         ...(body.capability !== undefined && { capability: body.capability || null }),

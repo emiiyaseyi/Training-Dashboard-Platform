@@ -9,6 +9,7 @@ export interface TrainingRow {
   businessUnit: string
   month: string
   cost: number
+  costMissing: boolean // true when the Cost cell was blank — distinct from a deliberately entered 0
   hours: number   // Learning Hours (optional — 0 if not provided)
   trainingType: string  // e.g. Internal Training, External Training, Summit, Leadership Cafe, Workshop
   capability: string    // Differentiating Capability tag
@@ -215,7 +216,9 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
     const name = normalise(r[col.name!])
     if (!name) { warnings.push(`Row ${lineNo}: Name is empty — skipped.`); return }
 
-    const cost = toFloat(r[col.cost!])
+    const rawCost = r[col.cost!]
+    const costMissing = rawCost === undefined || rawCost === null || String(rawCost).trim() === ''
+    const cost = toFloat(rawCost)
     if (cost < 0) warnings.push(`Row ${lineNo}: Negative cost (${cost}) for "${name}".`)
 
     const staffId = normalise(r[col.staffId ?? ''] ?? '')
@@ -233,6 +236,7 @@ export function parseTrainingExcel(buffer: Buffer): ParseResult<TrainingRow> {
       businessUnit: normalise(r[col.bu!]),
       month:        normalise(r[col.month ?? ''] ?? ''),
       cost,
+      costMissing,
       hours:        Math.max(0, hours),
       trainingType: normalise(r[col.trainingType ?? ''] ?? ''),
       capability:   normalise(r[col.capability ?? ''] ?? ''),
