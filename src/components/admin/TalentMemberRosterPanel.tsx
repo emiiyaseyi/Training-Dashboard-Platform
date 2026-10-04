@@ -12,6 +12,7 @@ interface RosterEntry {
   resolvedName: string | null
   businessUnit: string | null
   resolved: boolean
+  status: string
   sheetSyncedAt: string | null
   sheetSyncError: string | null
 }
@@ -21,6 +22,7 @@ interface RosterStaff {
   name: string
   email: string | null
   businessUnit: string
+  active?: boolean
 }
 
 interface Props {
@@ -43,9 +45,10 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
   const [bulkText, setBulkText] = useState('')
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [togglingStatusId, setTogglingStatusId] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/admin/roster-directory')
+    fetch('/api/admin/roster-directory?includeInactive=1')
       .then((res) => res.json())
       .then((data) => setDirectory(Array.isArray(data) ? data : []))
       .catch(() => {})
@@ -191,6 +194,27 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     }
   }
 
+  const toggleStatus = async (e: RosterEntry) => {
+    const nextStatus = e.status === 'Exited' ? 'Active' : 'Exited'
+    setTogglingStatusId(e.id)
+    try {
+      const res = await fetch(`/api/admin/talent-member-roster/${e.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      if (res.ok) {
+        await fetchEntries()
+        onChanged()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to update status.')
+      }
+    } finally {
+      setTogglingStatusId(null)
+    }
+  }
+
   const remove = async (id: string) => {
     if (!confirm('Remove this person from the Talent Member roster?')) return
     setDeletingId(id)
@@ -213,7 +237,7 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
     <SectionCard
       icon={Users}
       title={`Talent Member Roster (${entries.length})`}
-      description="Add or remove Talent Members here — search the staff directory and select as many as needed, or paste a list. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
+      description="Add or remove Talent Members here — search the staff directory (including exited staff, tagged \"Exited\") and select as many as needed, or paste a list. Click an entry's Active/Exited badge to toggle it. Every entry is mirrored into the sheet tab configured under Admin → Live Data Source."
       headerActions={
         <button
           onClick={(e) => { e.stopPropagation(); refreshFromDirectory() }}
@@ -263,7 +287,12 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
                         className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
                       >
                         <span className="text-slate-700">{r.name}</span>
-                        <span className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''} · {r.businessUnit}</span>
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          {r.staffId}{r.email ? ` · ${r.email}` : ''} · {r.businessUnit}
+                          {r.active === false && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Exited</span>
+                          )}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -354,6 +383,14 @@ export function TalentMemberRosterPanel({ onChanged }: Props) {
                 >
                   {e.resolved ? 'Matched' : 'Not matched'}
                 </span>
+                <button
+                  onClick={() => toggleStatus(e)}
+                  disabled={togglingStatusId === e.id}
+                  title="Click to toggle Active/Exited"
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${e.status === 'Exited' ? 'bg-slate-200 text-slate-600' : 'bg-blue-100 text-blue-700'}`}
+                >
+                  {togglingStatusId === e.id ? <Loader2 className="w-3 h-3 animate-spin inline" /> : e.status}
+                </button>
                 {e.sheetSyncedAt ? (
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                 ) : (

@@ -22,6 +22,7 @@ export async function GET() {
           resolvedName: match?.name ?? null,
           businessUnit: match?.businessUnit ?? null,
           resolved: !!match,
+          status: e.status,
           sheetSyncedAt: e.sheetSyncedAt,
           sheetSyncError: e.sheetSyncError,
         }
