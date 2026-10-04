@@ -19,6 +19,25 @@ model BusinessUnit {
   updatedAt  DateTime @updatedAt
 }
 
+// Archive for every record deleted from Training/KSS/Subscription records (any delete path —
+// the regular trash-icon delete, and "Keep this one" in Possible Duplicate Trainings) — kept
+// instead of hard-deleted so a mistaken delete is recoverable and there's an audit trail of what
+// was removed, when, and by whom. `data` holds the full original record as JSON (shape depends on
+// `recordType`), since the three source tables don't share a column set.
+model DeletedRecord {
+  id                String   @id @default(cuid())
+  recordType        String // "training" | "kss" | "subscription"
+  data              String // JSON — the original record's fields
+  deletedAt         DateTime @default(now())
+  deletedByName     String?
+  deletedByEmail    String?
+  // Best-effort removal of the matching row from the live Google Sheet (moved to a "Deleted
+  // <Type>" tab in the same spreadsheet) — not always possible (ambiguous match, sheet not
+  // configured, etc.), so tracked separately from the DB-side archive succeeding.
+  sheetMoved        Boolean  @default(false)
+  sheetMoveError    String?
+}
+
 // Single-row global settings — currently just the subscription/budget toggle
 model BudgetSettings {
   id                         String   @id @default(cuid())

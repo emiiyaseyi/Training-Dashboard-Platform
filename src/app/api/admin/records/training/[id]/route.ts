@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { MONTHS } from '@/lib/filter-types'
 import { pushTrainingRecordFieldsToSheet } from '@/lib/sheets-sync'
+import { archiveDeletedRecord } from '@/lib/deleted-records'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
@@ -98,8 +99,22 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params
+    const record = await prisma.trainingRecord.findUnique({ where: { id } })
+    if (!record) return NextResponse.json({ error: 'Record not found.' }, { status: 404 })
+
+    const { sheetMoved, sheetMoveError } = await archiveDeletedRecord(
+      'training',
+      record,
+      { name: gate.user.name, email: gate.user.email },
+      [
+        { columnCandidates: ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'], value: record.staffId },
+        { columnCandidates: ['training', 'trainingname', 'trainingtitle', 'course', 'programme'], value: record.training },
+        { columnCandidates: ['month', 'period', 'trainingmonth'], value: record.month },
+      ],
+    )
+
     await prisma.trainingRecord.delete({ where: { id } })
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, sheetMoved, sheetMoveError })
   } catch (err) {
     console.error('[admin/records/training/[id] DELETE]', err)
     return NextResponse.json({ error: 'Failed to delete record.' }, { status: 500 })

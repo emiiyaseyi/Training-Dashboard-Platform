@@ -689,3 +689,106 @@ export function findMissingColumns(headers: string[], type: keyof typeof SHEET_R
     .filter((req) => !hasMatchingColumn(headers, req.candidates))
     .map((req) => `Missing a "${req.label}" column (looked for: ${req.candidates.join(', ')}).`)
 }
+
+// ── Moving a deleted record's row to a "Deleted <Type>" tab ──────────────────────────────────
+
+// Tab titles + their numeric sheetId (gid) — the values API (used everywhere else in this file)
+// only ever needs a tab's name, but a structural change (add a tab, delete a row) goes through
+// the spreadsheets.batchUpdate API instead, which addresses tabs by this numeric id, not by name.
+async function fetchSheetMeta(spreadsheetId: string, accessToken: string): Promise<{ title: string; sheetId: number }[]> {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(sheetId,title)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  )
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Could not read spreadsheet structure (${res.status}): ${body.slice(0, 150)}`)
+  }
+  const data = (await res.json()) as { sheets?: { properties?: { sheetId?: number; title?: string } }[] }
+  return (data.sheets || [])
+    .map((s) => ({ title: s.properties?.title || '', sheetId: s.properties?.sheetId ?? -1 }))
+    .filter((s) => s.title && s.sheetId >= 0)
+}
+
+// Creates the tab (with the given header row) if it doesn't already exist — a no-op if it does,
+// so this is safe to call before every move rather than tracking "have I created this yet".
+async function ensureTabExists(spreadsheetId: string, tabName: string, accessToken: string, headerRow: string[]): Promise<void> {
+  const meta = await fetchSheetMeta(spreadsheetId, accessToken)
+  if (meta.some((s) => s.title === tabName)) return
+
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tabName } } }] }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Could not create tab "${tabName}" (${res.status}): ${body.slice(0, 150)}`)
+  }
+  await appendRowToSheet(spreadsheetId, tabName, accessToken, headerRow)
+}
+
+// Finds the one row in `sourceSheetName` whose cells match every entry in `matchColumns` (e.g.
+// Staff ID + Training name + Month/Year all on the same row), copies that row's full values into
+// `deletedTabName` (creating it, with the source's own header row, if it doesn't exist yet), then
+// deletes the row from the source tab. Deliberately conservative: if the matching column(s) can't
+// be found, or zero or more-than-one row matches, nothing is changed and the reason is returned —
+// guessing wrong here would silently delete or archive the wrong row from a live shared sheet.
+export async function moveRowToDeletedTab(
+  spreadsheetId: string,
+  sourceSheetName: string,
+  deletedTabName: string,
+  accessToken: string,
+  matchColumns: { columnCandidates: string[]; value: string }[],
+): Promise<{ moved: boolean; reason?: string }> {
+  const rows = await fetchSheetValues(spreadsheetId, sourceSheetName, accessToken)
+  if (rows.length < 2) return { moved: false, reason: `Tab "${sourceSheetName}" has no data rows.` }
+
+  const headers = rows[0]
+  const normHeaders = headers.map(normaliseHeader)
+  const colIdxs: number[] = []
+  for (const mc of matchColumns) {
+    const normCandidates = mc.columnCandidates.map(normaliseHeader)
+    const idx = normHeaders.findIndex((h) => normCandidates.some((c) => c === h || (c.length >= 4 && (h.includes(c) || c.includes(h)))))
+    if (idx === -1) return { moved: false, reason: `Could not find a "${mc.columnCandidates[0]}" column in "${sourceSheetName}".` }
+    colIdxs.push(idx)
+  }
+
+  const dataRows = rows.slice(1)
+  const matchingRowOffsets = dataRows
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => matchColumns.every((mc, j) => normaliseHeader(r[colIdxs[j]] || '') === normaliseHeader(mc.value)))
+    .map(({ i }) => i)
+
+  if (matchingRowOffsets.length === 0) return { moved: false, reason: 'No matching row found in the sheet.' }
+  if (matchingRowOffsets.length > 1) return { moved: false, reason: `${matchingRowOffsets.length} rows matched — ambiguous, skipped rather than guessing which one.` }
+
+  const rowOffset = matchingRowOffsets[0] // 0-based, within dataRows
+  const matchedValues = dataRows[rowOffset]
+
+  await ensureTabExists(spreadsheetId, deletedTabName, accessToken, headers)
+  await appendRowToSheet(spreadsheetId, deletedTabName, accessToken, matchedValues)
+
+  const meta = await fetchSheetMeta(spreadsheetId, accessToken)
+  const sourceSheetId = meta.find((s) => s.title === sourceSheetName)?.sheetId
+  if (sourceSheetId == null) return { moved: false, reason: `Could not resolve tab "${sourceSheetName}"'s internal id to delete the row — it was copied to "${deletedTabName}" but NOT removed from the source tab, so delete it there manually.` }
+
+  const gridRowIndex = rowOffset + 1 // +1 for the header row — 0-based grid index for deleteDimension
+  const delRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [{
+        deleteDimension: {
+          range: { sheetId: sourceSheetId, dimension: 'ROWS', startIndex: gridRowIndex, endIndex: gridRowIndex + 1 },
+        },
+      }],
+    }),
+  })
+  if (!delRes.ok) {
+    const body = await delRes.text().catch(() => '')
+    return { moved: false, reason: `Copied to "${deletedTabName}" but failed to remove from "${sourceSheetName}" (${delRes.status}): ${body.slice(0, 150)}` }
+  }
+
+  return { moved: true }
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+import { archiveDeletedRecord } from '@/lib/deleted-records'
 
 // Resolves a "same person, same training" duplicate group the admin has looked at and picked one
 // record to keep — deletes the rest, whether the duplicates share a Month/Year or not. If any
@@ -25,6 +26,22 @@ export async function POST(req: NextRequest) {
       where: { linkedTrainingRecordId: { in: deleteIds } },
       data: { linkedTrainingRecordId: keepId },
     })
+
+    // Archived (same as the regular single-record delete) rather than hard-deleted, so resolving
+    // a duplicate group stays recoverable and shows up in the same audit trail.
+    const toDelete = await prisma.trainingRecord.findMany({ where: { id: { in: deleteIds } } })
+    for (const record of toDelete) {
+      await archiveDeletedRecord(
+        'training',
+        record,
+        { name: gate.user.name, email: gate.user.email },
+        [
+          { columnCandidates: ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'], value: record.staffId },
+          { columnCandidates: ['training', 'trainingname', 'trainingtitle', 'course', 'programme'], value: record.training },
+          { columnCandidates: ['month', 'period', 'trainingmonth'], value: record.month },
+        ],
+      )
+    }
 
     const { count } = await prisma.trainingRecord.deleteMany({ where: { id: { in: deleteIds } } })
 
