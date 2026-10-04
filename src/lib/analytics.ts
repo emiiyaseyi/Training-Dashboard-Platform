@@ -2,6 +2,7 @@ import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
+import { computeYetToAttend } from './roster-analytics'
 import { countEligibleStaff, effectiveYearForCoverage, latestRosterSnapshot } from './staff-training-eligibility'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -118,6 +119,17 @@ export interface GroupAnalytics {
   totalUniqueStaff: number
   totalStaffCount: number
   groupCoverageRatio: number
+  // "Staff Coverage" headline — confirmed/eligible staff who attended 1+ training, over the
+  // confirmed/eligible pool. eligibleStaffTrained/totalStaffCount reproduce this exact ratio; kept
+  // alongside groupCoverageRatio so the UI can show both the numerator and the percentage without
+  // recomputing. Reuses computeYetToAttend's own numbers (see below) so this page and Yet to
+  // Attend never again report two different populations for "staff coverage".
+  eligibleStaffTrained: number
+  // Secondary, broader figure: EVERYONE who attended 1+ training (interns, Meri Movers, unconfirmed,
+  // H2 new hires included) over all active staff — "what % of the whole organisation, regardless
+  // of category, has attended something". Distinct on purpose from groupCoverageRatio above.
+  totalActiveStaffCount: number
+  overallCoverageRatioAllStaff: number
   avgImpactScore: number
   postTrainingImpactScore: number // line-manager-assessed rating, 0-5
   postTrainingReviewCount: number
@@ -720,7 +732,17 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const totalUniqueStaff = allUniqueIds.size
   const totalLearningInvestment = totalTrainingCost + totalOtherTrainingCost + totalSubscriptionCost
   const totalStaffCount = countEligibleStaff(rosterRecords, null, coverageYear)
-  const groupCoverageRatio = totalStaffCount > 0 ? (uniqueStaffTrained / totalStaffCount) * 100 : 0
+
+  // Same population on both sides of the ratio, reusing the exact numbers Yet to Attend already
+  // computes (eligible roster who attended 1+ training / eligible roster) — previously this divided
+  // EVERYONE who ever attended anything (including interns/Meri Movers/unconfirmed/H2 new hires) by
+  // only the eligible pool, which could and did exceed 100%.
+  const yetToAttend = await computeYetToAttend(filter, buScope ?? null)
+  const eligibleStaffTrained = yetToAttend.totalAttended
+  const groupCoverageRatio = yetToAttend.overallCoverageRatio
+
+  const totalActiveStaffCount = rosterRecords.filter((r) => r.active).length
+  const overallCoverageRatioAllStaff = totalActiveStaffCount > 0 ? (uniqueStaffTrained / totalActiveStaffCount) * 100 : 0
 
   // ── Impact score — raw average on 0–5 scale ──
   const validFeedback = feedbackRecords.filter((f) => f.confidenceRating != null)
@@ -969,6 +991,9 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     totalUniqueStaff,
     totalStaffCount,
     groupCoverageRatio,
+    eligibleStaffTrained,
+    totalActiveStaffCount,
+    overallCoverageRatioAllStaff,
     avgImpactScore,
     postTrainingImpactScore,
     postTrainingReviewCount,

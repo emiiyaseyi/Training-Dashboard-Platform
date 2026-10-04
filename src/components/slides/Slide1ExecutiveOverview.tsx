@@ -18,7 +18,7 @@ export function Slide1ExecutiveOverview({ data, pageNumber, periodLabel }: { dat
         <ReportTile icon={BadgeCheck} title="Subscription Spend" value={fmt(data.totalSubscriptionCost)} subtitle="Professional memberships" valueColor="text-report-green" />
 
         <ReportTile icon={Users} title="Investment per Staff" value={fmt(data.investmentPerStaff)} subtitle={`Across ${data.totalStaffCount.toLocaleString()} total staff`} valueColor="text-gold-400" />
-        <ReportTile icon={UserCheck} title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.uniqueStaffTrained} of ${data.totalStaffCount} trained`} valueColor={data.groupCoverageRatio >= 70 ? 'text-report-green' : data.groupCoverageRatio >= 40 ? 'text-gold-400' : 'text-report-red'} />
+        <ReportTile icon={UserCheck} title="Staff Coverage" value={pct(data.groupCoverageRatio)} subtitle={`${data.eligibleStaffTrained} of ${data.totalStaffCount} confirmed staff trained · ${pct(data.overallCoverageRatioAllStaff)} overall (all staff)`} valueColor={data.groupCoverageRatio >= 70 ? 'text-report-green' : data.groupCoverageRatio >= 40 ? 'text-gold-400' : 'text-report-red'} />
         <ReportTile icon={Star} title="Avg Impact Score" value={rating(data.avgImpactScore)} subtitle="Based on confidence ratings (max 5)" valueColor={data.avgImpactScore >= 4 ? 'text-report-green' : 'text-gold-400'} />
         <ReportTile icon={BarChart2} title="Projected Annual Spend" value={fmt(data.forecastedSpend)} subtitle={`Budget: ${fmt(data.totalBudget)}`} valueColor={data.budgetRisk === 'over-budget' ? 'text-report-red' : 'text-report-green'} />
 

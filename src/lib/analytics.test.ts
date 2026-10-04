@@ -17,6 +17,8 @@ const { findMany } = vi.hoisted(() => ({
     trainingType: vi.fn(),
     differentiatingCapability: vi.fn(),
     managerReviewRecord: vi.fn(),
+    staffRosterRecord: vi.fn(),
+    trainingSchedule: vi.fn(),
   },
 }))
 
@@ -30,6 +32,8 @@ vi.mock('@/lib/prisma', () => ({
     trainingType: { findMany: (...a: unknown[]) => findMany.trainingType(...a) },
     differentiatingCapability: { findMany: (...a: unknown[]) => findMany.differentiatingCapability(...a) },
     managerReviewRecord: { findMany: (...a: unknown[]) => findMany.managerReviewRecord(...a) },
+    staffRosterRecord: { findMany: (...a: unknown[]) => findMany.staffRosterRecord(...a) },
+    trainingSchedule: { findMany: (...a: unknown[]) => findMany.trainingSchedule(...a) },
   },
 }))
 
@@ -56,8 +60,25 @@ function trainingRecord(overrides: Partial<{
   month: string; year: number; cost: number; trainingType: string | null
 }> = {}) {
   return {
+    id: `tr-${Math.random()}`,
     staffId: 'S1', staffName: 'Jane Doe', businessUnit: 'Finance', training: 'Course A',
     month: 'March', year: 2026, cost: 0, trainingType: null,
+    ...overrides,
+  }
+}
+
+// Minimal StaffRosterRecord — active/confirmed, no Meri Mover/Intern/H2-hire exclusions by
+// default, so a roster of N of these behaves as "N eligible staff" for coverage math.
+function rosterRecord(overrides: Partial<{
+  staffId: string; businessUnit: string; active: boolean; confirmed: boolean
+  role: string | null; employmentType: string | null; employmentDate: Date | null
+}> = {}) {
+  return {
+    id: `rr-${Math.random()}`,
+    staffId: 'S1', firstName: 'Jane', middleName: null, lastName: 'Doe', email: null,
+    lineManagerStaffId: null, businessUnit: 'Finance', role: 'Analyst', department: null,
+    employmentType: 'Full-Time', active: true, employmentDate: new Date('2020-01-01'),
+    confirmed: true, batchId: 'batch-1', createdAt: new Date('2026-01-01'),
     ...overrides,
   }
 }
@@ -70,6 +91,8 @@ beforeEach(() => {
   findMany.trainingType.mockResolvedValue([])
   findMany.differentiatingCapability.mockResolvedValue([])
   findMany.managerReviewRecord.mockResolvedValue([])
+  findMany.staffRosterRecord.mockResolvedValue([])
+  findMany.trainingSchedule.mockResolvedValue([])
 })
 
 describe('computeGroupAnalytics — cost & budget aggregation', () => {
@@ -160,11 +183,19 @@ describe('computeGroupAnalytics — cost & budget aggregation', () => {
       trainingRecord({ staffId: 'S1', businessUnit: 'Finance', cost: 50 }),
       trainingRecord({ staffId: 'S2', businessUnit: 'Finance', cost: 75 }),
     ])
+    // 10 eligible (active, confirmed) staff on the roster, only S1/S2 of whom attended anything —
+    // groupCoverageRatio is this eligible-attended-over-eligible-total ratio (2 of 10 = 20%), NOT
+    // uniqueStaffTrained (which stays unscoped — see overallCoverageRatioAllStaff for that).
+    findMany.staffRosterRecord.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => rosterRecord({ staffId: `S${i + 1}` }))
+    )
 
     const result = await computeGroupAnalytics({ mode: 'all' })
 
     expect(result.uniqueStaffTrained).toBe(2)
-    expect(result.groupCoverageRatio).toBe(20) // 2 of 10 staff
+    expect(result.eligibleStaffTrained).toBe(2)
+    expect(result.groupCoverageRatio).toBe(20) // 2 of 10 eligible staff
+    expect(result.overallCoverageRatioAllStaff).toBe(20) // 2 of 10 active staff (same pool here)
   })
 
   it('filters training records by year and month range without double-counting excluded periods', async () => {
