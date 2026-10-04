@@ -124,14 +124,8 @@ function resolveAgainstRoster(
 // Matched in JS, not the Prisma query, so this behaves the same on the sqlite (local) and
 // postgres (production) connectors — sqlite has no case-insensitive `mode` filter. Whitespace is
 // stripped entirely (not just trimmed) so a stray non-breaking space or double space from manual
-// data entry in the Training Type column still matches. Recognizes "TM" (the original Training
-// Type taxonomy name), "Talent Member", and "Talent Members" (both renames seen in practice) —
-// the taxonomy entry can be renamed freely from Admin → Training Types, but that only changes the
-// label going forward; old TrainingRecord/TrainingSchedule rows keep whatever string was stored on
-// them at the time, so any of these spellings can genuinely coexist in the data indefinitely.
+// data entry in the Training Type column still matches.
 const normTM = (v: string | null) => (v || '').replace(/\s+/g, '').toLowerCase()
-const TM_TRAINING_TYPE_ALIASES = new Set(['tm', 'talentmember', 'talentmembers'])
-const isTMTrainingType = (v: string | null) => TM_TRAINING_TYPE_ALIASES.has(normTM(v))
 
 export async function computeTalentMemberReport(filter: PeriodFilter): Promise<TalentMemberFullReport> {
   const year = filter.mode === 'all' ? new Date().getFullYear() : (filter.year ?? new Date().getFullYear())
@@ -140,7 +134,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // doesn't span multiple years the way it does on other pages; see activeMonthIndices).
   const monthIndices = activeMonthIndices(filter)
 
-  const [directory, allRosterEntries, exemptions, allSchedules, yearTrainingRecords] = await Promise.all([
+  const [directory, allRosterEntries, exemptions, allSchedules, yearTrainingRecords, tmTrainingTypes] = await Promise.all([
     loadRosterDirectory(),
     prisma.talentMemberInfo.findMany(),
     prisma.talentMemberExemption.findMany({ where: { year } }),
@@ -149,10 +143,18 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
       orderBy: { startDate: 'asc' },
     }),
     prisma.trainingRecord.findMany({ where: { year } }),
+    prisma.trainingType.findMany({ where: { isTalentMemberType: true }, select: { name: true } }),
   ])
-  // Filtered here (not in the query above) for the same reason everything else in this file is
-  // matched in JS — a raw `where: { trainingType: 'TM' }` only ever matches that one exact string,
-  // silently missing every schedule tagged "Talent Member" instead.
+  // Matched against whichever Training Type name(s) are flagged "Talent Member type" in Admin →
+  // Training Types, not a hardcoded string — renaming that taxonomy entry, or flagging an
+  // additional one, takes effect immediately with no code change. More than one name can be
+  // flagged at once so historical rows tagged with an old name keep matching after a rename.
+  const tmTypeNames = new Set(tmTrainingTypes.map((t) => normTM(t.name)))
+  // Falls back to the literal "tm" only if nothing is flagged yet (e.g. right after this
+  // migration, before an admin has visited Training Types) — not a hardcoded alias list, just a
+  // safety net so TM matching doesn't go completely dark during that gap.
+  if (tmTypeNames.size === 0) tmTypeNames.add('tm')
+  const isTMTrainingType = (v: string | null) => tmTypeNames.has(normTM(v))
   const tmSchedules = allSchedules.filter((s) => isTMTrainingType(s.trainingType))
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
   // Whenever a schedule already exists for a person+training, the schedule is the source of

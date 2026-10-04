@@ -105,12 +105,18 @@ model UserPagePermission {
 // Training Type taxonomy — classifies training spend as "formal" (Internal/External Training)
 // or "other" (Summit, Leadership Cafe, Workshop, etc. — the "Strategic Learning Initiatives" bucket)
 model TrainingType {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  classification String   // "formal" | "other"
-  order          Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  classification     String   // "formal" | "other"
+  // Marks this entry as (one of) the Talent Member training type — computeTalentMemberReport
+  // matches TrainingRecord/TrainingSchedule rows against every flagged name's exact stored
+  // string, not a hardcoded alias list, so renaming this taxonomy entry from Admin -> Training
+  // Types never breaks TM matching again. More than one row can be flagged at once (e.g. right
+  // after a rename) so historical rows tagged with the old name keep matching too.
+  isTalentMemberType Boolean  @default(false)
+  order              Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // Differentiating Capability taxonomy — tags training records for coverage reporting

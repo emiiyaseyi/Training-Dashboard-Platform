@@ -9,6 +9,7 @@ export interface TaxonomyItem {
   name: string
   order: number
   classification?: 'formal' | 'other'
+  isTalentMemberType?: boolean
 }
 
 interface TaxonomyPanelProps {
@@ -16,19 +17,23 @@ interface TaxonomyPanelProps {
   description: string
   endpoint: string
   withClassification?: boolean
+  // Training Types only — marks (one or more) entries as the Talent Member training type.
+  // computeTalentMemberReport matches against whichever name(s) are flagged here instead of a
+  // hardcoded alias list, so renaming this entry never silently breaks TM matching again.
+  withTalentMemberFlag?: boolean
   namePlaceholder?: string
 }
 
-export function TaxonomyPanel({ title, description, endpoint, withClassification, namePlaceholder }: TaxonomyPanelProps) {
+export function TaxonomyPanel({ title, description, endpoint, withClassification, withTalentMemberFlag, namePlaceholder }: TaxonomyPanelProps) {
   const [items, setItems] = useState<TaxonomyItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [editMap, setEditMap] = useState<Record<string, { name: string; order: string; classification: 'formal' | 'other' }>>({})
+  const [editMap, setEditMap] = useState<Record<string, { name: string; order: string; classification: 'formal' | 'other'; isTalentMemberType: boolean }>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [addingNew, setAddingNew] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
-  const [newItem, setNewItem] = useState({ name: '', order: '0', classification: 'formal' as 'formal' | 'other' })
+  const [newItem, setNewItem] = useState({ name: '', order: '0', classification: 'formal' as 'formal' | 'other', isTalentMemberType: false })
 
   const load = async () => {
     setLoading(true)
@@ -38,7 +43,7 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
       setItems(Array.isArray(data) ? data : [])
       const init: typeof editMap = {}
       ;(Array.isArray(data) ? data : []).forEach((it) => {
-        init[it.id] = { name: it.name, order: it.order.toString(), classification: it.classification ?? 'formal' }
+        init[it.id] = { name: it.name, order: it.order.toString(), classification: it.classification ?? 'formal', isTalentMemberType: it.isTalentMemberType ?? false }
       })
       setEditMap(init)
     } finally {
@@ -50,6 +55,10 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
 
   const updateEdit = (id: string, field: 'name' | 'order' | 'classification', value: string) => {
     setEditMap((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  const updateEditFlag = (id: string, value: boolean) => {
+    setEditMap((prev) => ({ ...prev, [id]: { ...prev[id], isTalentMemberType: value } }))
   }
 
   const save = async (item: TaxonomyItem) => {
@@ -64,6 +73,7 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
           name: vals.name.trim(),
           order: parseInt(vals.order) || 0,
           ...(withClassification ? { classification: vals.classification } : {}),
+          ...(withTalentMemberFlag ? { isTalentMemberType: vals.isTalentMemberType } : {}),
         }),
       })
       setSaved(item.id)
@@ -85,9 +95,10 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
           name: newItem.name.trim(),
           order: parseInt(newItem.order) || 0,
           ...(withClassification ? { classification: newItem.classification } : {}),
+          ...(withTalentMemberFlag ? { isTalentMemberType: newItem.isTalentMemberType } : {}),
         }),
       })
-      setNewItem({ name: '', order: '0', classification: 'formal' })
+      setNewItem({ name: '', order: '0', classification: 'formal', isTalentMemberType: false })
       setAddingNew(false)
       await load()
     } finally {
@@ -121,10 +132,10 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
       ) : (
         <div className="space-y-2">
           {items.map((item) => {
-            const vals = editMap[item.id] ?? { name: item.name, order: item.order.toString(), classification: item.classification ?? 'formal' }
+            const vals = editMap[item.id] ?? { name: item.name, order: item.order.toString(), classification: item.classification ?? 'formal', isTalentMemberType: item.isTalentMemberType ?? false }
             const isSaving = saving === item.id
             const isSaved = saved === item.id
-            const changed = vals.name !== item.name || parseInt(vals.order) !== item.order || vals.classification !== (item.classification ?? 'formal')
+            const changed = vals.name !== item.name || parseInt(vals.order) !== item.order || vals.classification !== (item.classification ?? 'formal') || vals.isTalentMemberType !== (item.isTalentMemberType ?? false)
 
             return (
               <div key={item.id} className="overflow-x-auto border border-slate-100 rounded-lg">
@@ -147,6 +158,17 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
                     <option value="formal">Formal Training</option>
                     <option value="other">Strategic Learnings</option>
                   </select>
+                )}
+                {withTalentMemberFlag && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 shrink-0 whitespace-nowrap" title="Records/schedules tagged with this Training Type name count toward Talent Member training (Coming Up, Attended, spend).">
+                    <input
+                      type="checkbox"
+                      checked={vals.isTalentMemberType}
+                      onChange={(e) => updateEditFlag(item.id, e.target.checked)}
+                      className="w-3.5 h-3.5"
+                    />
+                    Talent Member type
+                  </label>
                 )}
                 <input
                   type="number"
@@ -207,6 +229,17 @@ export function TaxonomyPanel({ title, description, endpoint, withClassification
                     <option value="formal">Formal Training</option>
                     <option value="other">Strategic Learnings</option>
                   </select>
+                )}
+                {withTalentMemberFlag && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600 shrink-0 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={newItem.isTalentMemberType}
+                      onChange={(e) => setNewItem((p) => ({ ...p, isTalentMemberType: e.target.checked }))}
+                      className="w-3.5 h-3.5"
+                    />
+                    Talent Member type
+                  </label>
                 )}
               </div>
               <div className="flex items-center gap-3">

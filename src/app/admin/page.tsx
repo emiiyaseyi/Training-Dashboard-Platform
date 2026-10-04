@@ -692,6 +692,7 @@ export default function AdminPage() {
                 description="Classifies training spend as Formal Training (Internal/External) or Strategic Learnings (Summit, Leadership Cafe, Workshop, etc.). This drives the split shown on the Total Learning Investment and Strategic Learnings cards, and populates the Training Type column on the upload template."
                 endpoint="/api/training-types"
                 withClassification
+                withTalentMemberFlag
                 namePlaceholder="e.g. Summit"
               />
             </div>

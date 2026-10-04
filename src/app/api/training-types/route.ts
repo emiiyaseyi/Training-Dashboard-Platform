@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/session-guard'
 const DEFAULT_TYPES = [
   { name: 'Internal Training', classification: 'formal', order: 0 },
   { name: 'External Training', classification: 'formal', order: 1 },
-  { name: 'TM',                classification: 'formal', order: 2 },
+  { name: 'TM',                classification: 'formal', order: 2, isTalentMemberType: true },
   { name: 'Summit',            classification: 'other',  order: 3 },
   { name: 'Leadership Cafe',   classification: 'other',  order: 4 },
   { name: 'Workshop',          classification: 'other',  order: 5 },
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, classification, order } = body as { name: string; classification: string; order?: number }
+    const { name, classification, order, isTalentMemberType } = body as { name: string; classification: string; order?: number; isTalentMemberType?: boolean }
 
     if (!name) return NextResponse.json({ error: 'Name is required.' }, { status: 400 })
     if (classification !== 'formal' && classification !== 'other') {
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
 
     const type = await prisma.trainingType.upsert({
       where: { name },
-      update: { classification, order: order ?? 0 },
-      create: { name, classification, order: order ?? 0 },
+      update: { classification, order: order ?? 0, isTalentMemberType: isTalentMemberType ?? false },
+      create: { name, classification, order: order ?? 0, isTalentMemberType: isTalentMemberType ?? false },
     })
 
     return NextResponse.json(type)
@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { id, name, classification, order } = body as { id: string; name: string; classification: string; order?: number }
+    const { id, name, classification, order, isTalentMemberType } = body as { id: string; name: string; classification: string; order?: number; isTalentMemberType?: boolean }
 
     if (!id) return NextResponse.json({ error: 'ID is required.' }, { status: 400 })
     if (classification !== 'formal' && classification !== 'other') {
@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest) {
 
     const type = await prisma.trainingType.update({
       where: { id },
-      data: { name, classification, order: order ?? 0 },
+      data: { name, classification, order: order ?? 0, isTalentMemberType: isTalentMemberType ?? false },
     })
 
     return NextResponse.json(type)
