@@ -16,7 +16,10 @@ import type { PeriodFilter } from './filter-types'
 
 export function isMeriMover(staff: Pick<StaffRosterRecord, 'role'>): boolean {
   const role = (staff.role || '').trim().toLowerCase()
-  return role.includes('meri mover') || role.includes('merimover')
+  // Broad on purpose — any job title containing "mover" (Meri Mover, Senior Meri Mover, Mover,
+  // etc.) is this role, per explicit instruction after a variant title slipped through the
+  // earlier exact "meri mover"/"merimover" match.
+  return role.includes('mover')
 }
 
 export function isInternLike(staff: Pick<StaffRosterRecord, 'employmentType' | 'role'>): boolean {
