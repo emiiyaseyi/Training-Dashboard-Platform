@@ -59,3 +59,19 @@ export function countEligibleStaff(
 export function effectiveYearForCoverage(filter: PeriodFilter): number | null {
   return filter.mode === 'all' ? null : (filter.year ?? new Date().getFullYear())
 }
+
+// StaffRosterRecord is a snapshot LOG, not one row per person — every sync/upload that touches
+// someone adds another row rather than updating in place (see sheets-sync.ts's dedupeRoster).
+// Reading it for a coverage count without collapsing to "most recent row per Staff ID" silently
+// counts the same person multiple times, once per historical snapshot — this is what every other
+// consumer of this table (Yet to Attend, the Employees page) already does; analytics.ts didn't,
+// which is why Executive Overview's total was inflated relative to Yet to Attend's.
+export function latestRosterSnapshot<T extends { staffId: string; createdAt: Date }>(roster: T[]): T[] {
+  // Sorted internally (ascending) rather than trusting the caller's query order — a Map keeps
+  // whichever value was set last for a given key, so ascending order makes "last write wins"
+  // mean "most recent snapshot wins," regardless of how the caller fetched the rows.
+  const sorted = [...roster].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  const latestByStaffId = new Map<string, T>()
+  for (const r of sorted) latestByStaffId.set(r.staffId, r)
+  return [...latestByStaffId.values()]
+}

@@ -2,7 +2,7 @@ import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
-import { countEligibleStaff, effectiveYearForCoverage } from './staff-training-eligibility'
+import { countEligibleStaff, effectiveYearForCoverage, latestRosterSnapshot } from './staff-training-eligibility'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -642,7 +642,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const businessUnits = scopeSet ? rawBusinessUnits.filter((b) => scopeSet.has(b.name)) : rawBusinessUnits
   const allKSS = scopeSet ? rawKSS.filter((r) => scopeSet.has(r.businessUnit)) : rawKSS
   const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
-  const rosterRecords = scopeSet ? rawRoster.filter((r) => scopeSet.has(r.businessUnit)) : rawRoster
+  const latestRoster = latestRosterSnapshot(rawRoster)
+  const rosterRecords = scopeSet ? latestRoster.filter((r) => scopeSet.has(r.businessUnit)) : latestRoster
   const coverageYear = effectiveYearForCoverage(filter)
 
   const typeMap = buildTypeClassMap(trainingTypes)
@@ -1022,6 +1023,7 @@ export async function computeBUAnalytics(
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
   const coverageYear = effectiveYearForCoverage(filter)
+  const latestGroupRoster = latestRosterSnapshot(groupAllRoster)
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -1077,7 +1079,7 @@ export async function computeBUAnalytics(
   const staffTrained = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const otherStaffTrained = new Set(otherTrainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const subscriptionStaff = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
-  const totalStaff = countEligibleStaff(groupAllRoster, buName, coverageYear)
+  const totalStaff = countEligibleStaff(latestGroupRoster, buName, coverageYear)
   const budget = buConfig?.budget ?? 0
   const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
   const validF = feedbackRecords.filter((f) => f.confidenceRating != null)
@@ -1200,7 +1202,7 @@ export async function computeBUAnalytics(
     const cfg   = groupAllBUConfigs.find((b) => b.name === name)
     const tc    = tRecs.reduce((s, r) => s + r.cost, 0)
     const st    = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
-    const ts    = countEligibleStaff(groupAllRoster, name, coverageYear)
+    const ts    = countEligibleStaff(latestGroupRoster, name, coverageYear)
     const vF    = fRecs.filter((f) => f.confidenceRating != null)
     const ai    = vF.length > 0 ? vF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / vF.length : 0
     return {
