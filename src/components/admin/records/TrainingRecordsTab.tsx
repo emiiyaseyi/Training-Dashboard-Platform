@@ -975,16 +975,16 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1) }}
-            placeholder="Search training, name, Staff ID, or Business Unit…"
-            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
-          />
-        </div>
+      <div className="relative max-w-sm">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setPage(1) }}
+          placeholder="Search training, name, Staff ID, or Business Unit…"
+          className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         {!showDownloadReport && (
           <button onClick={() => setShowDownloadReport(true)} className="flex items-center gap-1.5 text-sm font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-2 hover:bg-slate-50">
             <Download className="w-4 h-4" /> Download Report

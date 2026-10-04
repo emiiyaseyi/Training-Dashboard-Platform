@@ -276,16 +276,16 @@ export function SubscriptionRecordsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setPage(1) }}
-            placeholder="Search name, Staff ID, BU, or Organization…"
-            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
-          />
-        </div>
+      <div className="relative max-w-sm">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setPage(1) }}
+          placeholder="Search name, Staff ID, BU, or Organization…"
+          className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
         {!addingNew && !bulkMode && (
           <>
             <button onClick={() => setAddingNew(true)} className="flex items-center gap-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg px-3 py-2 hover:bg-blue-700">
