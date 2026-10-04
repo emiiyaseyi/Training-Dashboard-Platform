@@ -323,8 +323,8 @@ export default function TalentMembersPage() {
 
         <SectionCard
           icon={CalendarCheck}
-          title={`TMs That Attended a Training (${data.attended.length})`}
-          description="Sourced from the 2026 Training Data (Training Type = TM) and from scheduled TM trainings whose end date has passed. Month-only entries (no vendor) come from the uploaded Training Data."
+          title={`Training Attendance Records (${data.attended.length})`}
+          description="One row per training attended, not per person — someone who attended more than one TM training this year appears more than once here (see Staff Trained above for the unique-headcount figure). Sourced from the 2026 Training Data (Training Type = TM) and from scheduled TM trainings whose end date has passed. Month-only entries (no vendor) come from the uploaded Training Data."
           headerActions={<SectionExport rows={attendedRows} filename={`tm_attended_${year}`} format="xlsx" label="Excel" />}
         >
           <DataTable
