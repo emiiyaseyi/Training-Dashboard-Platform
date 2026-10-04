@@ -650,6 +650,13 @@ model TrainingRecordChange {
   newData          String   // JSON snapshot of what the sheet now says for the same fields
   changedFields    String   // JSON string[] of which fields actually differ
   detectedAt       DateTime @default(now())
+  // True when at least one of changedFields would blank out a field that currently has a real
+  // value (e.g. Vendor going from "Acme" to empty) — almost always a stale/blank source cell, not
+  // a genuine correction. "Accept All" skips these and leaves them for individual review (where
+  // the full before/after is visible) instead of silently reverting an already-fixed field; a
+  // single "Accept" on one of these still applies it immediately, since that IS a deliberate,
+  // informed decision.
+  riskyRevert      Boolean  @default(false)
 
   @@index([existingRecordId])
 }

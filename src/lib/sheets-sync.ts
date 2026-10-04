@@ -58,11 +58,31 @@ function trainingLooseKey(staffName: string, training: string, month: string): s
   return `${staffName.trim().toLowerCase()}|${training.trim().toLowerCase()}|${(month || '').trim().toLowerCase()}`
 }
 
+// A proposed change is a "risky revert" when it would blank out a field that currently has a real
+// value — almost always caused by the source sheet cell being stale/blank rather than a genuine
+// edit, since a deliberate correction normally REPLACES a value, not erases it. Used to keep
+// "Accept All" from silently undoing an already-fixed field (see applyNextTrainingRecordChangeChunk).
+function isRiskyRevert(field: keyof TrainingRecordSnapshot, oldVal: unknown, newVal: unknown): boolean {
+  if (field === 'cost') {
+    // cost is never null — 0 is its own "blank" here, but only flagged risky going FROM a real,
+    // explicit value (genuinely free trainings staying 0→0 never reach this function at all, since
+    // that's not a change).
+    return typeof oldVal === 'number' && oldVal !== 0 && newVal === 0
+  }
+  if (field === 'hours') {
+    return oldVal != null && newVal == null
+  }
+  const oldStr = typeof oldVal === 'string' ? oldVal.trim() : ''
+  const newStr = typeof newVal === 'string' ? newVal.trim() : ''
+  return oldStr !== '' && newStr === ''
+}
+
 export interface TrainingRecordChangeCandidate {
   existingRecordId: string
   oldData: TrainingRecordSnapshot
   newData: TrainingRecordSnapshot
   changedFields: string[]
+  riskyRevert: boolean
 }
 
 // Splits incoming sheet rows into genuinely new rows (import directly, same as before) and
@@ -115,7 +135,8 @@ async function reconcileTraining(
       }
       const changedFields = TRACKED_TRAINING_FIELDS.filter((f) => String(oldData[f] ?? '') !== String(newData[f] ?? ''))
       if (changedFields.length > 0) {
-        changes.push({ existingRecordId: match.id, oldData, newData, changedFields })
+        const riskyRevert = changedFields.some((f) => isRiskyRevert(f, oldData[f], newData[f]))
+        changes.push({ existingRecordId: match.id, oldData, newData, changedFields, riskyRevert })
       }
       continue
     }
@@ -173,14 +194,26 @@ export interface ApplyChunkResult {
   remaining: number
   total: number
   failed: { id: string; message: string }[]
+  // Pending changes that blank out an already-filled field — never auto-applied by this function
+  // (see isRiskyRevert). Left in place in the queue for individual review/accept instead. This is
+  // the total count across the WHOLE queue, not just this chunk, so the caller can tell the admin
+  // up front how many will need a manual look once the auto-applicable ones are done.
+  heldForReview: number
 }
 
 export async function applyNextTrainingRecordChangeChunk(): Promise<ApplyChunkResult> {
-  const total = await prisma.trainingRecordChange.count()
-  const chunk = await prisma.trainingRecordChange.findMany({ take: CHUNK_SIZE, orderBy: { detectedAt: 'asc' } })
+  const [total, heldForReview] = await Promise.all([
+    prisma.trainingRecordChange.count({ where: { riskyRevert: false } }),
+    prisma.trainingRecordChange.count({ where: { riskyRevert: true } }),
+  ])
+  const chunk = await prisma.trainingRecordChange.findMany({
+    where: { riskyRevert: false },
+    take: CHUNK_SIZE,
+    orderBy: { detectedAt: 'asc' },
+  })
 
   if (chunk.length === 0) {
-    return { appliedThisChunk: 0, orphanedThisChunk: 0, remaining: 0, total, failed: [] }
+    return { appliedThisChunk: 0, orphanedThisChunk: 0, remaining: 0, total, failed: [], heldForReview }
   }
 
   const parsed = chunk.map((c) => ({
@@ -239,7 +272,7 @@ export async function applyNextTrainingRecordChangeChunk(): Promise<ApplyChunkRe
     await prisma.trainingRecordChange.deleteMany({ where: { id: { in: toDelete } } })
   }
 
-  return { appliedThisChunk, orphanedThisChunk, remaining: total - toDelete.length, total, failed }
+  return { appliedThisChunk, orphanedThisChunk, remaining: total - toDelete.length, total, failed, heldForReview }
 }
 
 async function dedupeFeedback(rows: FeedbackRow[]): Promise<FeedbackRow[]> {
@@ -540,6 +573,7 @@ export async function syncFromGoogleSheets(trigger: 'manual' | 'scheduled' = 'ma
               oldData: JSON.stringify(c.oldData),
               newData: JSON.stringify(c.newData),
               changedFields: JSON.stringify(c.changedFields),
+              riskyRevert: c.riskyRevert,
             })),
           })
         }

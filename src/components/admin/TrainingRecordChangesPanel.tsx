@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { GitCompareArrows, Check, X, Loader2, CheckCheck } from 'lucide-react'
+import { GitCompareArrows, Check, X, Loader2, CheckCheck, AlertTriangle } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
@@ -23,6 +23,7 @@ interface PendingChange {
   newData: TrainingSnapshot
   changedFields: string[]
   detectedAt: string
+  riskyRevert: boolean
 }
 
 const FIELD_LABELS: Record<keyof TrainingSnapshot, string> = {
@@ -85,20 +86,26 @@ export function TrainingRecordChangesPanel() {
   // (every record in it is genuinely failing, not just temporarily), the loop stops rather than
   // spinning forever on the same stuck chunk.
   const acceptAll = async () => {
-    if (!confirm(`Apply all ${changes.length} detected edits? Where a Staff ID is being corrected, every other record under the old ID (Training Data, Subscriptions, KSS) is updated to the new one too.`)) return
+    const autoApplicable = changes.filter((c) => !c.riskyRevert).length
+    if (autoApplicable === 0) {
+      alert('Every pending edit here would blank out an already-filled field, so none can be bulk-applied — review each one individually below.')
+      return
+    }
+    if (!confirm(`Apply ${autoApplicable} detected edit(s)? Where a Staff ID is being corrected, every other record under the old ID (Training Data, Subscriptions, KSS) is updated to the new one too. Edits that would blank out an already-filled field are skipped here and left below for individual review.`)) return
     setAcceptingAll(true)
     setAcceptAllNote('')
-    setAcceptAllProgress({ done: 0, total: changes.length })
+    setAcceptAllProgress({ done: 0, total: autoApplicable })
 
     let done = 0
-    let total = changes.length
+    let total = autoApplicable
     let allFailed: { id: string; message: string }[] = []
+    let heldForReview = changes.length - autoApplicable
     let stuckStreak = 0
     let noteSet = false
 
     try {
       while (true) {
-        let data: { appliedThisChunk?: number; orphanedThisChunk?: number; remaining?: number; total?: number; failed?: { id: string; message: string }[]; error?: string }
+        let data: { appliedThisChunk?: number; orphanedThisChunk?: number; remaining?: number; total?: number; failed?: { id: string; message: string }[]; heldForReview?: number; error?: string }
         try {
           const res = await fetch('/api/admin/training-record-changes/accept-all', { method: 'POST' })
           data = await res.json().catch(() => ({}))
@@ -118,6 +125,7 @@ export function TrainingRecordChangesPanel() {
         const progressedThisChunk = (data.appliedThisChunk ?? 0) + (data.orphanedThisChunk ?? 0)
         done = total - remaining
         if (data.failed?.length) allFailed = allFailed.concat(data.failed)
+        if (data.heldForReview != null) heldForReview = data.heldForReview
         setAcceptAllProgress({ done, total })
 
         if (remaining <= 0) break
@@ -134,8 +142,11 @@ export function TrainingRecordChangesPanel() {
         }
       }
 
-      if (allFailed.length > 0 && !noteSet) {
-        setAcceptAllNote(`Applied ${done} of ${total}. ${allFailed.length} genuinely failed and were left in place — first error: ${allFailed[0].message}`)
+      if (!noteSet) {
+        const parts = [`Applied ${done} of ${total}.`]
+        if (allFailed.length > 0) parts.push(`${allFailed.length} genuinely failed and were left in place — first error: ${allFailed[0].message}`)
+        if (heldForReview > 0) parts.push(`${heldForReview} would blank out an already-filled field, so ${heldForReview === 1 ? 'it was' : 'they were'} skipped — review ${heldForReview === 1 ? 'it' : 'them'} individually below.`)
+        if (allFailed.length > 0 || heldForReview > 0) setAcceptAllNote(parts.join(' '))
       }
     } finally {
       setPage(1)
@@ -145,7 +156,10 @@ export function TrainingRecordChangesPanel() {
     }
   }
 
-  const pageItems = paginate(changes, page, PAGE_SIZE)
+  // Risky reverts surfaced first — they're the ones that actually need a human look before being
+  // applied, so they shouldn't be buried behind pages of routine, safely-bulk-applicable edits.
+  const sortedChanges = [...changes].sort((a, b) => (b.riskyRevert ? 1 : 0) - (a.riskyRevert ? 1 : 0))
+  const pageItems = paginate(sortedChanges, page, PAGE_SIZE)
 
   return (
     <SectionCard
@@ -175,10 +189,18 @@ export function TrainingRecordChangesPanel() {
       ) : (
         <div className="space-y-3">
           {pageItems.map((c) => (
-            <div key={c.id} className="border border-amber-200 bg-amber-50/40 rounded-lg p-3">
-              <p className="text-xs font-semibold text-slate-700 mb-2">
+            <div key={c.id} className={`border rounded-lg p-3 ${c.riskyRevert ? 'border-red-300 bg-red-50/50' : 'border-amber-200 bg-amber-50/40'}`}>
+              <p className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                {c.riskyRevert && (
+                  <span title="Would blank out a field that currently has a value — likely a stale/blank source cell, not a real correction.">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                  </span>
+                )}
                 {c.newData.businessUnit || c.oldData.businessUnit}
                 <span className="text-slate-400 font-normal"> — {c.newData.month || c.oldData.month}</span>
+                {c.riskyRevert && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Would blank a filled field</span>
+                )}
               </p>
               <div className="overflow-x-auto">
                 <table className="text-xs w-full min-w-[420px]">

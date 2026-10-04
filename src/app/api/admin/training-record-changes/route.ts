@@ -18,6 +18,7 @@ export async function GET() {
         newData: JSON.parse(c.newData),
         changedFields: JSON.parse(c.changedFields),
         detectedAt: c.detectedAt,
+        riskyRevert: c.riskyRevert,
       }))
     )
   } catch (err) {
