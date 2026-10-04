@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import { isCustomSurveyExpired } from '@/lib/custom-survey'
 import { mirrorCustomSurveyResponse } from '@/lib/custom-survey-mirror'
 import { visibleQuestions } from '@/lib/custom-survey-branching'
+
+export const maxDuration = 60
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'custom-survey-submit', 20, 60_000)
@@ -46,13 +48,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     })
     await prisma.customSurveyRecipient.update({ where: { id: recipient.id }, data: { respondedAt: new Date() } })
 
-    const mirrorResult = await mirrorCustomSurveyResponse(recipient.survey, recipient, answers, questions, response.submittedAt)
-    if (mirrorResult.attempted) {
-      await prisma.customSurveyResponse.update({
-        where: { id: response.id },
-        data: { mirrorSyncedAt: mirrorResult.success ? new Date() : null, mirrorError: mirrorResult.success ? null : mirrorResult.message },
-      })
-    }
+    // Mirrored into the Google Sheet after the response has already gone back to the respondent —
+    // same fix as src/app/api/survey/[token]/[stage]/submit/route.ts: a slow/rate-limited Sheets
+    // call blocking the response here was turning "Submit" into an indefinite spinner.
+    after(async () => {
+      try {
+        const mirrorResult = await mirrorCustomSurveyResponse(recipient.survey, recipient, answers, questions, response.submittedAt)
+        if (mirrorResult.attempted) {
+          await prisma.customSurveyResponse.update({
+            where: { id: response.id },
+            data: { mirrorSyncedAt: mirrorResult.success ? new Date() : null, mirrorError: mirrorResult.success ? null : mirrorResult.message },
+          })
+        }
+      } catch (err) {
+        console.error('[custom-survey submit background]', err)
+      }
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {
