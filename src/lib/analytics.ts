@@ -2,6 +2,7 @@ import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
+import type { StaffRosterRecord } from '@prisma/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -578,6 +579,38 @@ function classifyTraining(trainingType: string | null | undefined, typeMap: Map<
   return typeMap.get(trainingType.toLowerCase()) ?? 'formal'
 }
 
+// "Total Staff Coverage" counts only staff a training cycle could realistically have reached —
+// confirmed, non-intern, not a Meri Mover (a driver/messenger role never enrolled in formal
+// training), and (when a specific year is being viewed) not hired in H2 of that same year, since
+// they wouldn't have had a fair shot at that year's training yet. Used as the denominator for
+// every coverage/capability-coverage ratio, replacing the old flat admin-entered headcount.
+function isEligibleForTrainingCoverage(staff: StaffRosterRecord, effectiveYear: number | null): boolean {
+  if (!staff.active || !staff.confirmed) return false
+  const empType = (staff.employmentType || '').toLowerCase()
+  const role = (staff.role || '').toLowerCase()
+  if (empType.includes('intern') || empType.includes('nysc') || role.includes('intern')) return false
+  if (role.includes('meri mover') || role.includes('merimover')) return false
+  if (effectiveYear != null && staff.employmentDate) {
+    const d = staff.employmentDate
+    if (d.getUTCFullYear() === effectiveYear && d.getUTCMonth() >= 6) return false // Jul–Dec
+  }
+  return true
+}
+
+function countEligibleStaff(roster: StaffRosterRecord[], businessUnit: string | null, effectiveYear: number | null): number {
+  return roster.filter(
+    (s) => (businessUnit == null || s.businessUnit.toLowerCase() === businessUnit.toLowerCase())
+      && isEligibleForTrainingCoverage(s, effectiveYear)
+  ).length
+}
+
+// "All Time" has no single year to evaluate an H2-hire cutoff against, so that part of
+// eligibility is skipped for it — a person hired H2 2024 has since had full years (2025, 2026…)
+// to be trained, so excluding them from an all-time total would be wrong.
+function effectiveYearForCoverage(filter: PeriodFilter): number | null {
+  return filter.mode === 'all' ? null : (filter.year ?? new Date().getFullYear())
+}
+
 function computeCapabilityCoverage(
   records: { staffId: string; capability: string | null }[],
   capabilities: { name: string }[],
@@ -612,6 +645,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     capabilities,
     talentMemberReport,
     rawManagerReviews,
+    rawRoster,
   ] = await Promise.all([
     prisma.trainingRecord.findMany(),
     prisma.feedbackRecord.findMany(),
@@ -622,6 +656,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
     computeTalentMemberReport({ mode: 'year', year: filter.year ?? new Date().getFullYear() }),
     prisma.managerReviewRecord.findMany(),
+    prisma.staffRosterRecord.findMany(),
   ])
 
   // BU-scoped users only see data for their assigned Business Unit(s) on this endpoint — every
@@ -635,6 +670,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const businessUnits = scopeSet ? rawBusinessUnits.filter((b) => scopeSet.has(b.name)) : rawBusinessUnits
   const allKSS = scopeSet ? rawKSS.filter((r) => scopeSet.has(r.businessUnit)) : rawKSS
   const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
+  const rosterRecords = scopeSet ? rawRoster.filter((r) => scopeSet.has(r.businessUnit)) : rawRoster
+  const coverageYear = effectiveYearForCoverage(filter)
 
   const typeMap = buildTypeClassMap(trainingTypes)
 
@@ -709,7 +746,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const allUniqueIds = new Set([...uniqueTrainedIds, ...uniqueSubIds])
   const totalUniqueStaff = allUniqueIds.size
   const totalLearningInvestment = totalTrainingCost + totalOtherTrainingCost + totalSubscriptionCost
-  const totalStaffCount = businessUnits.reduce((s, b) => s + b.staffCount, 0)
+  const totalStaffCount = countEligibleStaff(rosterRecords, null, coverageYear)
   const groupCoverageRatio = totalStaffCount > 0 ? (uniqueStaffTrained / totalStaffCount) * 100 : 0
 
   // ── Impact score — raw average on 0–5 scale ──
@@ -838,7 +875,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const staffTrained = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const otherStaffTrained = new Set(otherTRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const subscriptionStaff = new Set(sRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
-    const totalStaff = buConfig?.staffCount ?? 0
+    const totalStaff = countEligibleStaff(rosterRecords, buName, coverageYear)
     const budget = buConfig?.budget ?? 0
     const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
     const validF = fRecs.filter((f) => f.confidenceRating != null)
@@ -997,7 +1034,8 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, buManagerReviews] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, buManagerReviews,
+         groupAllRoster] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -1008,8 +1046,10 @@ export async function computeBUAnalytics(
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.trainingType.findMany(),
     prisma.managerReviewRecord.findMany({ where: { businessUnit: { equals: buName } } }),
+    prisma.staffRosterRecord.findMany(),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
+  const coverageYear = effectiveYearForCoverage(filter)
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -1065,7 +1105,7 @@ export async function computeBUAnalytics(
   const staffTrained = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const otherStaffTrained = new Set(otherTrainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const subscriptionStaff = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
-  const totalStaff = buConfig?.staffCount ?? 0
+  const totalStaff = countEligibleStaff(groupAllRoster, buName, coverageYear)
   const budget = buConfig?.budget ?? 0
   const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
   const validF = feedbackRecords.filter((f) => f.confidenceRating != null)
@@ -1188,7 +1228,7 @@ export async function computeBUAnalytics(
     const cfg   = groupAllBUConfigs.find((b) => b.name === name)
     const tc    = tRecs.reduce((s, r) => s + r.cost, 0)
     const st    = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
-    const ts    = cfg?.staffCount ?? 0
+    const ts    = countEligibleStaff(groupAllRoster, name, coverageYear)
     const vF    = fRecs.filter((f) => f.confidenceRating != null)
     const ai    = vF.length > 0 ? vF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / vF.length : 0
     return {
