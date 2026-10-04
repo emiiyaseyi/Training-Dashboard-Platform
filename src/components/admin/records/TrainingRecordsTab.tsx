@@ -658,18 +658,23 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     })
   }
 
-  const bulkDeleteSelectedDuplicates = async () => {
-    if (selectedDuplicateIds.size === 0) return
-    if (!confirm(`Delete ${selectedDuplicateIds.size} selected record(s)? This can't be undone from here (they're archived under Deleted Trainings).`)) return
+  const allDuplicateIds = () => duplicateGroups.flatMap((g) => g.records.map((r) => r.id))
+
+  const selectAllDuplicates = () => setSelectedDuplicateIds(new Set(allDuplicateIds()))
+  const deselectAllDuplicates = () => setSelectedDuplicateIds(new Set())
+
+  const runBulkDuplicateDelete = async (ids: string[], confirmMessage: string) => {
+    if (ids.length === 0) return
+    if (!confirm(confirmMessage)) return
     setBulkDeletingDuplicates(true)
     try {
-      const ids = [...selectedDuplicateIds]
+      const idSet = new Set(ids)
       const res = await fetch('/api/admin/records/training/possible-duplicates/bulk-delete', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
       })
       if (res.ok) {
         setDuplicateGroups((prev) => prev
-          .map((g) => ({ ...g, records: g.records.filter((r) => !selectedDuplicateIds.has(r.id)) }))
+          .map((g) => ({ ...g, records: g.records.filter((r) => !idSet.has(r.id)) }))
           .filter((g) => g.records.length > 1))
         setSelectedDuplicateIds(new Set())
         await load()
@@ -680,6 +685,26 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     } finally {
       setBulkDeletingDuplicates(false)
     }
+  }
+
+  const bulkDeleteSelectedDuplicates = () =>
+    runBulkDuplicateDelete(
+      [...selectedDuplicateIds],
+      `Delete ${selectedDuplicateIds.size} selected record(s)? This can't be undone from here (they're archived under Deleted Trainings).`
+    )
+
+  // Inverse of "Delete selected" — within every group that has at least one ticked row, deletes
+  // every OTHER row in that group and leaves the ticked one(s) alone. Groups with nothing ticked
+  // are left untouched entirely, so a mixed selection only resolves the groups the admin actually
+  // made a choice on.
+  const keepSelectedDuplicates = () => {
+    const idsToDelete = duplicateGroups
+      .filter((g) => g.records.some((r) => selectedDuplicateIds.has(r.id)))
+      .flatMap((g) => g.records.filter((r) => !selectedDuplicateIds.has(r.id)).map((r) => r.id))
+    runBulkDuplicateDelete(
+      idsToDelete,
+      `Keep the ${selectedDuplicateIds.size} selected record(s) and delete the other ${idsToDelete.length} in the same group(s)? This can't be undone from here (they're archived under Deleted Trainings).`
+    )
   }
 
   // Shared by both the per-group bulk assign and a single attendee's individual override —
@@ -1487,29 +1512,44 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           <p className="text-[11px] text-slate-400">
             Same person (by Staff ID, or by first + last name when there&apos;s no Staff ID — a missing/extra middle name doesn&apos;t
             stop a match), same training name — whether or not the records share a Month/Year. Pick which record to keep; the
-            other(s) are deleted (any linked schedule keeps pointing to the one you keep). Or tick the checkbox on any row(s) across
-            any group(s) and bulk delete them directly.
+            other(s) are deleted (any linked schedule keeps pointing to the one you keep). Or tick checkboxes across any
+            group(s) and either delete just those, or keep just those and delete the rest of their group.
           </p>
 
-          {selectedDuplicateIds.size > 0 && (
-            <div className="flex items-center justify-between bg-amber-100 border border-amber-300 rounded-lg px-3 py-2">
-              <span className="text-xs font-medium text-amber-800">{selectedDuplicateIds.size} selected</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedDuplicateIds(new Set())}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-700"
-                >
-                  Clear
+          {duplicateGroups.length > 0 && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={selectAllDuplicates} className="text-xs font-medium text-navy-600 hover:text-navy-800">
+                  Select all
                 </button>
-                <button
-                  onClick={bulkDeleteSelectedDuplicates}
-                  disabled={bulkDeletingDuplicates}
-                  className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
-                >
-                  {bulkDeletingDuplicates ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  Delete selected
+                <button onClick={deselectAllDuplicates} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                  Deselect all
                 </button>
               </div>
+              {selectedDuplicateIds.size > 0 && (
+                <span className="text-xs font-medium text-amber-800">{selectedDuplicateIds.size} selected</span>
+              )}
+            </div>
+          )}
+
+          {selectedDuplicateIds.size > 0 && (
+            <div className="flex items-center justify-end gap-2 bg-amber-100 border border-amber-300 rounded-lg px-3 py-2">
+              <button
+                onClick={keepSelectedDuplicates}
+                disabled={bulkDeletingDuplicates}
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg px-3 py-1.5 hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {bulkDeletingDuplicates ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Keep selected, delete the rest
+              </button>
+              <button
+                onClick={bulkDeleteSelectedDuplicates}
+                disabled={bulkDeletingDuplicates}
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+              >
+                {bulkDeletingDuplicates ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Delete selected
+              </button>
             </div>
           )}
 
