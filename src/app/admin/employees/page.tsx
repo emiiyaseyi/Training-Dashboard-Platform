@@ -190,6 +190,23 @@ export default function EmployeesPage() {
     setPage(1)
   }, [query, statusFilter, employmentFilter, departmentFilter, buFilter, roleFilter])
 
+  // Always computed from the full unfiltered list, not whatever tab/search is active — "how many
+  // staff do we have" shouldn't change depending on which filter happens to be selected.
+  const summary = useMemo(() => {
+    const activeCount = employees.filter((e) => e.active).length
+    const byBU = new Map<string, number>()
+    for (const e of employees) {
+      if (!e.active) continue
+      byBU.set(e.businessUnit || 'Unassigned', (byBU.get(e.businessUnit || 'Unassigned') || 0) + 1)
+    }
+    return {
+      total: employees.length,
+      active: activeCount,
+      inactive: employees.length - activeCount,
+      byBU: [...byBU.entries()].sort((a, b) => b[1] - a[1]),
+    }
+  }, [employees])
+
   const departments = useMemo(() => [...new Set(employees.map((e) => e.department).filter((d): d is string => !!d))].sort(), [employees])
   const roles = useMemo(() => [...new Set(employees.map((e) => e.role).filter((r): r is string => !!r))].sort(), [employees])
   const staffById = useMemo(() => {
@@ -322,6 +339,36 @@ export default function EmployeesPage() {
       />
 
       <div className="p-4 sm:p-8 space-y-4">
+        {!loading && (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <div>
+                <p className="text-2xl font-bold text-slate-800 tabular-nums">{summary.total}</p>
+                <p className="text-xs text-slate-500">Total staff on roster</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-emerald-600 tabular-nums">{summary.active}</p>
+                <p className="text-xs text-slate-500">Active</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-400 tabular-nums">{summary.inactive}</p>
+                <p className="text-xs text-slate-500">Inactive / Exited</p>
+              </div>
+            </div>
+            {summary.byBU.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Active staff by Business Unit</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {summary.byBU.map(([bu, count]) => (
+                    <span key={bu} className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1">
+                      {bu} <span className="font-semibold text-slate-800">{count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {showAddForm && (
           <EmployeeForm
             draft={addDraft}
