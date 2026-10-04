@@ -147,14 +147,22 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   ])
   // Matched against whichever Training Type name(s) are flagged "Talent Member type" in Admin →
   // Training Types, not a hardcoded string — renaming that taxonomy entry, or flagging an
-  // additional one, takes effect immediately with no code change. More than one name can be
-  // flagged at once so historical rows tagged with an old name keep matching after a rename.
+  // additional one, takes effect immediately with no code change going forward.
+  //
+  // BUT: a TrainingRecord/TrainingSchedule stores its OWN trainingType string at the moment it
+  // was created — renaming the taxonomy entry afterward never touches rows already saved under
+  // the old spelling (confirmed case: a schedule saved as "Talent Member" stayed that way even
+  // after the taxonomy entry was renamed to "Talent Members" and re-flagged — only the new
+  // spelling was in the flagged set, so the older row silently stopped matching). Flagging covers
+  // "going forward and any name an admin explicitly adds"; the pattern match below covers
+  // "whatever this word family has ever been called," so a rename never orphans older rows again
+  // without needing the admin to also go back and flag every past spelling by hand.
   const tmTypeNames = new Set(tmTrainingTypes.map((t) => normTM(t.name)))
-  // Falls back to the literal "tm" only if nothing is flagged yet (e.g. right after this
-  // migration, before an admin has visited Training Types) — not a hardcoded alias list, just a
-  // safety net so TM matching doesn't go completely dark during that gap.
-  if (tmTypeNames.size === 0) tmTypeNames.add('tm')
-  const isTMTrainingType = (v: string | null) => tmTypeNames.has(normTM(v))
+  if (tmTypeNames.size === 0) tmTypeNames.add('tm') // safety net if nothing's flagged yet at all
+  const isTMTrainingType = (v: string | null) => {
+    const n = normTM(v)
+    return tmTypeNames.has(n) || n.startsWith('talentmember')
+  }
   const tmSchedules = allSchedules.filter((s) => isTMTrainingType(s.trainingType))
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
   // Whenever a schedule already exists for a person+training, the schedule is the source of
