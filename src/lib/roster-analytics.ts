@@ -95,13 +95,25 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   for (const r of allRoster) latestByStaffId.set(r.staffId, r)
   const latestRoster = [...latestByStaffId.values()]
 
-  let roster = latestRoster.filter((r) => r.confirmed)
+  // employmentType is rarely populated by the roster sync (it's set manually per-person on the
+  // Employees page, not part of the Excel/Sheets import columns) — job title text reliably is,
+  // so Intern/NYSC/Graduate Intern detection falls back to it, matching analytics.ts's
+  // isEligibleForTrainingCoverage. Exited staff (active: false) are excluded from the
+  // confirmed-staff pool entirely — someone no longer with the company isn't "yet to attend"
+  // anything, confirmed or not.
+  const isInternLike = (r: (typeof latestRoster)[number]) => {
+    const empType = (r.employmentType || '').trim().toLowerCase()
+    const role = (r.role || '').trim().toLowerCase()
+    return empType.includes('intern') || empType.includes('nysc') || role.includes('intern')
+  }
+
+  let roster = latestRoster.filter((r) => r.confirmed && r.active)
   if (buScope) roster = roster.filter((r) => buScope.includes(r.businessUnit))
 
-  let scopedRoster = latestRoster
+  let scopedRoster = latestRoster.filter((r) => r.active)
   if (buScope) scopedRoster = scopedRoster.filter((r) => buScope.includes(r.businessUnit))
   const unconfirmedStaffCount = scopedRoster.filter((r) => !r.confirmed).length
-  const internStaffCount = scopedRoster.filter((r) => (r.employmentType || '').trim().toLowerCase() === 'intern').length
+  const internStaffCount = scopedRoster.filter(isInternLike).length
 
   const inPeriod = (year: number, month: string) => {
     if (filter.mode !== 'all' && filter.year && year !== filter.year) return false
