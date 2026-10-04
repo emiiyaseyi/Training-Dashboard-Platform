@@ -2,10 +2,14 @@ import { prisma } from '@/lib/prisma'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { buildFullName } from '@/lib/staff-name'
+import { isEligibleForTrainingCoverage, isInternLike, isMeriMover, effectiveYearForCoverage } from '@/lib/staff-training-eligibility'
 
-// Kept intentionally separate from analytics.ts — this report reads TrainingRecord (and, for the
-// same reason Talent Members unions two sources — see computeTalentMemberReport — TrainingSchedule)
-// for attendance but never writes back to either, and touches no other report's calculations.
+// Kept intentionally separate from analytics.ts in its attendance logic — this report reads
+// TrainingRecord (and, for the same reason Talent Members unions two sources — see
+// computeTalentMemberReport — TrainingSchedule) for attendance but never writes back to either,
+// and touches no other report's calculations. Who COUNTS toward coverage, though, is shared with
+// analytics.ts via staff-training-eligibility.ts, so both pages report the same pool for the same
+// underlying question.
 
 function allowedMonths(filter: PeriodFilter): Set<string> | null {
   if (filter.mode === 'all' || filter.mode === 'year') return null
@@ -57,6 +61,7 @@ export interface YetToAttendReport {
   // than folded into the confirmed-staff coverage numbers above.
   unconfirmedStaffCount: number
   internStaffCount: number
+  meriMoverStaffCount: number
 }
 
 export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[] | null): Promise<YetToAttendReport> {
@@ -95,25 +100,23 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   for (const r of allRoster) latestByStaffId.set(r.staffId, r)
   const latestRoster = [...latestByStaffId.values()]
 
-  // employmentType is rarely populated by the roster sync (it's set manually per-person on the
-  // Employees page, not part of the Excel/Sheets import columns) — job title text reliably is,
-  // so Intern/NYSC/Graduate Intern detection falls back to it, matching analytics.ts's
-  // isEligibleForTrainingCoverage. Exited staff (active: false) are excluded from the
-  // confirmed-staff pool entirely — someone no longer with the company isn't "yet to attend"
-  // anything, confirmed or not.
-  const isInternLike = (r: (typeof latestRoster)[number]) => {
-    const empType = (r.employmentType || '').trim().toLowerCase()
-    const role = (r.role || '').trim().toLowerCase()
-    return empType.includes('intern') || empType.includes('nysc') || role.includes('intern')
-  }
+  // "Confirmed Staff" (the main coverage pool below) uses the exact same eligibility rule as
+  // Executive Overview's Total Staff Coverage — active, confirmed, not an Intern/NYSC/Graduate
+  // Intern, not a Meri Mover (driver/messenger role never enrolled in formal training) — so the
+  // two pages report consistent numbers for the same underlying question. Interns and Meri
+  // Movers get their own informational cards below instead, counted from the active roster
+  // regardless of confirmation status, since "how many Meri Movers do we have" doesn't depend on
+  // whether they happen to be confirmed.
+  const coverageYear = effectiveYearForCoverage(filter)
 
-  let roster = latestRoster.filter((r) => r.confirmed && r.active)
+  let roster = latestRoster.filter((r) => isEligibleForTrainingCoverage(r, coverageYear))
   if (buScope) roster = roster.filter((r) => buScope.includes(r.businessUnit))
 
   let scopedRoster = latestRoster.filter((r) => r.active)
   if (buScope) scopedRoster = scopedRoster.filter((r) => buScope.includes(r.businessUnit))
   const unconfirmedStaffCount = scopedRoster.filter((r) => !r.confirmed).length
   const internStaffCount = scopedRoster.filter(isInternLike).length
+  const meriMoverStaffCount = scopedRoster.filter(isMeriMover).length
 
   const inPeriod = (year: number, month: string) => {
     if (filter.mode !== 'all' && filter.year && year !== filter.year) return false
@@ -200,5 +203,6 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     availableYears,
     unconfirmedStaffCount,
     internStaffCount,
+    meriMoverStaffCount,
   }
 }

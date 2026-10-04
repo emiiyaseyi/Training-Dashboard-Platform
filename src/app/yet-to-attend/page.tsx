@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Users, UserCheck, UserX, Download, Search, Clock, GraduationCap } from 'lucide-react'
+import { RefreshCw, Users, UserCheck, UserX, Download, Search, Clock, GraduationCap, Truck } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { AlertBadge } from '@/components/ui/AlertBadge'
@@ -119,7 +119,7 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Confirmed Staff"
                 value={data.totalConfirmedStaff.toLocaleString()}
-                subtitle="On roster, excludes unconfirmed staff"
+                subtitle="On roster, excludes unconfirmed, exited, interns, and Meri Movers"
                 icon={Users}
                 color="blue"
               />
@@ -162,8 +162,15 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Interns"
                 value={data.internStaffCount.toLocaleString()}
-                subtitle="On roster with Employment Type = Intern"
+                subtitle="Intern, NYSC, or Graduate Intern — excluded from the numbers above"
                 icon={GraduationCap}
+                color="blue"
+              />
+              <KPICard
+                title="Meri Movers"
+                value={data.meriMoverStaffCount.toLocaleString()}
+                subtitle="Drivers/messengers, never enrolled in formal training — excluded from the numbers above"
+                icon={Truck}
                 color="blue"
               />
             </div>

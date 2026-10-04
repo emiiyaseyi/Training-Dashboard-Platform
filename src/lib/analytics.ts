@@ -2,7 +2,7 @@ import { prisma } from './prisma'
 import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
-import type { StaffRosterRecord } from '@prisma/client'
+import { countEligibleStaff, effectiveYearForCoverage } from './staff-training-eligibility'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -579,37 +579,9 @@ function classifyTraining(trainingType: string | null | undefined, typeMap: Map<
   return typeMap.get(trainingType.toLowerCase()) ?? 'formal'
 }
 
-// "Total Staff Coverage" counts only staff a training cycle could realistically have reached —
-// confirmed, non-intern, not a Meri Mover (a driver/messenger role never enrolled in formal
-// training), and (when a specific year is being viewed) not hired in H2 of that same year, since
-// they wouldn't have had a fair shot at that year's training yet. Used as the denominator for
-// every coverage/capability-coverage ratio, replacing the old flat admin-entered headcount.
-function isEligibleForTrainingCoverage(staff: StaffRosterRecord, effectiveYear: number | null): boolean {
-  if (!staff.active || !staff.confirmed) return false
-  const empType = (staff.employmentType || '').toLowerCase()
-  const role = (staff.role || '').toLowerCase()
-  if (empType.includes('intern') || empType.includes('nysc') || role.includes('intern')) return false
-  if (role.includes('meri mover') || role.includes('merimover')) return false
-  if (effectiveYear != null && staff.employmentDate) {
-    const d = staff.employmentDate
-    if (d.getUTCFullYear() === effectiveYear && d.getUTCMonth() >= 6) return false // Jul–Dec
-  }
-  return true
-}
-
-function countEligibleStaff(roster: StaffRosterRecord[], businessUnit: string | null, effectiveYear: number | null): number {
-  return roster.filter(
-    (s) => (businessUnit == null || s.businessUnit.toLowerCase() === businessUnit.toLowerCase())
-      && isEligibleForTrainingCoverage(s, effectiveYear)
-  ).length
-}
-
-// "All Time" has no single year to evaluate an H2-hire cutoff against, so that part of
-// eligibility is skipped for it — a person hired H2 2024 has since had full years (2025, 2026…)
-// to be trained, so excluding them from an all-time total would be wrong.
-function effectiveYearForCoverage(filter: PeriodFilter): number | null {
-  return filter.mode === 'all' ? null : (filter.year ?? new Date().getFullYear())
-}
+// "Total Staff Coverage" eligibility (active, confirmed, non-intern, non-Meri-Mover, H2-hire
+// cutoff) now lives in staff-training-eligibility.ts, shared with Yet to Attend Training —
+// imported above as countEligibleStaff/effectiveYearForCoverage.
 
 function computeCapabilityCoverage(
   records: { staffId: string; capability: string | null }[],
