@@ -19,14 +19,52 @@ interface ProbeDef {
 // documented endpoint for that section; several of our requested data points (see coverageNote)
 // have NO matching endpoint anywhere in their docs, which no live call can fix — that's a gap in
 // what they expose, not a bug here.
-const PROBES: ProbeDef[] = [
+// Diagnostic sweep — every one of these is genuinely parameter-free (or every parameter is
+// optional with a sensible default), confirmed by reading each one's own reference page, so a
+// failure here means something about the CREDENTIALS or the sandbox account itself, not a guessed
+// placeholder value. Spans multiple unrelated API sections (RMS, Employee Services, Performance)
+// specifically so a mix of passes/fails tells us whether the problem is account-wide or
+// section-specific, instead of only ever seeing every probe fail for the same unknown reason.
+const DIAGNOSTIC_PROBES: ProbeDef[] = [
   {
     id: 'discover-company',
     section: 'Diagnostics',
     label: 'List companies (discover the real company_name/id)',
     path: '/v1/rms/companies',
-    coverageNote: 'Needs no parameters beyond the credentials — lists every company registered under this account with its real id/name. Every other probe below uses a placeholder ("test") for company_name/employee_code/appraisal_cycle, which is almost certainly why they all fail with the same generic "An error occurred while processing the request" — those placeholders were never real values. Run this first, then swap in whatever real company id/name comes back for the other calls.',
+    coverageNote: 'Zero parameters needed beyond credentials. Lists every company registered under this account with its real id/name — every probe below under Employee Services/Talent Acquisition/Performance uses a placeholder ("test") for company_name/employee_code/appraisal_cycle, which is almost certainly why those fail. Run this first, then swap in whatever real company id/name comes back.',
   },
+  {
+    id: 'discover-countries',
+    section: 'Diagnostics',
+    label: 'List countries (pure reference data, zero params)',
+    path: '/v1/rms/countries',
+    coverageNote: 'Zero parameters, zero dependency on this account\'s own company/employee data — just a static 247-country reference list. If this fails, the problem is the credentials themselves or sandbox access in general, not anything about which company/employee/cycle values we\'re guessing elsewhere.',
+  },
+  {
+    id: 'discover-holidays',
+    section: 'Diagnostics',
+    label: 'Get holidays (Employee Services, zero required params)',
+    path: '/v1/employees/holidays',
+    coverageNote: 'filterBy and employee_code are both optional with defaults (today / Employee001) — no company parameter at all. A pass here specifically confirms Employee Services access works with these credentials even though the Employee master record probe below (which needs no params either, but is a bigger/heavier call) is failing.',
+  },
+  {
+    id: 'discover-birthdays',
+    section: 'Diagnostics',
+    label: 'Get birthdays (Employee Services, zero required params)',
+    path: '/v1/employees/birthdays',
+    coverageNote: 'filterBy is optional (defaults to this-month) — no company or employee parameter at all.',
+  },
+  {
+    id: 'discover-appraisal-cycles',
+    section: 'Diagnostics',
+    label: 'List appraisal cycles (Performance, all params optional)',
+    path: '/v1/performance/cycles',
+    coverageNote: 'Every parameter here is optional, INCLUDING company_name (unlike the employee appraisals probe below, which requires it) — so this should work regardless of which company this account is scoped to, and its response should contain real appraisal_cycle titles/years we can then plug into the Employee appraisals probe instead of the guessed "2026".',
+  },
+]
+
+const PROBES: ProbeDef[] = [
+  ...DIAGNOSTIC_PROBES,
   {
     id: 'es-employees',
     section: 'Employee Services',
@@ -60,11 +98,13 @@ const PROBES: ProbeDef[] = [
 // Super-admin only, by the same logic as ta-status — this is infrastructure/credential status
 // for an integration that isn't live yet, not something any HR unit viewer should see.
 //
-// Exploratory only: calls 5 of SeamlessHR's sandbox endpoints (one company-discovery diagnostic,
-// plus one per HR section we asked them
-// about) with whatever credentials are in SEAMLESSHR_SANDBOX_CLIENT_ID/SECRET and returns each
-// raw response (status + body) unmodified, so the admin can see exactly what SeamlessHR sends
-// back — including the literal error — to screenshot for their own troubleshooting.
+// Exploratory only: calls SeamlessHR's sandbox endpoints — a set of genuinely zero/optional-param
+// diagnostic probes (spanning several unrelated API sections, so a mix of passes/fails tells us
+// whether an issue is account-wide or section-specific) plus one representative call per HR
+// section we actually asked SeamlessHR about — with whatever credentials are in
+// SEAMLESSHR_SANDBOX_CLIENT_ID/SECRET, and returns each raw response (status + body) unmodified,
+// so the admin can see exactly what SeamlessHR sends back — including the literal error — to
+// screenshot for their own troubleshooting.
 export async function GET() {
   const session = await auth()
   if (!session?.user?.isSuperAdmin) {

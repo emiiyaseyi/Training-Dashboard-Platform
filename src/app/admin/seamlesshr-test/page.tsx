@@ -75,9 +75,11 @@ export default function SeamlessHRTestPage() {
             <p className="text-sm font-semibold text-slate-800">What this does</p>
           </div>
           <p className="text-sm text-slate-600">
-            Calls 5 endpoints on SeamlessHR&apos;s sandbox (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">api-sandbox.seamlesshr.app</code>) —
-            a company-discovery diagnostic, plus one per HR section we asked SeamlessHR about — using the credentials in this server&apos;s environment, and shows
-            exactly what comes back for each, plus what that endpoint does and doesn&apos;t cover based on their published docs.
+            Calls several endpoints on SeamlessHR&apos;s sandbox (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">api-sandbox.seamlesshr.app</code>) —
+            a <strong>Diagnostics</strong> group of genuinely zero/optional-parameter calls across several unrelated API sections (so a mix of passes/fails shows
+            whether an issue is account-wide or section-specific), plus one representative call per HR section we actually asked SeamlessHR about — using the
+            credentials in this server&apos;s environment, and shows exactly what comes back for each, plus what that endpoint does and doesn&apos;t cover based
+            on their published docs.
           </p>
           <button
             type="button"
