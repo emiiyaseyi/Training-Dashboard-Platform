@@ -30,6 +30,7 @@ interface BUSummaryRow {
   staffTrained: number
   otherStaffTrained: number
   totalStaff: number
+  eligibleStaffTrained: number
   coverageRatio: number
   avgImpactScore: number
   postTrainingImpactScore: number
