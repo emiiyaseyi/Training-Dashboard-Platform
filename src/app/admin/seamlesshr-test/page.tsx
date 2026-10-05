@@ -75,8 +75,8 @@ export default function SeamlessHRTestPage() {
             <p className="text-sm font-semibold text-slate-800">What this does</p>
           </div>
           <p className="text-sm text-slate-600">
-            Calls 4 endpoints on SeamlessHR&apos;s sandbox (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">api-sandbox.seamlesshr.app</code>) —
-            one per HR section we asked SeamlessHR about — using the credentials in this server&apos;s environment, and shows
+            Calls 5 endpoints on SeamlessHR&apos;s sandbox (<code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">api-sandbox.seamlesshr.app</code>) —
+            a company-discovery diagnostic, plus one per HR section we asked SeamlessHR about — using the credentials in this server&apos;s environment, and shows
             exactly what comes back for each, plus what that endpoint does and doesn&apos;t cover based on their published docs.
           </p>
           <button

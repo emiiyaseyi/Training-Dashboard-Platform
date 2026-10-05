@@ -21,6 +21,13 @@ interface ProbeDef {
 // what they expose, not a bug here.
 const PROBES: ProbeDef[] = [
   {
+    id: 'discover-company',
+    section: 'Diagnostics',
+    label: 'List companies (discover the real company_name/id)',
+    path: '/v1/rms/companies',
+    coverageNote: 'Needs no parameters beyond the credentials — lists every company registered under this account with its real id/name. Every other probe below uses a placeholder ("test") for company_name/employee_code/appraisal_cycle, which is almost certainly why they all fail with the same generic "An error occurred while processing the request" — those placeholders were never real values. Run this first, then swap in whatever real company id/name comes back for the other calls.',
+  },
+  {
     id: 'es-employees',
     section: 'Employee Services',
     label: 'Employee master record',
@@ -53,7 +60,8 @@ const PROBES: ProbeDef[] = [
 // Super-admin only, by the same logic as ta-status — this is infrastructure/credential status
 // for an integration that isn't live yet, not something any HR unit viewer should see.
 //
-// Exploratory only: calls 4 of SeamlessHR's sandbox endpoints (one per HR section we asked them
+// Exploratory only: calls 5 of SeamlessHR's sandbox endpoints (one company-discovery diagnostic,
+// plus one per HR section we asked them
 // about) with whatever credentials are in SEAMLESSHR_SANDBOX_CLIENT_ID/SECRET and returns each
 // raw response (status + body) unmodified, so the admin can see exactly what SeamlessHR sends
 // back — including the literal error — to screenshot for their own troubleshooting.
