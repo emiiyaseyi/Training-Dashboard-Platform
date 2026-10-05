@@ -19,7 +19,7 @@ const COMPARED_METRICS: { key: keyof BUSummary; label: string }[] = [
   { key: 'trainingCost', label: 'Formal Training Spend' },
   { key: 'otherInvestmentCost', label: 'Strategic Learnings Spend' },
   { key: 'subscriptionCost', label: 'Subscription Spend' },
-  { key: 'staffTrained', label: 'Staff Trained' },
+  { key: 'eligibleStaffTrained', label: 'Staff Trained' },
   { key: 'coverageRatio', label: 'Coverage %' },
   { key: 'avgImpactScore', label: 'Avg Impact Score' },
   { key: 'budgetUtilisation', label: 'Budget Utilisation %' },

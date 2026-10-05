@@ -317,7 +317,7 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     slide.addShape('line', { x: x + 0.2, y: statsY, w: cardW - 0.4, h: 0, line: { color: C.navyLight, width: 0.5 } })
     slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
     slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.gold })
-    slide.addText(`${bu.staffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+    slide.addText(`${bu.eligibleStaffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
 
     slide.addText('Avg Impact Score', { x: x + statColW, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
     slide.addText(rating(bu.avgImpactScore), { x: x + statColW, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.green })

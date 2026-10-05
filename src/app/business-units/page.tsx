@@ -115,7 +115,7 @@ function BUCard({ bu, onClick }: { bu: BUSummaryRow; onClick: () => void }) {
           <p className={`text-sm font-bold tabular-nums ${coverageColor}`}>
             {bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'}
           </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{bu.staffTrained} trained</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{bu.eligibleStaffTrained} trained</p>
         </div>
         <div className="text-center border-x border-slate-100">
           <div className="flex items-center justify-center gap-1 mb-1">
@@ -215,7 +215,7 @@ export default function BusinessUnitsDashboard() {
     'Formal Training (₦)': b.trainingCost,
     'Strategic Learnings (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
-    'Staff Trained': b.staffTrained,
+    'Staff Trained': b.eligibleStaffTrained,
     'Total Staff': b.totalStaff,
     'Coverage %': b.totalStaff > 0 ? b.coverageRatio.toFixed(1) : '—',
     'Avg Impact (out of 5)': b.avgImpactScore.toFixed(1),
@@ -321,7 +321,7 @@ export default function BusinessUnitsDashboard() {
                   { key: 'trainingCost',       header: 'Formal Training',   align: 'right', render: (r) => fmt(r.trainingCost as number) },
                   { key: 'otherInvestmentCost', header: 'Strategic Learnings', align: 'right', render: (r) => fmt(r.otherInvestmentCost as number) },
                   { key: 'subscriptionCost',   header: 'Subscriptions',     align: 'right', render: (r) => fmt(r.subscriptionCost as number) },
-                  { key: 'staffTrained',       header: 'Trained',           align: 'right' },
+                  { key: 'eligibleStaffTrained', header: 'Trained',         align: 'right' },
                   {
                     key: 'coverageRatio', header: 'Coverage', align: 'right',
                     render: (r) => {

@@ -23,11 +23,11 @@ export function DataQualityIssues() {
       .then((r) => r.json())
       .then((data: GroupAnalytics) => {
         const flagged = data.businessUnits
-          .filter((b) => b.totalStaff > 0 && (b.staffTrained > b.totalStaff || b.subscriptionStaff > b.totalStaff))
+          .filter((b) => b.totalStaff > 0 && (b.eligibleStaffTrained > b.totalStaff || b.subscriptionStaff > b.totalStaff))
           .map((b) => ({
             businessUnit: b.name,
             configuredHeadcount: b.totalStaff,
-            staffTrained: b.staffTrained,
+            staffTrained: b.eligibleStaffTrained,
             subscriptionStaff: b.subscriptionStaff,
           }))
         setIssues(flagged)

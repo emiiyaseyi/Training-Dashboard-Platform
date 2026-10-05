@@ -79,7 +79,7 @@ export default function ExecutiveDashboard() {
     'Strategic Learnings (₦)': b.otherInvestmentCost,
     'Subscription Spend (₦)': b.subscriptionCost,
     'Total Learning Investment (₦)': b.totalInvestment,
-    'Staff Trained': b.staffTrained,
+    'Staff Trained': b.eligibleStaffTrained,
     'Coverage %': parseFloat(b.coverageRatio.toFixed(1)),
     'Avg Impact (out of 5)': parseFloat(b.avgImpactScore.toFixed(1)),
   }))

@@ -88,10 +88,16 @@ export interface BUSummary {
   otherInvestmentCost: number // Strategic Learning Initiatives (Summit, Leadership Cafe, Workshop, etc.)
   subscriptionCost: number
   totalInvestment: number
-  staffTrained: number
+  staffTrained: number       // unique staff with at least one Formal Training record, ANY eligibility — not the Coverage numerator
   otherStaffTrained: number // unique staff with at least one Strategic Learning record
   subscriptionStaff: number
   totalStaff: number
+  // Coverage's actual numerator — eligible/confirmed staff (same population as totalStaff) who
+  // attended 1+ training, reusing computeYetToAttend's own per-BU numbers so this can never again
+  // divide two different populations (previously staffTrained/totalStaff — ALL trained staff over
+  // only the ELIGIBLE total — which let Coverage exceed 100%, and meant BU coverages summed to a
+  // different total than Executive Overview's).
+  eligibleStaffTrained: number
   budget: number
   coverageRatio: number
   avgImpactScore: number
@@ -854,6 +860,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     ]),
   ].filter((name) => name.trim().length > 0)
 
+  const yetToAttendByBU = new Map(yetToAttend.byBU.map((b) => [b.businessUnit, b]))
+
   const businessUnitSummaries: BUSummary[] = buNames.map((buName) => {
     const tRecs = trainingRecords.filter((r) => r.businessUnit === buName)
     const formalTRecs = tRecs.filter((r) => classifyTraining(r.trainingType, typeMap) === 'formal')
@@ -870,9 +878,11 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     const staffTrained = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const otherStaffTrained = new Set(otherTRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
     const subscriptionStaff = new Set(sRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
-    const totalStaff = countEligibleStaff(rosterRecords, buName, coverageYear)
+    const buAttendance = yetToAttendByBU.get(buName)
+    const totalStaff = buAttendance?.totalConfirmed ?? 0
+    const eligibleStaffTrained = buAttendance?.attended ?? 0
     const budget = buConfig?.budget ?? 0
-    const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
+    const coverageRatio = buAttendance?.coverageRatio ?? 0
     const validF = fRecs.filter((f) => f.confidenceRating != null)
     const avgImpact =
       validF.length > 0
@@ -895,6 +905,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
       otherStaffTrained,
       subscriptionStaff,
       totalStaff,
+      eligibleStaffTrained,
       budget,
       coverageRatio,
       avgImpactScore: avgImpact,
@@ -1032,8 +1043,7 @@ export async function computeBUAnalytics(
   filter: PeriodFilter = { mode: 'all' },
 ): Promise<BUDetailAnalytics> {
   const [allTraining, allFeedback, allSubscriptions, buConfig,
-         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, buManagerReviews,
-         groupAllRoster] = await Promise.all([
+         groupAllTraining, groupAllFeedback, groupAllBUConfigs, buKSS, trainingTypes, buManagerReviews] = await Promise.all([
     prisma.trainingRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.feedbackRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.subscriptionRecord.findMany({ where: { businessUnit: { equals: buName } } }),
@@ -1044,11 +1054,16 @@ export async function computeBUAnalytics(
     prisma.kSSRecord.findMany({ where: { businessUnit: { equals: buName } } }),
     prisma.trainingType.findMany(),
     prisma.managerReviewRecord.findMany({ where: { businessUnit: { equals: buName } } }),
-    prisma.staffRosterRecord.findMany(),
   ])
   const typeMap = buildTypeClassMap(trainingTypes)
-  const coverageYear = effectiveYearForCoverage(filter)
-  const latestGroupRoster = latestRosterSnapshot(groupAllRoster)
+  // Reuses computeYetToAttend's own eligible-population numbers (unscoped — covers every BU, not
+  // just this one, since the group-wide benchmark comparison further below needs every BU's
+  // figures too) for this BU's own Coverage AND for the top/bottom benchmark comparison —
+  // otherwise either or both divide a different pair of populations than everywhere else and can
+  // show/rank Coverage over 100%.
+  const yetToAttendGroup = await computeYetToAttend(filter, null)
+  const yetToAttendByBU = new Map(yetToAttendGroup.byBU.map((b) => [b.businessUnit, b]))
+  const buAttendance = yetToAttendByBU.get(buName)
 
   // Apply period filter to training records (same logic as group analytics)
   let trainingRecords = allTraining
@@ -1104,9 +1119,10 @@ export async function computeBUAnalytics(
   const staffTrained = new Set(trainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const otherStaffTrained = new Set(otherTrainingRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
   const subscriptionStaff = new Set(subscriptionRecords.map((r) => normalizeStaffIdKey(r.staffId))).size
-  const totalStaff = countEligibleStaff(latestGroupRoster, buName, coverageYear)
+  const totalStaff = buAttendance?.totalConfirmed ?? 0
+  const eligibleStaffTrained = buAttendance?.attended ?? 0
   const budget = buConfig?.budget ?? 0
-  const coverageRatio = totalStaff > 0 ? (staffTrained / totalStaff) * 100 : 0
+  const coverageRatio = buAttendance?.coverageRatio ?? 0
   const validF = feedbackRecords.filter((f) => f.confidenceRating != null)
   const avgImpact = validF.length > 0
     ? validF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / validF.length
@@ -1128,6 +1144,7 @@ export async function computeBUAnalytics(
     otherStaffTrained,
     subscriptionStaff,
     totalStaff,
+    eligibleStaffTrained,
     budget,
     coverageRatio,
     avgImpactScore: avgImpact,
@@ -1227,15 +1244,16 @@ export async function computeBUAnalytics(
     const cfg   = groupAllBUConfigs.find((b) => b.name === name)
     const tc    = tRecs.reduce((s, r) => s + r.cost, 0)
     const st    = new Set(tRecs.map((r) => normalizeStaffIdKey(r.staffId))).size
-    const ts    = countEligibleStaff(latestGroupRoster, name, coverageYear)
+    const nameAttendance = yetToAttendByBU.get(name)
+    const ts    = nameAttendance?.totalConfirmed ?? 0
     const vF    = fRecs.filter((f) => f.confidenceRating != null)
     const ai    = vF.length > 0 ? vF.reduce((s, f) => s + (f.confidenceRating ?? 0), 0) / vF.length : 0
     return {
       name,
       trainingCost: tc, otherInvestmentCost: 0, subscriptionCost: 0, totalInvestment: tc,
       staffTrained: st, otherStaffTrained: 0, subscriptionStaff: 0,
-      totalStaff: ts, budget: cfg?.budget ?? 0,
-      coverageRatio: ts > 0 ? (st / ts) * 100 : 0,
+      totalStaff: ts, eligibleStaffTrained: nameAttendance?.attended ?? 0, budget: cfg?.budget ?? 0,
+      coverageRatio: nameAttendance?.coverageRatio ?? 0,
       avgImpactScore: ai,
       postTrainingImpactScore: 0,
       subscriptionRatio: 0, budgetUtilisation: 0, isOverBudget: false,

@@ -169,7 +169,7 @@ export function BUDeepDivePanel({ buName, detail, onClose, filter }: Props) {
               <MiniKPI label="Investment per Trained Staff" value={bu.staffTrained > 0 ? fmt(bu.totalInvestment / bu.staffTrained) : '—'} sub={`${bu.staffTrained} trained staff`} accent="text-amber-700" />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MiniKPI label="Staff Coverage" value={bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'} sub={`${bu.staffTrained} of ${bu.totalStaff || '?'} trained`} accent={bu.coverageRatio >= 70 ? 'text-green-700' : bu.coverageRatio >= 40 ? 'text-amber-700' : 'text-red-700'} alert={bu.coverageRatio < 30 && bu.totalStaff > 0} />
+              <MiniKPI label="Staff Coverage" value={bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—'} sub={`${bu.eligibleStaffTrained} of ${bu.totalStaff || '?'} trained`} accent={bu.coverageRatio >= 70 ? 'text-green-700' : bu.coverageRatio >= 40 ? 'text-amber-700' : 'text-red-700'} alert={bu.coverageRatio < 30 && bu.totalStaff > 0} />
               <MiniKPI label="Avg Impact Score" value={rating(bu.avgImpactScore)} sub="Avg confidence rating (max 5)" accent={bu.avgImpactScore >= 4.0 ? 'text-green-700' : bu.avgImpactScore >= 3.0 ? 'text-amber-700' : 'text-slate-500'} />
               <MiniKPI label="Budget Status" value={bu.budget > 0 ? (bu.isOverBudget ? 'Over Budget' : 'On Track') : 'Not Set'} sub={bu.budget > 0 ? `Budget: ${fmt(bu.budget)}` : 'Set in Admin Settings'} accent={bu.isOverBudget ? 'text-red-700' : bu.budget > 0 ? 'text-green-700' : 'text-slate-400'} alert={bu.isOverBudget} />
               <MiniKPI label="Subscription Members" value={bu.subscriptionStaff.toLocaleString()} sub="Staff with active memberships" accent="text-blue-700" />
