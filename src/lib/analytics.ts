@@ -3,7 +3,7 @@ import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
 import { computeYetToAttend } from './roster-analytics'
-import { countEligibleStaff, effectiveYearForCoverage, latestRosterSnapshot } from './staff-training-eligibility'
+import { countEligibleStaff, effectiveYearForCoverage, latestRosterSnapshot, isEligibleForTrainingCoverage } from './staff-training-eligibility'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -602,10 +602,17 @@ function classifyTraining(trainingType: string | null | undefined, typeMap: Map<
 // cutoff) now lives in staff-training-eligibility.ts, shared with Yet to Attend Training —
 // imported above as countEligibleStaff/effectiveYearForCoverage.
 
+// eligibleStaffIds (normalized) scopes the numerator to the SAME population totalStaffCount
+// counts — previously staffTrained counted EVERYONE with a capability-tagged training record
+// (interns, Meri Movers, unconfirmed staff, exited staff, H2 new hires included) while
+// totalStaffCount was already the eligible-only count, so a capability with enough non-eligible
+// attendees could (and did — "Talent Leadership" hit 145%) exceed 100%. Same population-mismatch
+// bug already fixed for Executive Overview's and each BU's own Staff Coverage.
 function computeCapabilityCoverage(
   records: { staffId: string; capability: string | null }[],
   capabilities: { name: string }[],
   totalStaffCount: number,
+  eligibleStaffIds: Set<string>,
 ): CapabilityCoverage[] {
   return capabilities
     .map(({ name }) => {
@@ -613,6 +620,7 @@ function computeCapabilityCoverage(
         records
           .filter((r) => (r.capability ?? '').toLowerCase() === name.toLowerCase())
           .map((r) => normalizeStaffIdKey(r.staffId))
+          .filter((id) => eligibleStaffIds.has(id))
       ).size
       return {
         capability: name,
@@ -739,6 +747,9 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const totalUniqueStaff = allUniqueIds.size
   const totalLearningInvestment = totalTrainingCost + totalOtherTrainingCost + totalSubscriptionCost
   const totalStaffCount = countEligibleStaff(rosterRecords, null, coverageYear)
+  const eligibleStaffIds = new Set(
+    rosterRecords.filter((r) => isEligibleForTrainingCoverage(r, coverageYear)).map((r) => normalizeStaffIdKey(r.staffId))
+  )
 
   // Same population on both sides of the ratio, reusing the exact numbers Yet to Attend already
   // computes (eligible roster who attended 1+ training / eligible roster) — previously this divided
@@ -973,7 +984,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
 
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
 
-  const capabilityCoverage = computeCapabilityCoverage(trainingRecords, capabilities, totalStaffCount)
+  const capabilityCoverage = computeCapabilityCoverage(trainingRecords, capabilities, totalStaffCount, eligibleStaffIds)
   // Headline "Skill Coverage Ratio" for Executive Overview — the mean of each configured
   // Differentiating Capability's own coverage %, i.e. "on average, how covered are we across our
   // strategic capabilities." The per-capability breakdown this averages over is the detail view on
