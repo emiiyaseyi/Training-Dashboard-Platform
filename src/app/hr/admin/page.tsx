@@ -208,7 +208,7 @@ export default function HrAdminPage() {
 
             {taStatus.tabRowCounts && (
               <div>
-                <p className="text-xs font-medium text-slate-500 mb-1.5">Rows found per tab — 0 usually means that tab is missing or misnamed, not that it's genuinely empty:</p>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Rows found per tab — 0 usually means that tab is missing or misnamed, not that it&apos;s genuinely empty:</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {TA_TAB_LABELS.map((t) => {
                     const count = taStatus.tabRowCounts![t.key]

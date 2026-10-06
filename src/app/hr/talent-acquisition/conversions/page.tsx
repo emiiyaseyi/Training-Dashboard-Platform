@@ -95,7 +95,7 @@ export default async function ConversionsPage() {
             <p className="text-sm font-bold text-slate-800">Conversion Reason / Drop-off</p>
           </div>
           {dropOffReasons.length === 0 ? (
-            <p className="text-sm text-slate-400">No "Not Converted" records yet.</p>
+            <p className="text-sm text-slate-400">No &quot;Not Converted&quot; records yet.</p>
           ) : (
             <BarChart labels={dropOffReasons.map((g) => g.key)} values={dropOffReasons.map((g) => g.count)} color="#B0714F" horizontal showLabels height={Math.max(180, dropOffReasons.length * 40)} />
           )}
