@@ -17,10 +17,24 @@ export async function GET() {
   const serviceAccountEmail = process.env.TA_GOOGLE_SERVICE_ACCOUNT_EMAIL || null
 
   if (!emailConfigured || !keyConfigured || !sheetIdConfigured) {
-    return NextResponse.json({ emailConfigured, keyConfigured, sheetIdConfigured, serviceAccountEmail, connected: false, connectionError: null, usingSampleData: true })
+    return NextResponse.json({ emailConfigured, keyConfigured, sheetIdConfigured, serviceAccountEmail, connected: false, connectionError: null, usingSampleData: true, tabRowCounts: null })
   }
 
-  const { connectionError } = await getTaDashboardData()
+  const { connectionError, records, pipeline, internalMobility, conversions, notConverted, vacancies } = await getTaDashboardData()
+  // Per-tab row counts — Hires/Config are required (a failure there sets connectionError and the
+  // whole response falls back to sample data), but Pipeline/Internal Mobility/Conversion/Not
+  // Converted/Vacancies 2026 each fail SILENTLY into an empty array if their tab isn't found or
+  // is misnamed (see getTaDashboardData's optionalRange) — connected: true alone can't tell the
+  // admin whether a specific new tab actually came through. Surfaced here instead, so a missing/
+  // misnamed tab shows as "0 rows" rather than looking identical to "connected and fine."
+  const tabRowCounts = connectionError ? null : {
+    hires: records.length,
+    pipeline: pipeline.length,
+    internalMobility: internalMobility.length,
+    conversions: conversions.length,
+    notConverted: notConverted.length,
+    vacancies: vacancies.length,
+  }
   return NextResponse.json({
     emailConfigured,
     keyConfigured,
@@ -29,5 +43,6 @@ export async function GET() {
     connected: !connectionError,
     connectionError,
     usingSampleData: Boolean(connectionError),
+    tabRowCounts,
   })
 }

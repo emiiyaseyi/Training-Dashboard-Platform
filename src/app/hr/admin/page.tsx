@@ -14,7 +14,19 @@ interface TaStatus {
   connected: boolean
   connectionError: string | null
   usingSampleData: boolean
+  tabRowCounts: {
+    hires: number; pipeline: number; internalMobility: number; conversions: number; notConverted: number; vacancies: number
+  } | null
 }
+
+const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
+  { key: 'hires', sheetName: 'Hires', required: true },
+  { key: 'pipeline', sheetName: 'Pipeline', required: false },
+  { key: 'internalMobility', sheetName: 'Internal Mobility', required: false },
+  { key: 'conversions', sheetName: 'Conversion', required: false },
+  { key: 'notConverted', sheetName: 'Not Converted', required: false },
+  { key: 'vacancies', sheetName: 'Vacancies 2026', required: false },
+]
 
 interface AdminUser {
   id: string
@@ -194,6 +206,24 @@ export default function HrAdminPage() {
               </div>
             )}
 
+            {taStatus.tabRowCounts && (
+              <div>
+                <p className="text-xs font-medium text-slate-500 mb-1.5">Rows found per tab — 0 usually means that tab is missing or misnamed, not that it's genuinely empty:</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {TA_TAB_LABELS.map((t) => {
+                    const count = taStatus.tabRowCounts![t.key]
+                    const missing = count === 0
+                    return (
+                      <div key={t.key} className={`rounded-lg border px-2.5 py-1.5 text-xs ${missing ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-meristem-100 bg-meristem-50/60 text-slate-700'}`}>
+                        <p className="font-medium">{t.sheetName}{t.required ? ' *' : ''}</p>
+                        <p className="tabular-nums">{count} row{count === 1 ? '' : 's'}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {taStatus.serviceAccountEmail && (
               <p className="text-xs text-slate-500">
                 Service account: <span className="font-mono text-slate-700">{taStatus.serviceAccountEmail}</span> — share the recruitment Google Sheet with this address as at least Viewer.
@@ -211,7 +241,7 @@ export default function HrAdminPage() {
                   <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> — the same JSON file&apos;s <span className="font-mono">private_key</span> value, pasted in full (including the BEGIN/END lines) directly into Vercel — never through chat.</li>
                   <li><span className="font-mono">TA_GOOGLE_SHEET_ID</span> — the ID from the sheet&apos;s URL (the long string between <span className="font-mono">/d/</span> and <span className="font-mono">/edit</span>).</li>
                 </ul>
-                <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, and <span className="font-mono">Config</span>.</p>
+                <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, <span className="font-mono">Config</span>, <span className="font-mono">Internal Mobility</span>, <span className="font-mono">Conversion</span>, <span className="font-mono">Not Converted</span>, and <span className="font-mono">Vacancies 2026</span>.</p>
               </div>
             )}
           </div>
