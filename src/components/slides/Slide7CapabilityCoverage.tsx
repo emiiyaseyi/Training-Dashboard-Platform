@@ -5,7 +5,12 @@ import type { GroupAnalytics } from '@/lib/analytics'
 export function Slide7CapabilityCoverage({ data, pageNumber, periodLabel }: { data: GroupAnalytics; pageNumber: number; periodLabel: string }) {
   const coverage = data.capabilityCoverage
   return (
-    <SlideShell title="Differentiating Capabilities Coverage" subtitle="Share of total staff trained against each strategic capability" pageNumber={pageNumber} periodLabel={periodLabel}>
+    <SlideShell
+      title="Differentiating Capabilities Coverage"
+      subtitle={coverage.length > 0 ? `Skill Coverage Ratio: ${data.skillCoverageRatio.toFixed(1)}% average — share of total staff trained against each strategic capability below` : 'Share of total staff trained against each strategic capability'}
+      pageNumber={pageNumber}
+      periodLabel={periodLabel}
+    >
       {coverage.length === 0 ? (
         <div className="h-full flex items-center justify-center text-sm text-report-gray">
           No Differentiating Capabilities configured yet — add them in Admin.

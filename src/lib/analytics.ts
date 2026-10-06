@@ -144,6 +144,7 @@ export interface GroupAnalytics {
   subscriptionSharePct: number
   investmentPerStaff: number
   capabilityCoverage: CapabilityCoverage[]
+  skillCoverageRatio: number // mean coverage % across all Differentiating Capabilities — see Slide1/the /capabilities page for the per-capability detail
   otherTrainingTypeNames: string[]
   businessUnits: BUSummary[]
   monthlySpend: { month: string; cost: number }[]
@@ -973,6 +974,13 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const sortedBUs = businessUnitSummaries.sort((a, b) => b.totalInvestment - a.totalInvestment)
 
   const capabilityCoverage = computeCapabilityCoverage(trainingRecords, capabilities, totalStaffCount)
+  // Headline "Skill Coverage Ratio" for Executive Overview — the mean of each configured
+  // Differentiating Capability's own coverage %, i.e. "on average, how covered are we across our
+  // strategic capabilities." The per-capability breakdown this averages over is the detail view on
+  // the Differentiating Capabilities Coverage page/slide; this is deliberately just the one number.
+  const skillCoverageRatio = capabilityCoverage.length > 0
+    ? capabilityCoverage.reduce((s, c) => s + c.coverageRatio, 0) / capabilityCoverage.length
+    : 0
   const otherTrainingTypeNames = trainingTypes
     .filter((t) => t.classification === 'other')
     .sort((a, b) => a.order - b.order)
@@ -1013,6 +1021,7 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
     subscriptionSharePct,
     investmentPerStaff,
     capabilityCoverage,
+    skillCoverageRatio,
     otherTrainingTypeNames,
     businessUnits: sortedBUs,
     monthlySpend,

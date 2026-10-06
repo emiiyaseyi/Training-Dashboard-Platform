@@ -118,6 +118,7 @@ function buildSlide1(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     { iconKey: 'target', title: 'Trainings vs Role Relevance', value: rating(data.avgRoleRelevance), subtitle: 'How relevant is training to their role?', valueColor: data.avgRoleRelevance >= 4 ? C.green : C.gold },
     { iconKey: 'checkCircle', title: 'Trainings vs Expectations Met', value: rating(data.avgExpectationsMet), subtitle: 'Extent to which expectations were met', valueColor: data.avgExpectationsMet >= 4 ? C.green : C.gold },
     { iconKey: 'shieldCheck', title: `${data.hoursReport.hoursThreshold}-Hour Compliance`, value: `${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`, subtitle: `${data.hoursReport.staffMeeting40h} of ${data.totalStaffCount} staff`, valueColor: data.hoursReport.staffMeeting40hPct >= 80 ? C.green : data.hoursReport.staffMeeting40hPct >= 50 ? C.gold : C.red },
+    { iconKey: 'layers', title: 'Skill Coverage Ratio', value: pct(data.skillCoverageRatio), subtitle: 'Avg coverage across Differentiating Capabilities — see Capability Coverage for detail', valueColor: data.skillCoverageRatio >= 70 ? C.green : data.skillCoverageRatio >= 40 ? C.gold : C.red },
   ]
   addTileGrid(slide, tiles, icons, 4)
   addFooter(slide, 1, periodLabel)

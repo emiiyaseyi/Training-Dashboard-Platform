@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
+import { SkillsGapSettingsPanel } from '@/components/admin/SkillsGapSettingsPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
 import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
@@ -54,6 +55,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'group-cost-distribution', label: 'Strategic Learnings / Group Cost Distribution', tab: 'business-units' },
   { id: 'training-types', label: 'Training Types', tab: 'taxonomies' },
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
+  { id: 'skills-gap-settings', label: 'Skills Gap Settings', tab: 'taxonomies' },
   { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
   { id: 'google-sheets', label: 'Live Data Source — Google Sheets', tab: 'data-quality' },
   { id: 'training-record-changes', label: 'Training Data Changes to Review', tab: 'data-quality' },
@@ -703,6 +705,9 @@ export default function AdminPage() {
                 endpoint="/api/capabilities"
                 namePlaceholder="e.g. Risk Management"
               />
+            </div>
+            <div id="skills-gap-settings" className={sectionWrapClass('skills-gap-settings')}>
+              <SkillsGapSettingsPanel />
             </div>
             <div id="vendors" className={sectionWrapClass('vendors')}>
               <TaxonomyPanel

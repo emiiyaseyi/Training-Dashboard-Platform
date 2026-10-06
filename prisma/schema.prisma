@@ -45,6 +45,19 @@ model BudgetSettings {
   updatedAt                  DateTime @updatedAt
 }
 
+// Single-row config for the Skills & Competency Gaps page's severity bands — a capability/group
+// combination at or below criticalThreshold is "Critical", above that but at or below
+// moderateThreshold is "Moderate", anything higher is "Healthy". Admin-editable (Admin -> Skills
+// Gap Settings) rather than hardcoded, since what counts as a critical gap is an org judgment
+// call, not a fixed rule — defaults (30/60) match the same bands already used elsewhere in the
+// app's own coverage-color thresholds.
+model SkillsGapSettings {
+  id                String   @id @default(cuid())
+  criticalThreshold Float    @default(30)
+  moderateThreshold Float    @default(60)
+  updatedAt         DateTime @updatedAt
+}
+
 // Single-row config for the live Google Sheets data source. The service account credentials
 // themselves live in environment variables (never in the DB) — this just tracks which
 // spreadsheet/tabs to read and the sync schedule, plus the outcome of the last sync attempt.

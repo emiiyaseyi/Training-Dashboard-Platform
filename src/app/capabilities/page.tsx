@@ -77,6 +77,17 @@ export default function CapabilityCoveragePage() {
 
         {coverage.length > 0 && (
           <>
+            <div className="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-navy-700 flex items-center justify-center shrink-0">
+                <span className="text-white text-sm font-bold">%</span>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Skill Coverage Ratio</p>
+                <p className="text-2xl font-bold text-navy-700">{data.skillCoverageRatio.toFixed(1)}%</p>
+                <p className="text-xs text-slate-400">Average coverage across all {coverage.length} Differentiating Capabilities below — also shown on the Executive Overview.</p>
+              </div>
+            </div>
+
             <div ref={chartRef}>
               <ChartCard
                 title="Capability Coverage (%)"

@@ -24,10 +24,11 @@ import {
   Database,
   Users,
   ArrowLeftRight,
+  Target,
 } from 'lucide-react'
 import { hasAccess, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
-const ANALYTICS_PAGE_COUNT = 7
+const ANALYTICS_PAGE_COUNT = 8
 
 const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
   { href: '/',               label: 'Executive Overview',      icon: LayoutDashboard, page: 'executive-overview' },
@@ -35,6 +36,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/subscriptions',  label: 'Subscriptions',           icon: BadgeCheck,      page: 'subscriptions' },
   { href: '/business-units', label: 'Business Units',          icon: Building2,       page: 'business-units' },
   { href: '/capabilities',   label: 'Capability Coverage',     icon: Layers,          page: 'capability-coverage' },
+  { href: '/skills-gaps',    label: 'Skills & Competency Gaps', icon: Target,         page: 'skills-gaps' },
   { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
   { href: '/talent-members', label: 'Talent Members',          icon: Award,           page: 'talent-members' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
