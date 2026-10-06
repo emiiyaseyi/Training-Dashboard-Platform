@@ -214,6 +214,28 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     }
   }
 
+  // Direct proof, not inference: for everyone with a responded timestamp, did any REMINDER actually
+  // get sent after that timestamp? See check-reminder-timing/route.ts.
+  const [checkingTiming, setCheckingTiming] = useState(false)
+  const [timingResult, setTimingResult] = useState<{ violationCount: number; violations: { staffName: string; trainingName: string; stage: string; respondedAt: string; reminderSentAt: string; minutesAfterResponse: number }[] } | null>(null)
+  const checkReminderTiming = async () => {
+    setCheckingTiming(true)
+    setTimingResult(null)
+    try {
+      const res = await fetch('/api/admin/survey-automation/check-reminder-timing')
+      const data = await res.json()
+      if (res.ok) {
+        setTimingResult({ violationCount: data.violationCount, violations: data.violations })
+      } else {
+        alert(data.error || 'Failed to check reminder timing.')
+      }
+    } catch {
+      alert('Failed to check reminder timing.')
+    } finally {
+      setCheckingTiming(false)
+    }
+  }
+
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [showAddSchedule, setShowAddSchedule] = useState(() => !!scheduleDraft)
@@ -854,6 +876,64 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
         >
           {repairingResponses ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
           {repairingResponses ? 'Fixing…' : 'Run fix now'}
+        </button>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <Search className="w-4 h-4" /> Check: was a reminder ever sent after someone responded?
+          </p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+            Direct proof rather than inference — cross-checks every actual reminder email against the responder&apos;s own submission timestamp.
+          </p>
+          {timingResult && (
+            timingResult.violationCount === 0 ? (
+              <p className="text-xs text-emerald-700 font-medium mt-2">
+                Checked every responded attendee — no reminder was ever sent after their response. The reminder system itself isn&apos;t the issue.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-1.5">
+                <p className="text-xs text-red-700 font-semibold">
+                  Found {timingResult.violationCount} reminder{timingResult.violationCount === 1 ? '' : 's'} sent after the person had already responded:
+                </p>
+                <div className="max-h-56 overflow-y-auto border border-red-200 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead className="bg-red-50 text-red-800">
+                      <tr>
+                        <th className="text-left px-2 py-1">Attendee</th>
+                        <th className="text-left px-2 py-1">Training</th>
+                        <th className="text-left px-2 py-1">Stage</th>
+                        <th className="text-left px-2 py-1">Responded</th>
+                        <th className="text-left px-2 py-1">Reminder sent</th>
+                        <th className="text-right px-2 py-1">Delay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timingResult.violations.map((v, i) => (
+                        <tr key={i} className="border-t border-red-100">
+                          <td className="px-2 py-1">{v.staffName}</td>
+                          <td className="px-2 py-1">{v.trainingName}</td>
+                          <td className="px-2 py-1">{v.stage}</td>
+                          <td className="px-2 py-1">{new Date(v.respondedAt).toLocaleString()}</td>
+                          <td className="px-2 py-1">{new Date(v.reminderSentAt).toLocaleString()}</td>
+                          <td className="px-2 py-1 text-right">{v.minutesAfterResponse < 60 ? `${v.minutesAfterResponse}m` : `${Math.round(v.minutesAfterResponse / 60)}h`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+        <button
+          onClick={checkReminderTiming}
+          disabled={checkingTiming}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-slate-700 rounded-lg px-3 py-2 hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap"
+        >
+          {checkingTiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+          {checkingTiming ? 'Checking…' : 'Run check'}
         </button>
       </div>
 
