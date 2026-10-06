@@ -22,13 +22,19 @@ export async function POST() {
       loadRosterDirectory(),
     ])
 
-    const toUpdate: { id: string; staffId: string; name: string; email: string | null; wasSynced: boolean }[] = []
+    const toUpdate: { id: string; staffId: string; name: string; email: string | null; status?: string; wasSynced: boolean }[] = []
     for (const entry of entries) {
       const match = resolveStaffLooseAny(entry, directory)
       if (!match) continue
-      const changed = entry.staffId !== match.staffId || entry.name !== match.name || entry.email !== (match.email || null)
+      // One-directional on purpose: if the roster shows them inactive but this entry still says
+      // Active, correct it — that's the stale case this button exists to fix (e.g. Adaeze,
+      // confirmed exited elsewhere but still showing Active here because nothing had ever synced
+      // it). Never flips Exited back to Active automatically, since an admin may have marked
+      // someone Exited from the TM programme specifically, independent of their roster status.
+      const statusFix = !match.active && entry.status !== 'Exited' ? 'Exited' : undefined
+      const changed = entry.staffId !== match.staffId || entry.name !== match.name || entry.email !== (match.email || null) || !!statusFix
       if (!changed) continue
-      toUpdate.push({ id: entry.id, staffId: match.staffId, name: match.name, email: match.email || null, wasSynced: !!entry.sheetSyncedAt })
+      toUpdate.push({ id: entry.id, staffId: match.staffId, name: match.name, email: match.email || null, status: statusFix, wasSynced: !!entry.sheetSyncedAt })
     }
 
     if (toUpdate.length === 0) {
@@ -38,7 +44,7 @@ export async function POST() {
     await prisma.$transaction(
       toUpdate.map((u) => prisma.talentMemberInfo.update({
         where: { id: u.id },
-        data: { staffId: u.staffId, name: u.name, email: u.email },
+        data: { staffId: u.staffId, name: u.name, email: u.email, ...(u.status ? { status: u.status } : {}) },
       }))
     )
 

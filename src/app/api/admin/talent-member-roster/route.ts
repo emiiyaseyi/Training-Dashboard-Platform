@@ -77,7 +77,17 @@ export async function POST(req: NextRequest) {
     // to the sheet) carries the full Name/Staff ID/Email, not just whichever one was typed —
     // matches what the report already does for display, just persisted this time.
     for (const entry of created) {
-      const { entry: finalEntry } = await backfillRosterEntryFromDirectory(entry)
+      const { entry: backfilled } = await backfillRosterEntryFromDirectory(entry)
+      // New entries always default to "Active" (the schema default) regardless of who's being
+      // added — someone added specifically because they've exited (e.g. to clear a stale-TM
+      // warning elsewhere) would otherwise show Active until an admin remembers to flip the badge
+      // by hand. Match it to the roster's own active flag at creation time instead.
+      let finalEntry = backfilled
+      const directory = await loadRosterDirectory()
+      const match = resolveStaffLooseAny(finalEntry, directory)
+      if (match && !match.active && finalEntry.status !== 'Exited') {
+        finalEntry = await prisma.talentMemberInfo.update({ where: { id: finalEntry.id }, data: { status: 'Exited' } })
+      }
       const result = await mirrorRosterEntryToSheet(finalEntry)
       if (result.attempted) {
         await prisma.talentMemberInfo.update({

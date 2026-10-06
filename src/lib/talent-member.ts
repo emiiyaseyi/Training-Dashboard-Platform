@@ -215,10 +215,16 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // definition, so a Year-to-Date filter (which is about what's already happened) shouldn't hide
   // a training scheduled later in the same year. Only "past" (what counts toward attendance and
   // spend) is scoped to the selected year + month range.
+  //
+  // Split on START date, not end date — a multi-day training that's already begun counts as
+  // attended and drops out of "Coming Up" the moment it starts, not only once it finishes. An
+  // end-date split left an in-progress training in BOTH lists simultaneously (still "upcoming"
+  // since it hadn't ended, while its auto-mirrored TrainingRecord already counted as attended),
+  // which is exactly the double-listing this was reported against.
   const pastSchedules = tmSchedules.filter((s) =>
-    s.endDate.getTime() < now && s.startDate.getFullYear() === year && inSelectedPeriod(MONTHS[s.startDate.getMonth()])
+    s.startDate.getTime() < now && s.startDate.getFullYear() === year && inSelectedPeriod(MONTHS[s.startDate.getMonth()])
   )
-  const upcomingSchedules = tmSchedules.filter((s) => s.endDate.getTime() >= now)
+  const upcomingSchedules = tmSchedules.filter((s) => s.startDate.getTime() >= now)
 
   const rosterKeys = new Set(roster.map((s) => normalizeStaffIdKey(s.staffId)))
   // A schedule's trainingType is one shared value for the whole training, not per-attendee — an

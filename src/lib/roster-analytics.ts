@@ -83,8 +83,11 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   const availableYears = [...new Set(allTraining.map((r) => r.year))].sort((a, b) => b - a)
 
   const now = Date.now()
-  const pastSchedules = allSchedules.filter((s) => s.endDate.getTime() < now)
-  const upcomingSchedules = allSchedules.filter((s) => s.endDate.getTime() >= now)
+  // Split on START date, not end date — same reasoning as computeTalentMemberReport: once a
+  // training has begun it counts toward attendance and drops out of "upcoming", rather than
+  // sitting in both simultaneously until it finishes.
+  const pastSchedules = allSchedules.filter((s) => s.startDate.getTime() < now)
+  const upcomingSchedules = allSchedules.filter((s) => s.startDate.getTime() >= now)
 
   // Every schedule attendee gets a TrainingRecord auto-written and linked back via
   // linkedTrainingRecordId the moment they're added (see attendees/route.ts) — purely so Manage
