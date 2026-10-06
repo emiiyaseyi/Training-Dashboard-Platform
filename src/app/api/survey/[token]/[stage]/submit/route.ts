@@ -57,13 +57,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       return NextResponse.json({ error: `Please answer: ${missing.map((q) => q.label).join(', ')}` }, { status: 400 })
     }
 
-    // Save the raw, full-fidelity answer set regardless of stage.
-    const response = await prisma.surveyResponse.create({
-      data: { attendeeId: attendee.id, stage: stageKey, answers: JSON.stringify(answers) },
-    })
-    await prisma.trainingScheduleAttendee.update({
-      where: { id: attendee.id },
-      data: { [RESPONDED_FIELD[stageKey]]: new Date() },
+    // Save the raw, full-fidelity answer set AND stamp the attendee's responded-at field in one
+    // transaction — these must both succeed or neither does. Previously two separate awaited
+    // writes: if the process died between them (timeout, cold-start kill, transient DB error),
+    // the SurveyResponse row existed (so the admin's Responses tab correctly counted them) but
+    // RESPONDED_FIELD stayed null, so sendSurveyReminders (which only checks that field, never
+    // the SurveyResponse table) kept treating them as not-yet-responded and nudging them forever.
+    const response = await prisma.$transaction(async (tx) => {
+      const created = await tx.surveyResponse.create({
+        data: { attendeeId: attendee.id, stage: stageKey, answers: JSON.stringify(answers) },
+      })
+      await tx.trainingScheduleAttendee.update({
+        where: { id: attendee.id },
+        data: { [RESPONDED_FIELD[stageKey]]: new Date() },
+      })
+      return created
     })
 
     // Feed the structured metric this stage maps to (FeedbackRecord for post1, ManagerReviewRecord

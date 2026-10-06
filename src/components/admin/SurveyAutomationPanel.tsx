@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine, Wrench,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -187,6 +187,32 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [savingSettings, setSavingSettings] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // One-off repair button for the non-atomic-write bug (see repair-responded-flags/route.ts) —
+  // someone whose response was saved but whose respondedAt field never got stamped (a server
+  // process dying between the two writes) kept getting reminded forever despite already having
+  // responded, visibly, under the schedule's own Responses tab.
+  const [repairingResponses, setRepairingResponses] = useState(false)
+  const [repairResult, setRepairResult] = useState<{ trainingFixed: number; customFixed: number } | null>(null)
+  const repairRespondedFlags = async () => {
+    if (!confirm('Scan every training schedule and custom survey for people who already responded but are still flagged as not-responded (and still getting reminders), and fix them?')) return
+    setRepairingResponses(true)
+    setRepairResult(null)
+    try {
+      const res = await fetch('/api/admin/survey-automation/repair-responded-flags', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setRepairResult({ trainingFixed: data.trainingFixed, customFixed: data.customFixed })
+        await loadSchedules()
+      } else {
+        alert(data.error || 'Failed to repair responded flags.')
+      }
+    } catch {
+      alert('Failed to repair responded flags.')
+    } finally {
+      setRepairingResponses(false)
+    }
+  }
 
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
@@ -805,6 +831,32 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
 
   return (
     <div className="space-y-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5">
+            <Wrench className="w-4 h-4" /> Fix stuck reminders
+          </p>
+          <p className="text-xs text-amber-700 mt-1 max-w-2xl">
+            A data bug could leave someone marked as &quot;not responded&quot; and still getting reminders even though their response is already saved and visible
+            under a schedule&apos;s Responses tab. This has been fixed for every NEW submission going forward — click below to also fix anyone already affected.
+          </p>
+          {repairResult && (
+            <p className="text-xs text-emerald-700 font-medium mt-2">
+              Fixed {repairResult.trainingFixed} training survey response{repairResult.trainingFixed === 1 ? '' : 's'} and {repairResult.customFixed} custom survey response{repairResult.customFixed === 1 ? '' : 's'}.
+              {repairResult.trainingFixed === 0 && repairResult.customFixed === 0 ? ' Nothing was affected.' : ' They’ll stop getting reminders immediately.'}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={repairRespondedFlags}
+          disabled={repairingResponses}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-amber-600 rounded-lg px-3 py-2 hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
+        >
+          {repairingResponses ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
+          {repairingResponses ? 'Fixing…' : 'Run fix now'}
+        </button>
+      </div>
+
       {/* Survey forms are native to the platform — no Google Form links needed. Submissions
           write to the database and optionally mirror into a tab on the spreadsheet already
           configured under Live Data Source. */}

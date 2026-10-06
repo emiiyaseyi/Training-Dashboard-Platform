@@ -43,10 +43,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       return NextResponse.json({ error: `Please answer: ${missing.map((q) => q.label).join(', ')}` }, { status: 400 })
     }
 
-    const response = await prisma.customSurveyResponse.create({
-      data: { recipientId: recipient.id, answers: JSON.stringify(answers) },
+    // Same reasoning as src/app/api/survey/[token]/[stage]/submit/route.ts: these two writes must
+    // happen atomically, or a process death between them leaves a CustomSurveyResponse row (so the
+    // admin's Responses view counts them) with respondedAt still null (so reminders keep nudging
+    // them forever, since the reminder check only reads respondedAt).
+    const response = await prisma.$transaction(async (tx) => {
+      const created = await tx.customSurveyResponse.create({
+        data: { recipientId: recipient.id, answers: JSON.stringify(answers) },
+      })
+      await tx.customSurveyRecipient.update({ where: { id: recipient.id }, data: { respondedAt: new Date() } })
+      return created
     })
-    await prisma.customSurveyRecipient.update({ where: { id: recipient.id }, data: { respondedAt: new Date() } })
 
     // Mirrored into the Google Sheet after the response has already gone back to the respondent —
     // same fix as src/app/api/survey/[token]/[stage]/submit/route.ts: a slow/rate-limited Sheets
