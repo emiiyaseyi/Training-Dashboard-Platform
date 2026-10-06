@@ -35,22 +35,22 @@ export type PptxGen = any
 export function addHeader(slide: PptxSlide, title: string, subtitle: string) {
   slide.addText(title, {
     x: MARGIN, y: 0.4, w: PAGE_W - MARGIN * 2, h: 0.55,
-    fontFace: 'Georgia', fontSize: 28, bold: true, color: C.navy,
+    fontFace: 'Tahoma', fontSize: 28, bold: true, color: C.navy,
   })
   slide.addText(subtitle, {
     x: MARGIN, y: 0.95, w: PAGE_W - MARGIN * 2, h: 0.3,
-    fontFace: 'Calibri', fontSize: 13, color: C.gray,
+    fontFace: 'Tahoma', fontSize: 13, color: C.gray,
   })
 }
 
 export function addFooter(slide: PptxSlide, pageNumber: number, periodLabel: string) {
   slide.addText(`Meristem Group  |  Learning & Development Investment Report  |  ${periodLabel}`, {
     x: MARGIN, y: FOOTER_Y, w: PAGE_W - MARGIN * 2 - 0.6, h: 0.3,
-    fontFace: 'Calibri', fontSize: 9, color: C.gray,
+    fontFace: 'Tahoma', fontSize: 9, color: C.gray,
   })
   slide.addText(String(pageNumber), {
     x: PAGE_W - MARGIN - 0.5, y: FOOTER_Y, w: 0.5, h: 0.3,
-    fontFace: 'Calibri', fontSize: 9, color: C.gray, align: 'right',
+    fontFace: 'Tahoma', fontSize: 9, color: C.gray, align: 'right',
   })
   slide.addShape('line', {
     x: MARGIN, y: FOOTER_Y - 0.08, w: PAGE_W - MARGIN * 2, h: 0,
@@ -101,16 +101,16 @@ export function addTileGrid(slide: PptxSlide, tiles: Tile[], icons: IconImages, 
     }
     slide.addText(tile.title, {
       x: x + 0.14, y: y + 0.48, w: tileW - 0.28, h: titleH,
-      fontFace: 'Calibri', fontSize: 12, color: C.navy, bold: false,
+      fontFace: 'Tahoma', fontSize: 12, color: C.navy, bold: false,
     })
     slide.addText(tile.value, {
       x: x + 0.14, y: y + valueY, w: tileW - 0.28, h: valueH,
-      fontFace: 'Georgia', fontSize: 22, bold: true, color: tile.valueColor ?? C.navy,
+      fontFace: 'Tahoma', fontSize: 22, bold: true, color: tile.valueColor ?? C.navy,
     })
     if (tile.subtitle && subtitleH > 0) {
       slide.addText(tile.subtitle, {
         x: x + 0.14, y: y + subtitleY, w: tileW - 0.28, h: subtitleH,
-        fontFace: 'Calibri', fontSize: 9, color: C.gray, valign: 'top',
+        fontFace: 'Tahoma', fontSize: 9, color: C.gray, valign: 'top',
       })
     }
   })
@@ -167,12 +167,12 @@ function buildSlide2(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
 
   function participationPanel(x: number, title: string, isSub: boolean, p: GroupAnalytics['trainingParticipation']) {
     slide.addShape('roundRect', { x, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-    slide.addText(title, { x: x + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+    slide.addText(title, { x: x + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 13, bold: true, color: C.navy })
     const oneLabel = isSub ? 'Hold exactly 1 subscription' : 'Completed exactly 1'
     const twoLabel = isSub ? 'Hold 2 or more subscriptions' : 'Completed 2 or more'
-    slide.addText(`${oneLabel}          ${p.oneTraining.toLocaleString()} (${p.oneTrainingPct.toFixed(1)}%)`, { x: x + 0.2, y: panelTop + 0.6, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addText(`${oneLabel}          ${p.oneTraining.toLocaleString()} (${p.oneTrainingPct.toFixed(1)}%)`, { x: x + 0.2, y: panelTop + 0.6, w: panelW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 11, color: C.navy })
     slide.addShape('rect', { x: x + 0.2, y: panelTop + 0.95, w: (panelW - 0.4) * Math.min(1, p.oneTrainingPct / 100), h: 0.1, fill: { color: C.navy }, line: { type: 'none' } })
-    slide.addText(`${twoLabel}          ${p.twoPlus.toLocaleString()} (${p.twoPlusPct.toFixed(1)}%)`, { x: x + 0.2, y: panelTop + 1.25, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addText(`${twoLabel}          ${p.twoPlus.toLocaleString()} (${p.twoPlusPct.toFixed(1)}%)`, { x: x + 0.2, y: panelTop + 1.25, w: panelW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 11, color: C.navy })
     slide.addShape('rect', { x: x + 0.2, y: panelTop + 1.6, w: (panelW - 0.4) * Math.min(1, p.twoPlusPct / 100), h: 0.1, fill: { color: C.green }, line: { type: 'none' } })
   }
 
@@ -189,7 +189,7 @@ function buildSlide3(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
 
   const leftW = 3.6
   slide.addShape('roundRect', { x: MARGIN, y: CONTENT_TOP, w: leftW, h: FOOTER_Y - 0.25 - CONTENT_TOP, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-  slide.addText('Investment Split', { x: MARGIN + 0.2, y: CONTENT_TOP + 0.15, w: leftW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+  slide.addText('Investment Split', { x: MARGIN + 0.2, y: CONTENT_TOP + 0.15, w: leftW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 13, bold: true, color: C.navy })
   slide.addChart(pptx.ChartType.doughnut, [{
     name: 'Investment Split',
     labels: ['Formal Training', 'Strategic Learnings', 'Subscriptions'],
@@ -211,14 +211,14 @@ function buildSlide3(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   ]
   legendCols.forEach((col, i) => {
     const x = MARGIN + 0.2 + i * legendColW
-    slide.addText(col.value, { x, y: legendY, w: legendColW - 0.1, h: 0.28, fontFace: 'Calibri', fontSize: 11, bold: true, color: col.color })
-    slide.addText(col.label, { x, y: legendY + 0.3, w: legendColW - 0.1, h: 0.6, fontFace: 'Calibri', fontSize: 9, color: C.gray, valign: 'top' })
+    slide.addText(col.value, { x, y: legendY, w: legendColW - 0.1, h: 0.28, fontFace: 'Tahoma', fontSize: 11, bold: true, color: col.color })
+    slide.addText(col.label, { x, y: legendY + 0.3, w: legendColW - 0.1, h: 0.6, fontFace: 'Tahoma', fontSize: 9, color: C.gray, valign: 'top' })
   })
 
   const rightX = MARGIN + leftW + 0.25
   const rightW = PAGE_W - MARGIN - rightX
   slide.addShape('roundRect', { x: rightX, y: CONTENT_TOP, w: rightW, h: FOOTER_Y - 0.25 - CONTENT_TOP, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-  slide.addText('Monthly Formal Training Spend (₦)', { x: rightX + 0.2, y: CONTENT_TOP + 0.15, w: rightW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+  slide.addText('Monthly Formal Training Spend (₦)', { x: rightX + 0.2, y: CONTENT_TOP + 0.15, w: rightW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 13, bold: true, color: C.navy })
   if (data.monthlySpend.length > 0) {
     slide.addChart(pptx.ChartType.line, [{
       name: 'Formal Training Spend',
@@ -246,7 +246,7 @@ function buildSlide4(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
   const busByCoverage = [...data.businessUnits].sort((a, b) => b.coverageRatio - a.coverageRatio)
 
   slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-  slide.addText('Total Investment by Business Unit (₦M)', { x: MARGIN + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 12, bold: true, color: C.navy })
+  slide.addText('Total Investment by Business Unit (₦M)', { x: MARGIN + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 12, bold: true, color: C.navy })
   slide.addChart(pptx.ChartType.bar, [{
     name: 'Total Investment (₦M)',
     labels: bus.map((b) => b.name),
@@ -259,7 +259,7 @@ function buildSlide4(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
 
   const rightX = MARGIN + panelW + 0.2
   slide.addShape('roundRect', { x: rightX, y: panelTop, w: panelW, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-  slide.addText('Staff Coverage by Business Unit (%)', { x: rightX + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Calibri', fontSize: 12, bold: true, color: C.navy })
+  slide.addText('Staff Coverage by Business Unit (%)', { x: rightX + 0.2, y: panelTop + 0.15, w: panelW - 0.4, h: 0.3, fontFace: 'Tahoma', fontSize: 12, bold: true, color: C.navy })
   slide.addChart(pptx.ChartType.bar, [{
     name: 'Coverage %',
     labels: busByCoverage.map((b) => b.name),
@@ -301,28 +301,28 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     // at x+0.65+(cardW-2.7)=x+cardW-2.05, figure box starts at x+cardW-2.0), and the figure box is
     // wide enough (2.0in) that a value like "₦163.75M" at 24pt bold never wraps to a 2nd line and
     // bleeds into the row below — that wrap was the cause of the overlapping-text export bug.
-    slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.7, h: 0.4, fontFace: 'Calibri', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle', wrap: false })
+    slide.addText(bu.name, { x: x + 0.65, y: y + 0.14, w: cardW - 2.7, h: 0.4, fontFace: 'Tahoma', fontSize: 16, bold: true, color: C.navyDark, valign: 'middle', wrap: false })
     slide.addText([
       { text: 'Total Learning Investment\n', options: { fontSize: 11, color: C.gray } },
       { text: fmt(bu.totalInvestment), options: { fontSize: 24, bold: true, color: C.navy, breakLine: true } },
-    ], { x: x + cardW - 2.0, y: y + 0.08, w: 2.0, h: 0.62, align: 'right', fontFace: 'Calibri', valign: 'top' })
+    ], { x: x + cardW - 2.0, y: y + 0.08, w: 2.0, h: 0.62, align: 'right', fontFace: 'Tahoma', valign: 'top' })
 
     const rowTop = y + 0.78
     const colW = cardW / 3
-    slide.addText([{ text: 'Formal Training\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + 0.2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
-    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Calibri' })
+    slide.addText([{ text: 'Formal Training\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.trainingCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + 0.2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Tahoma' })
+    slide.addText([{ text: 'Strategic Learnings\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.otherInvestmentCost), options: { fontSize: 16, bold: true, color: C.gold } }], { x: x + colW, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Tahoma' })
+    slide.addText([{ text: 'Subscription Spend\n', options: { fontSize: 11, color: C.gray, breakLine: true } }, { text: fmt(bu.subscriptionCost), options: { fontSize: 16, bold: true, color: C.navyDark } }], { x: x + colW * 2, y: rowTop, w: colW - 0.2, h: 0.45, fontFace: 'Tahoma' })
     slide.addText(
       bu.budget > 0 ? `${pct((bu.trainingCost / bu.budget) * 100)} of budget` : 'Budget not set',
-      { x: x + 0.2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
+      { x: x + 0.2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Tahoma', fontSize: 10, color: C.gray, wrap: false }
     )
     slide.addText(
       `${bu.otherStaffTrained} staff`,
-      { x: x + colW, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
+      { x: x + colW, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Tahoma', fontSize: 10, color: C.gray, wrap: false }
     )
     slide.addText(
       `${bu.subscriptionStaff} members`,
-      { x: x + colW * 2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Calibri', fontSize: 10, color: C.gray, wrap: false }
+      { x: x + colW * 2, y: rowTop + 0.45, w: colW - 0.2, h: 0.26, fontFace: 'Tahoma', fontSize: 10, color: C.gray, wrap: false }
     )
 
     // Bottom row is 3 columns now (Coverage / Avg Impact / Post-Training Impact), matching the
@@ -332,17 +332,17 @@ function buildBUProfileSlide(pptx: PptxGen, title: string, subtitle: string, bus
     const statsY = rowTop + 0.82
     const statColW = cardW / 3
     slide.addShape('line', { x: x + 0.2, y: statsY, w: cardW - 0.4, h: 0, line: { color: C.navyLight, width: 0.5 } })
-    slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
-    slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.gold })
-    slide.addText(`${bu.eligibleStaffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+    slide.addText('Coverage', { x: x + 0.2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 11, color: C.gray })
+    slide.addText(bu.totalStaff > 0 ? pct(bu.coverageRatio) : '—', { x: x + 0.2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Tahoma', fontSize: 22, bold: true, color: C.gold })
+    slide.addText(`${bu.eligibleStaffTrained} trained (1+ training)`, { x: x + 0.2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 9, color: C.gray })
 
-    slide.addText('Avg Impact Score', { x: x + statColW, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
-    slide.addText(rating(bu.avgImpactScore), { x: x + statColW, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.green })
-    slide.addText('Self-reported confidence', { x: x + statColW, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+    slide.addText('Avg Impact Score', { x: x + statColW, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 11, color: C.gray })
+    slide.addText(rating(bu.avgImpactScore), { x: x + statColW, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Tahoma', fontSize: 22, bold: true, color: C.green })
+    slide.addText('Self-reported confidence', { x: x + statColW, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 9, color: C.gray })
 
-    slide.addText('Post-Training Impact', { x: x + statColW * 2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 11, color: C.gray })
-    slide.addText(bu.postTrainingImpactScore > 0 ? rating(bu.postTrainingImpactScore) : '—', { x: x + statColW * 2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Calibri', fontSize: 22, bold: true, color: C.navy })
-    slide.addText('From line manager reviews', { x: x + statColW * 2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+    slide.addText('Post-Training Impact', { x: x + statColW * 2, y: statsY + 0.08, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 11, color: C.gray })
+    slide.addText(bu.postTrainingImpactScore > 0 ? rating(bu.postTrainingImpactScore) : '—', { x: x + statColW * 2, y: statsY + 0.3, w: statColW - 0.15, h: 0.32, fontFace: 'Tahoma', fontSize: 22, bold: true, color: C.navy })
+    slide.addText('From line manager reviews', { x: x + statColW * 2, y: statsY + 0.66, w: statColW - 0.15, h: 0.22, fontFace: 'Tahoma', fontSize: 9, color: C.gray })
   })
 
   addFooter(slide, pageNumber, periodLabel)
@@ -356,7 +356,7 @@ function buildSlide7(pptx: PptxGen, data: GroupAnalytics, periodLabel: string) {
 
   if (coverage.length === 0) {
     slide.addText('No Differentiating Capabilities configured yet — add them in Admin.', {
-      x: MARGIN, y: CONTENT_TOP + 1.5, w: PAGE_W - MARGIN * 2, h: 0.5, align: 'center', fontFace: 'Calibri', fontSize: 12, color: C.gray,
+      x: MARGIN, y: CONTENT_TOP + 1.5, w: PAGE_W - MARGIN * 2, h: 0.5, align: 'center', fontFace: 'Tahoma', fontSize: 12, color: C.gray,
     })
   } else {
     const top = CONTENT_TOP, h = FOOTER_Y - 0.25 - top
@@ -413,16 +413,16 @@ function buildSlide8(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     const barW = PAGE_W - MARGIN * 2 - 0.4
 
     slide.addShape('roundRect', { x: MARGIN, y: panelTop, w: PAGE_W - MARGIN * 2, h: panelH, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-    slide.addText('TM Training Coverage', { x: barX, y: panelTop + 0.15, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+    slide.addText('TM Training Coverage', { x: barX, y: panelTop + 0.15, w: barW, h: 0.3, fontFace: 'Tahoma', fontSize: 13, bold: true, color: C.navy })
 
-    slide.addText(`Trained          ${tm.staffTrained.toLocaleString()} (${trainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 0.6, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addText(`Trained          ${tm.staffTrained.toLocaleString()} (${trainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 0.6, w: barW, h: 0.3, fontFace: 'Tahoma', fontSize: 11, color: C.navy })
     slide.addShape('rect', { x: barX, y: panelTop + 0.95, w: barW * Math.min(1, trainedPct / 100), h: 0.1, fill: { color: C.green }, line: { type: 'none' } })
 
-    slide.addText(`Yet to be Trained          ${tm.staffNotTrained.toLocaleString()} (${notTrainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 1.25, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 11, color: C.navy })
+    slide.addText(`Yet to be Trained          ${tm.staffNotTrained.toLocaleString()} (${notTrainedPct.toFixed(1)}%)`, { x: barX, y: panelTop + 1.25, w: barW, h: 0.3, fontFace: 'Tahoma', fontSize: 11, color: C.navy })
     slide.addShape('rect', { x: barX, y: panelTop + 1.6, w: barW * Math.min(1, notTrainedPct / 100), h: 0.1, fill: { color: C.red }, line: { type: 'none' } })
 
     if (tm.totalHeadcount === 0) {
-      slide.addText('Set the Total TM Headcount in Admin Settings to see coverage percentages.', { x: barX, y: panelTop + 1.95, w: barW, h: 0.3, fontFace: 'Calibri', fontSize: 9, color: C.gray })
+      slide.addText('Set the Total TM Headcount in Admin Settings to see coverage percentages.', { x: barX, y: panelTop + 1.95, w: barW, h: 0.3, fontFace: 'Tahoma', fontSize: 9, color: C.gray })
     }
   }
 

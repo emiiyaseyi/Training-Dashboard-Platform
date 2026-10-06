@@ -68,14 +68,14 @@ export function buildBUReportHtml(businessUnit: string, comparison: BUReportComp
 <style>
   @page { size: A4; margin: 22mm 16mm; }
   * { box-sizing: border-box; }
-  body { font-family: Calibri, Arial, sans-serif; color: ${C.navy}; margin: 0; }
-  h1 { font-family: Georgia, serif; font-size: 26px; color: ${C.navy}; margin: 0 0 4px 0; }
+  body { font-family: Tahoma, Arial, sans-serif; color: ${C.navy}; margin: 0; }
+  h1 { font-family: Tahoma, sans-serif; font-size: 26px; color: ${C.navy}; margin: 0 0 4px 0; }
   h2 { font-size: 15px; color: ${C.navy}; margin: 28px 0 10px 0; }
   .subtitle { font-size: 13px; color: ${C.gray}; margin: 0 0 24px 0; }
   .headline { display: flex; gap: 14px; margin-bottom: 8px; }
   .card { flex: 1; background: ${C.panelBg}; border: 1px solid ${C.navyLight}; border-radius: 8px; padding: 14px 16px; }
   .card .label { font-size: 11px; color: ${C.gray}; margin-bottom: 6px; }
-  .card .value { font-family: Georgia, serif; font-size: 26px; font-weight: bold; }
+  .card .value { font-family: Tahoma, sans-serif; font-size: 26px; font-weight: bold; }
   .narrative { font-size: 12.5px; color: ${C.gray}; line-height: 1.6; margin-top: 18px; }
   table.delta-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   table.delta-table th { background: ${C.navy}; color: #fff; text-align: left; padding: 8px 10px; }

@@ -33,7 +33,7 @@ function formatDeltaChange(delta: MetricDelta): string {
 }
 
 function addDeltaTable(slide: PptxSlide, title: string, currentLabel: string, previousLabel: string, deltas: MetricDelta[], top: number) {
-  slide.addText(title, { x: MARGIN, y: top, w: PAGE_W - MARGIN * 2, h: 0.3, fontFace: 'Calibri', fontSize: 13, bold: true, color: C.navy })
+  slide.addText(title, { x: MARGIN, y: top, w: PAGE_W - MARGIN * 2, h: 0.3, fontFace: 'Tahoma', fontSize: 13, bold: true, color: C.navy })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: any[] = [
@@ -53,7 +53,7 @@ function addDeltaTable(slide: PptxSlide, title: string, currentLabel: string, pr
 
   slide.addTable(rows, {
     x: MARGIN, y: top + 0.35, w: PAGE_W - MARGIN * 2,
-    fontFace: 'Calibri', fontSize: 11, border: { type: 'solid', color: 'E2E6F0', pt: 0.5 },
+    fontFace: 'Tahoma', fontSize: 11, border: { type: 'solid', color: 'E2E6F0', pt: 0.5 },
     colW: [(PAGE_W - MARGIN * 2) * 0.4, (PAGE_W - MARGIN * 2) * 0.2, (PAGE_W - MARGIN * 2) * 0.2, (PAGE_W - MARGIN * 2) * 0.2],
   })
 }
@@ -83,12 +83,12 @@ export async function buildBUReportPptxBuffer(businessUnit: string, comparison: 
   headline.forEach((h, i) => {
     const x = MARGIN + i * (cardW + 0.2)
     cover.addShape('roundRect', { x, y: CONTENT_TOP, w: cardW, h: 1.7, rectRadius: 0.06, fill: { color: C.panelBg }, line: { color: C.navyLight, width: 0.75 } })
-    cover.addText(h.label, { x: x + 0.2, y: CONTENT_TOP + 0.18, w: cardW - 0.4, h: 0.4, fontFace: 'Calibri', fontSize: 12, color: C.gray })
-    cover.addText(h.value, { x: x + 0.2, y: CONTENT_TOP + 0.65, w: cardW - 0.4, h: 0.7, fontFace: 'Georgia', fontSize: 30, bold: true, color: h.color })
+    cover.addText(h.label, { x: x + 0.2, y: CONTENT_TOP + 0.18, w: cardW - 0.4, h: 0.4, fontFace: 'Tahoma', fontSize: 12, color: C.gray })
+    cover.addText(h.value, { x: x + 0.2, y: CONTENT_TOP + 0.65, w: cardW - 0.4, h: 0.7, fontFace: 'Tahoma', fontSize: 30, bold: true, color: h.color })
   })
   cover.addText(
     `This report compares ${businessUnit}'s ${periodLabel} learning investment against ${previousLabel}.${comparison.quarterly ? ` It also includes the ${comparison.quarterly.quarterLabel} quarterly comparison, since this month closes out the quarter.` : ''}`,
-    { x: MARGIN, y: CONTENT_TOP + 2.1, w: PAGE_W - MARGIN * 2, h: 1.0, fontFace: 'Calibri', fontSize: 12, color: C.gray, valign: 'top' }
+    { x: MARGIN, y: CONTENT_TOP + 2.1, w: PAGE_W - MARGIN * 2, h: 1.0, fontFace: 'Tahoma', fontSize: 12, color: C.gray, valign: 'top' }
   )
   addFooter(cover, 1, periodLabel)
 
