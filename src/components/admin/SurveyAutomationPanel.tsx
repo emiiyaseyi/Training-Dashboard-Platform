@@ -236,6 +236,31 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     }
   }
 
+  // Tests the duplicate-attendee theory: two rows for the same real person on the same schedule
+  // (different literal staffId spelling slipping past the DB's own exact-match unique constraint)
+  // — one could show green while a separate, independently-reminded row for the same person is
+  // still unresponded, which would exactly explain "they're marked responded but still complain
+  // about reminders." See check-duplicate-attendees/route.ts.
+  const [checkingDuplicateAttendees, setCheckingDuplicateAttendees] = useState(false)
+  const [duplicateAttendeeResult, setDuplicateAttendeeResult] = useState<{ groupCount: number; groups: { scheduleId: string; trainingName: string; rows: { attendeeId: string; staffId: string; staffName: string; preSentAt: string | null; preRespondedAt: string | null; post1SentAt: string | null; post1RespondedAt: string | null; post2SentAt: string | null; post2RespondedAt: string | null }[] }[] } | null>(null)
+  const checkDuplicateAttendees = async () => {
+    setCheckingDuplicateAttendees(true)
+    setDuplicateAttendeeResult(null)
+    try {
+      const res = await fetch('/api/admin/training-schedule/check-duplicate-attendees')
+      const data = await res.json()
+      if (res.ok) {
+        setDuplicateAttendeeResult({ groupCount: data.groupCount, groups: data.groups })
+      } else {
+        alert(data.error || 'Failed to check for duplicate attendees.')
+      }
+    } catch {
+      alert('Failed to check for duplicate attendees.')
+    } finally {
+      setCheckingDuplicateAttendees(false)
+    }
+  }
+
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [loadingSchedules, setLoadingSchedules] = useState(true)
   const [showAddSchedule, setShowAddSchedule] = useState(() => !!scheduleDraft)
@@ -957,6 +982,64 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
         >
           {checkingTiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
           {checkingTiming ? 'Checking…' : 'Run check'}
+        </button>
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <Search className="w-4 h-4" /> Check for duplicate attendee entries
+          </p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+            Finds two attendee rows for the same real person on the same schedule (a Staff ID typed with different punctuation slipping past the exact-match duplicate check) —
+            one could show as responded while the other, separately-reminded row is the one actually still nagging them.
+          </p>
+          {duplicateAttendeeResult && (
+            duplicateAttendeeResult.groupCount === 0 ? (
+              <p className="text-xs text-emerald-700 font-medium mt-2">No duplicate attendee entries found — this isn&apos;t the cause.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-red-700 font-semibold">
+                  Found {duplicateAttendeeResult.groupCount} real {duplicateAttendeeResult.groupCount === 1 ? 'person' : 'people'} with more than one attendee row:
+                </p>
+                {duplicateAttendeeResult.groups.map((g) => (
+                  <div key={`${g.scheduleId}-${g.rows[0].staffId}`} className="border border-red-200 rounded-lg overflow-hidden">
+                    <p className="text-xs font-medium text-slate-700 bg-red-50 px-2 py-1">{g.trainingName}</p>
+                    <table className="w-full text-xs">
+                      <thead className="text-slate-400">
+                        <tr>
+                          <th className="text-left px-2 py-1">Staff ID</th>
+                          <th className="text-left px-2 py-1">Name</th>
+                          <th className="text-center px-2 py-1">Pre</th>
+                          <th className="text-center px-2 py-1">Post-1</th>
+                          <th className="text-center px-2 py-1">Post-2</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.rows.map((r) => (
+                          <tr key={r.attendeeId} className="border-t border-slate-100">
+                            <td className="px-2 py-1">{r.staffId}</td>
+                            <td className="px-2 py-1">{r.staffName}</td>
+                            <td className="px-2 py-1 text-center">{r.preRespondedAt ? '✅' : r.preSentAt ? '🔵' : '—'}</td>
+                            <td className="px-2 py-1 text-center">{r.post1RespondedAt ? '✅' : r.post1SentAt ? '🔵' : '—'}</td>
+                            <td className="px-2 py-1 text-center">{r.post2RespondedAt ? '✅' : r.post2SentAt ? '🔵' : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+        <button
+          onClick={checkDuplicateAttendees}
+          disabled={checkingDuplicateAttendees}
+          className="flex items-center gap-1.5 text-xs font-medium text-white bg-slate-700 rounded-lg px-3 py-2 hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap"
+        >
+          {checkingDuplicateAttendees ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+          {checkingDuplicateAttendees ? 'Checking…' : 'Run check'}
         </button>
       </div>
 
@@ -1928,12 +2011,16 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                                                 <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
                                               )}
                                             </button>
-                                            {state === 'sent' && (
+                                            {state !== 'unsent' && (
                                               <button
                                                 type="button"
                                                 onClick={() => stopReminders(s.id, a.id, stage, a.staffName)}
                                                 disabled={stoppingReminderKey === stopKey}
-                                                title={`Stop ${STAGE_LABELS[stage]} reminders for ${a.staffName} only — everyone else keeps getting reminded until they respond`}
+                                                title={
+                                                  state === 'filled'
+                                                    ? `${a.staffName} already shows as responded — click only if they're still reporting reminders (this re-stamps responded-at to right now, in case a duplicate record for them is the one actually being reminded)`
+                                                    : `Stop ${STAGE_LABELS[stage]} reminders for ${a.staffName} only — everyone else keeps getting reminded until they respond`
+                                                }
                                                 className="text-slate-300 hover:text-amber-600 disabled:opacity-40"
                                               >
                                                 {stoppingReminderKey === stopKey ? (
