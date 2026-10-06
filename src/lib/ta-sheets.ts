@@ -10,7 +10,7 @@
 import { JWT } from 'google-auth-library'
 import { createPrivateKey } from 'crypto'
 import { normalizePrivateKey } from './google-sheets'
-import type { ConfigLists, DashboardData, HireRecord, OfferStatus, PipelineRecord } from './ta-types'
+import type { ConfigLists, DashboardData, HireRecord, OfferStatus, PipelineRecord, InternalMobilityRecord, ConversionRecord, NotConvertedRecord, VacancyRecord } from './ta-types'
 import { isOfferStatus } from './ta-metrics'
 import { getSampleTaDashboardData } from './ta-sample-data'
 import { findColumn, headerIndex, normalizeHeader } from './ta-sheet-columns'
@@ -20,6 +20,10 @@ const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 export const HIRES_RANGE = 'Hires!A1:O'
 export const PIPELINE_RANGE = 'Pipeline!A1:H'
 export const CONFIG_RANGE = 'Config!A1:F'
+export const INTERNAL_MOBILITY_RANGE = 'Internal Mobility!A1:I'
+export const CONVERSION_RANGE = 'Conversion!A1:J'
+export const NOT_CONVERTED_RANGE = 'Not Converted!A1:H'
+export const VACANCIES_RANGE = 'Vacancies 2026!A1:H'
 
 // Exported so pages can show an honest "sample data" banner instead of presenting demo numbers
 // as if they were the real recruitment sheet.
@@ -178,6 +182,144 @@ function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
     .filter((r): r is PipelineRecord => r !== null)
 }
 
+function parseInternalMobilityRows(rows: unknown[][]): InternalMobilityRecord[] {
+  if (rows.length === 0) return []
+  const [header, ...body] = rows as string[][]
+  const idx = headerIndex(header)
+
+  const iStaffId = findColumn(idx, 'staffId')
+  const iName = findColumn(idx, 'name')
+  const iCurrentBU = findColumn(idx, 'currentBU')
+  const iCurrentRole = findColumn(idx, 'currentRole')
+  const iPreviousBU = findColumn(idx, 'previousBU')
+  const iPreviousRole = findColumn(idx, 'previousRole')
+  const iDeploymentDate = findColumn(idx, 'deploymentDate')
+  const iPreviousGrade = findColumn(idx, 'previousGrade')
+  const iNewGrade = findColumn(idx, 'newGrade')
+
+  return body
+    .filter((row) => row.some((cell) => cell != null && cell !== ''))
+    .map((row): InternalMobilityRecord | null => {
+      const get = (index: number | undefined) => (index == null ? undefined : row[index])
+      const deploymentDate = parseDateCell(get(iDeploymentDate))
+      if (!deploymentDate) return null
+      return {
+        staffId: String(get(iStaffId) ?? '').trim(),
+        name: String(get(iName) ?? ''),
+        currentBU: String(get(iCurrentBU) ?? ''),
+        currentRole: String(get(iCurrentRole) ?? ''),
+        previousBU: String(get(iPreviousBU) ?? ''),
+        previousRole: String(get(iPreviousRole) ?? ''),
+        deploymentDate,
+        previousGrade: String(get(iPreviousGrade) ?? ''),
+        newGrade: String(get(iNewGrade) ?? ''),
+      }
+    })
+    .filter((r): r is InternalMobilityRecord => r !== null)
+}
+
+function parseConversionRows(rows: unknown[][]): ConversionRecord[] {
+  if (rows.length === 0) return []
+  const [header, ...body] = rows as string[][]
+  const idx = headerIndex(header)
+
+  const iStaffId = findColumn(idx, 'staffId')
+  const iName = findColumn(idx, 'name')
+  const iBU = findColumn(idx, 'bu')
+  const iRole = findColumn(idx, 'role')
+  const iInternStart = findColumn(idx, 'internStartDate')
+  const iGrade = findColumn(idx, 'grade')
+  const iEffectiveDate = findColumn(idx, 'conversionEffectiveDate')
+  const iManager = findColumn(idx, 'manager')
+  const iOfferRate = findColumn(idx, 'offerRate')
+  const iCost = findColumn(idx, 'costPerConversion')
+
+  return body
+    .filter((row) => row.some((cell) => cell != null && cell !== ''))
+    .map((row): ConversionRecord | null => {
+      const get = (index: number | undefined) => (index == null ? undefined : row[index])
+      const conversionEffectiveDate = parseDateCell(get(iEffectiveDate))
+      if (!conversionEffectiveDate) return null
+      return {
+        staffId: String(get(iStaffId) ?? '').trim(),
+        name: String(get(iName) ?? ''),
+        bu: String(get(iBU) ?? ''),
+        role: String(get(iRole) ?? ''),
+        internStartDate: parseDateCell(get(iInternStart)),
+        grade: String(get(iGrade) ?? ''),
+        conversionEffectiveDate,
+        manager: String(get(iManager) ?? ''),
+        offerRate: get(iOfferRate) != null && get(iOfferRate) !== '' ? String(get(iOfferRate)) : null,
+        costPerConversion: parseOptionalNumberCell(get(iCost)),
+      }
+    })
+    .filter((r): r is ConversionRecord => r !== null)
+}
+
+function parseNotConvertedRows(rows: unknown[][]): NotConvertedRecord[] {
+  if (rows.length === 0) return []
+  const [header, ...body] = rows as string[][]
+  const idx = headerIndex(header)
+
+  const iStaffId = findColumn(idx, 'staffId')
+  const iName = findColumn(idx, 'name')
+  const iBU = findColumn(idx, 'bu')
+  const iRole = findColumn(idx, 'role')
+  const iEmploymentStart = findColumn(idx, 'employmentStartDate')
+  const iGrade = findColumn(idx, 'grade')
+  const iManager = findColumn(idx, 'manager')
+  const iReason = findColumn(idx, 'reason')
+
+  return body
+    .filter((row) => row.some((cell) => cell != null && cell !== ''))
+    .map((row): NotConvertedRecord => {
+      const get = (index: number | undefined) => (index == null ? undefined : row[index])
+      return {
+        staffId: String(get(iStaffId) ?? '').trim(),
+        name: String(get(iName) ?? ''),
+        bu: String(get(iBU) ?? ''),
+        role: String(get(iRole) ?? ''),
+        employmentStartDate: parseDateCell(get(iEmploymentStart)),
+        grade: String(get(iGrade) ?? ''),
+        manager: String(get(iManager) ?? ''),
+        reason: String(get(iReason) ?? ''),
+      }
+    })
+}
+
+function parseVacancyRows(rows: unknown[][]): VacancyRecord[] {
+  if (rows.length === 0) return []
+  const [header, ...body] = rows as string[][]
+  const idx = headerIndex(header)
+
+  const iRole = findColumn(idx, 'role')
+  const iBU = findColumn(idx, 'bu')
+  const iCount = findColumn(idx, 'numberOfVacancies')
+  const iLocation = findColumn(idx, 'location')
+  const iGrade = findColumn(idx, 'grade')
+  const iStatus = findColumn(idx, 'status')
+  const iDateOpened = findColumn(idx, 'dateOpened')
+  const iDateFilled = findColumn(idx, 'dateFilled')
+
+  return body
+    .filter((row) => row.some((cell) => cell != null && cell !== ''))
+    .map((row): VacancyRecord => {
+      const get = (index: number | undefined) => (index == null ? undefined : row[index])
+      return {
+        role: String(get(iRole) ?? ''),
+        bu: String(get(iBU) ?? ''),
+        numberOfVacancies: parseNumberCell(get(iCount)),
+        location: String(get(iLocation) ?? ''),
+        grade: String(get(iGrade) ?? ''),
+        status: String(get(iStatus) ?? ''),
+        dateOpened: parseDateCell(get(iDateOpened)),
+        // dateFilled stays null for every row until a "Date Filled" column exists on the sheet —
+        // Time to Fill can't be computed without it (see ta-types.ts's VacancyRecord comment).
+        dateFilled: parseDateCell(get(iDateFilled)),
+      }
+    })
+}
+
 const EMPTY_CONFIG: ConfigLists = { bus: [], roles: [], offerStatuses: [], officeTypes: [], hiringSources: [], pipelineStages: [] }
 
 function parseConfigColumns(rows: unknown[][]): ConfigLists {
@@ -222,19 +364,30 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
     const spreadsheetId = process.env.TA_GOOGLE_SHEET_ID as string
     const accessToken = await getTaAccessToken()
 
-    const [hiresRows, configRows, pipelineRows] = await Promise.all([
+    const optionalRange = (range: string, label: string) =>
+      fetchRange(spreadsheetId, range, accessToken).catch(() => {
+        console.warn(`[ta-sheets] No "${label}" tab found — that section will be empty.`)
+        return [] as unknown[][]
+      })
+
+    const [hiresRows, configRows, pipelineRows, internalMobilityRows, conversionRows, notConvertedRows, vacancyRows] = await Promise.all([
       fetchRange(spreadsheetId, HIRES_RANGE, accessToken),
       fetchRange(spreadsheetId, CONFIG_RANGE, accessToken),
-      fetchRange(spreadsheetId, PIPELINE_RANGE, accessToken).catch(() => {
-        console.warn('[ta-sheets] No "Pipeline" tab found — pipeline section will be empty.')
-        return [] as unknown[][]
-      }),
+      optionalRange(PIPELINE_RANGE, 'Pipeline'),
+      optionalRange(INTERNAL_MOBILITY_RANGE, 'Internal Mobility'),
+      optionalRange(CONVERSION_RANGE, 'Conversion'),
+      optionalRange(NOT_CONVERTED_RANGE, 'Not Converted'),
+      optionalRange(VACANCIES_RANGE, 'Vacancies 2026'),
     ])
 
     return {
       records: parseHiresRows(hiresRows),
       config: parseConfigColumns(configRows),
       pipeline: parsePipelineRows(pipelineRows),
+      internalMobility: parseInternalMobilityRows(internalMobilityRows),
+      conversions: parseConversionRows(conversionRows),
+      notConverted: parseNotConvertedRows(notConvertedRows),
+      vacancies: parseVacancyRows(vacancyRows),
       connectionError: null,
     }
   } catch (err) {

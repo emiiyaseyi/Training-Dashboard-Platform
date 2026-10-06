@@ -2,7 +2,7 @@
 // (lib/metrics.ts), unchanged: every derived number the dashboard shows comes from here, and
 // none of it depends on the framework, so it ports as-is.
 
-import type { HireRecord, Filters, OfferStatus, PipelineRecord } from './ta-types'
+import type { HireRecord, Filters, OfferStatus, PipelineRecord, InternalMobilityRecord, ConversionRecord, NotConvertedRecord, VacancyRecord } from './ta-types'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
@@ -381,4 +381,126 @@ export function pipelineAgingRequisitions(pipeline: PipelineRecord[], asOf: Date
   return pipeline
     .map((r) => ({ id: r.id, candidateName: r.candidateName, role: r.role, bu: r.bu, daysElapsed: (asOf.getTime() - r.requisitionStartDate.getTime()) / DAY_MS }))
     .sort((a, b) => b.daysElapsed - a.daysElapsed)
+}
+
+// ---------- Internal Mobility ----------
+// Rate/headcount-based metrics (#1, #9) need the live staff roster (Postgres), not anything in
+// this sheet — kept out of this file on purpose (framework-agnostic, sheet-data-only, see the
+// file header) and passed in as plain numbers/sets by the API route that already has that data.
+
+/** Internal Mobility Rate = moves in the period / total active headcount. activeHeadcount comes
+ * from StaffRosterRecord, resolved by the caller. */
+export function internalMobilityRate(mobility: InternalMobilityRecord[], activeHeadcount: number): number | null {
+  if (activeHeadcount === 0) return null
+  return mobility.length / activeHeadcount
+}
+
+export function mobilityByFunction(mobility: InternalMobilityRecord[]): GroupedCount[] {
+  // "Function" = Current Role — the sheet has no separate Department/Function column, Role is the
+  // closest available proxy.
+  return countByKey(mobility, (r) => r.currentRole)
+}
+
+// No grade hierarchy is configured anywhere (Config has no Grades list), so "promotion" vs
+// "lateral" can't be determined from direction of movement — only from whether the grade changed
+// at all. Promotion = grade changed; Lateral = grade stayed the same. This is a stated assumption,
+// not a verified one: a genuine demotion would be miscounted as a promotion under this rule, since
+// there's no way to tell "Officer -> Manager" from "Manager -> Officer" is higher without an
+// explicit order. Revisit if/when grades get a defined hierarchy.
+export function promotionRate(mobility: InternalMobilityRecord[]): number | null {
+  if (mobility.length === 0) return null
+  const promoted = mobility.filter((r) => r.previousGrade && r.newGrade && r.previousGrade !== r.newGrade).length
+  return promoted / mobility.length
+}
+
+export function lateralMobilityRate(mobility: InternalMobilityRecord[]): number | null {
+  if (mobility.length === 0) return null
+  const lateral = mobility.filter((r) => r.previousGrade && r.newGrade && r.previousGrade === r.newGrade).length
+  return lateral / mobility.length
+}
+
+/** Share of people who moved (in the given mobility list) who are still active today.
+ * activeStaffIds comes from StaffRosterRecord, resolved by the caller. */
+export function retentionAfterMobility(mobility: InternalMobilityRecord[], activeStaffIds: Set<string>): number | null {
+  if (mobility.length === 0) return null
+  const retained = mobility.filter((r) => activeStaffIds.has(r.staffId.toUpperCase())).length
+  return retained / mobility.length
+}
+
+/** Share of ALL filled vacancies (Filled Internally + Filled Externally) that were filled
+ * internally — a current snapshot ratio only, since there's no Date Filled column to make this
+ * trendable over time (see ta-types.ts's VacancyRecord comment). Time to Fill is NOT computable
+ * at all without that column — deliberately not built as a function here rather than guessed. */
+export function internalFillRate(vacancies: VacancyRecord[]): number | null {
+  const filled = vacancies.filter((v) => v.status === 'Filled Internally' || v.status === 'Filled Externally')
+  if (filled.length === 0) return null
+  const internal = filled.filter((v) => v.status === 'Filled Internally').length
+  return internal / filled.length
+}
+
+// ---------- Conversions ----------
+// Reuses the GroupedCount shape already defined above (BU & Role Demographics section) — same
+// { key, count } result, just needed for record types other than HireRecord, hence the separate
+// generic helper name (groupCountBy above is narrowly typed to HireRecord only).
+
+function countByKey<T>(records: T[], keyFn: (r: T) => string): GroupedCount[] {
+  const map = new Map<string, number>()
+  for (const r of records) {
+    const key = keyFn(r) || 'Unspecified'
+    map.set(key, (map.get(key) ?? 0) + 1)
+  }
+  return [...map.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count)
+}
+
+export function conversionsByBU(conversions: ConversionRecord[]): GroupedCount[] {
+  return countByKey(conversions, (r) => r.bu)
+}
+
+export function conversionsByManager(conversions: ConversionRecord[]): GroupedCount[] {
+  return countByKey(conversions, (r) => r.manager)
+}
+
+/** Converted interns / total interns (StaffRosterRecord.employmentType = "Intern"). Only as
+ * reliable as that field being kept current on the Employees page — not something this function
+ * can verify. internHeadcount is resolved by the caller. */
+export function internToFullTimeConversionRate(conversions: ConversionRecord[], internHeadcount: number): number | null {
+  if (internHeadcount === 0) return null
+  return conversions.length / internHeadcount
+}
+
+/** Share of converted interns who are still active today. activeStaffIds comes from
+ * StaffRosterRecord, resolved by the caller. */
+export function internRetentionRate(conversions: ConversionRecord[], activeStaffIds: Set<string>): number | null {
+  if (conversions.length === 0) return null
+  const retained = conversions.filter((r) => activeStaffIds.has(r.staffId.toUpperCase())).length
+  return retained / conversions.length
+}
+
+export function averageTimeToConversionDays(conversions: ConversionRecord[]): number | null {
+  const days = conversions
+    .filter((r) => r.internStartDate)
+    .map((r) => (r.conversionEffectiveDate.getTime() - (r.internStartDate as Date).getTime()) / DAY_MS)
+  return avg(days)
+}
+
+/** Converted / (Converted + declined-offer Not Converted). The Conversion sheet only ever lists
+ * people who DID convert, so "offers made" has to come from pairing it with Not Converted rows
+ * whose Reason text indicates a declined offer specifically — rows with other reasons (performance,
+ * role no longer available, resigned before a decision) aren't offer declines and are excluded.
+ * This is a text-matching heuristic against free-text Reason values, not a guaranteed-accurate
+ * count — worth a second look if Reason values don't consistently say "declined". */
+export function conversionOfferAcceptanceRate(conversions: ConversionRecord[], notConverted: NotConvertedRecord[]): number | null {
+  const declinedOffers = notConverted.filter((r) => /declin/i.test(r.reason)).length
+  const totalOffers = conversions.length + declinedOffers
+  if (totalOffers === 0) return null
+  return conversions.length / totalOffers
+}
+
+export function averageCostPerConversion(conversions: ConversionRecord[]): number | null {
+  const costs = conversions.map((r) => r.costPerConversion).filter((c): c is number => c != null)
+  return avg(costs)
+}
+
+export function conversionDropOffReasons(notConverted: NotConvertedRecord[]): GroupedCount[] {
+  return countByKey(notConverted, (r) => r.reason)
 }

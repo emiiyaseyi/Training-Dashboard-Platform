@@ -29,6 +29,31 @@ export type SheetField =
   | 'officeType'
   | 'hiringSource'
   | 'currentStage'
+  // Internal Mobility sheet
+  | 'staffId'
+  | 'name'
+  | 'currentBU'
+  | 'currentRole'
+  | 'previousBU'
+  | 'previousRole'
+  | 'deploymentDate'
+  | 'previousGrade'
+  | 'newGrade'
+  // Conversion / Not Converted sheets (also reuse staffId, name, bu, role, grade)
+  | 'grade'
+  | 'internStartDate'
+  | 'conversionEffectiveDate'
+  | 'manager'
+  | 'offerRate'
+  | 'costPerConversion'
+  | 'employmentStartDate'
+  | 'reason'
+  // Vacancies 2026 sheet
+  | 'numberOfVacancies'
+  | 'location'
+  | 'status'
+  | 'dateOpened'
+  | 'dateFilled'
 
 export const HEADER_ALIASES: Record<SheetField, string[]> = {
   id: ['id'],
@@ -47,6 +72,28 @@ export const HEADER_ALIASES: Record<SheetField, string[]> = {
   officeType: ['office type'],
   hiringSource: ['hiring source', 'source'],
   currentStage: ['current stage', 'pipeline stage', 'stage'],
+  staffId: ['staff id', 'staffid'],
+  name: ['name'],
+  currentBU: ['current bu'],
+  currentRole: ['current role'],
+  previousBU: ['previous bu'],
+  previousRole: ['previous role'],
+  deploymentDate: ['deployment date'],
+  previousGrade: ['previous grade'],
+  newGrade: ['new grade'],
+  grade: ['grade'],
+  internStartDate: ['intern start date'],
+  conversionEffectiveDate: ['conversion effective date', 'effective date'],
+  manager: ['manager', 'manager/team', 'team'],
+  offerRate: ['offer rate'],
+  costPerConversion: ['cost per conversion', 'cost'],
+  employmentStartDate: ['employment start date'],
+  reason: ['reason'],
+  numberOfVacancies: ['no of vacancies', 'number of vacancies', 'no. of vacancies'],
+  location: ['location'],
+  status: ['status'],
+  dateOpened: ['date opened'],
+  dateFilled: ['date filled'],
 }
 
 export function findColumn(idx: Map<string, number>, field: SheetField): number | undefined {

@@ -8,6 +8,8 @@ const TABS = [
   { href: '/hr/talent-acquisition/financial-insights', label: 'Financial Insights' },
   { href: '/hr/talent-acquisition/bu-role-demographics', label: 'BU & Role Demographics' },
   { href: '/hr/talent-acquisition/efficiency-velocity', label: 'Efficiency & Velocity' },
+  { href: '/hr/talent-acquisition/internal-mobility', label: 'Internal Mobility' },
+  { href: '/hr/talent-acquisition/conversions', label: 'Conversions' },
 ]
 
 /** Sub-navigation between the 4 Talent Acquisition views — ported 1:1 from the source repo's

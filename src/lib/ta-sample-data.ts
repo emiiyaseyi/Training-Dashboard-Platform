@@ -3,7 +3,7 @@
 // TA_GOOGLE_SHEET_ID/credentials are set — never used in production (see ta-sheets.ts).
 // Deterministic (seeded PRNG) so local sessions are reproducible.
 
-import type { DashboardData, HireRecord, OfferStatus, PipelineRecord } from './ta-types'
+import type { DashboardData, HireRecord, OfferStatus, PipelineRecord, InternalMobilityRecord, ConversionRecord, NotConvertedRecord, VacancyRecord } from './ta-types'
 
 const BUS = ['Engineering', 'Sales', 'Operations', 'Customer Success', 'Finance']
 const OFFICE_TYPES = ['Front Office', 'Back Office']
@@ -20,6 +20,9 @@ const ROLES: { name: string; officeType: string }[] = [
 const HIRING_SOURCES = ['Referral', 'LinkedIn', 'Job Board', 'Agency', 'Direct']
 const PIPELINE_STAGES = ['Requisition', 'Psychometric Assessment', 'First Level with Hiring Team', 'Second Level with HBUs', 'Offer', 'Medical', 'Resumption']
 const STATUSES: OfferStatus[] = ['Accepted', 'Accepted', 'Accepted', 'Declined', 'Pending']
+const GRADES = ['Officer', 'Senior Officer', 'Assistant Manager', 'Manager', 'Senior Manager']
+const VACANCY_STATUSES = ['Open', 'Filled Internally', 'Filled Externally']
+const NOT_CONVERTED_REASONS = ['Declined Offer', 'Performance', 'Role Not Available', 'Resigned Before Decision']
 
 function mulberry32(seed: number) {
   return function () {
@@ -93,6 +96,88 @@ function generatePipeline(count: number, rng: () => number, now: Date): Pipeline
   return records
 }
 
+function gradeStep(rng: () => number): { previous: string; next: string } {
+  const i = Math.floor(rng() * (GRADES.length - 1))
+  return { previous: GRADES[i], next: GRADES[i + 1] }
+}
+
+function generateInternalMobility(count: number, rng: () => number, now: Date): InternalMobilityRecord[] {
+  const records: InternalMobilityRecord[] = []
+  for (let i = 0; i < count; i++) {
+    const { previous, next } = gradeStep(rng)
+    const lateral = rng() < 0.3
+    records.push({
+      staffId: `SAMP-${1000 + i}`,
+      name: `Sample Staff ${i + 1}`,
+      currentBU: pick(rng, BUS),
+      currentRole: pick(rng, ROLES).name,
+      previousBU: pick(rng, BUS),
+      previousRole: pick(rng, ROLES).name,
+      deploymentDate: daysAgo(now, Math.floor(rng() * 365)),
+      previousGrade: previous,
+      newGrade: lateral ? previous : next,
+    })
+  }
+  return records
+}
+
+function generateConversions(count: number, rng: () => number, now: Date): ConversionRecord[] {
+  const records: ConversionRecord[] = []
+  for (let i = 0; i < count; i++) {
+    const internStartDate = daysAgo(now, Math.floor(rng() * 400) + 180)
+    const cost = Math.round((rng() * 50000 + 20000) / 1000) * 1000
+    records.push({
+      staffId: `SAMP-C${2000 + i}`,
+      name: `Sample Intern ${i + 1}`,
+      bu: pick(rng, BUS),
+      role: pick(rng, ROLES).name,
+      internStartDate,
+      grade: GRADES[0],
+      conversionEffectiveDate: daysAgo(internStartDate, -(Math.floor(rng() * 150) + 150)),
+      manager: `Manager ${Math.floor(rng() * 8) + 1}`,
+      offerRate: 'Accepted',
+      costPerConversion: cost,
+    })
+  }
+  return records
+}
+
+function generateNotConverted(count: number, rng: () => number, now: Date): NotConvertedRecord[] {
+  const records: NotConvertedRecord[] = []
+  for (let i = 0; i < count; i++) {
+    records.push({
+      staffId: `SAMP-N${3000 + i}`,
+      name: `Sample Intern (Not Converted) ${i + 1}`,
+      bu: pick(rng, BUS),
+      role: pick(rng, ROLES).name,
+      employmentStartDate: daysAgo(now, Math.floor(rng() * 400) + 180),
+      grade: GRADES[0],
+      manager: `Manager ${Math.floor(rng() * 8) + 1}`,
+      reason: pick(rng, NOT_CONVERTED_REASONS),
+    })
+  }
+  return records
+}
+
+function generateVacancies(count: number, rng: () => number, now: Date): VacancyRecord[] {
+  const records: VacancyRecord[] = []
+  for (let i = 0; i < count; i++) {
+    const status = pick(rng, VACANCY_STATUSES)
+    const dateOpened = daysAgo(now, Math.floor(rng() * 180) + 10)
+    records.push({
+      role: pick(rng, ROLES).name,
+      bu: pick(rng, BUS),
+      numberOfVacancies: Math.floor(rng() * 3) + 1,
+      location: pick(rng, ['Lagos', 'Abuja', 'Port Harcourt']),
+      grade: pick(rng, GRADES),
+      status,
+      dateOpened,
+      dateFilled: null, // sheet has no Date Filled column yet — see ta-types.ts's VacancyRecord comment
+    })
+  }
+  return records
+}
+
 export function getSampleTaDashboardData(): DashboardData {
   const rng = mulberry32(42)
   const now = new Date()
@@ -107,5 +192,9 @@ export function getSampleTaDashboardData(): DashboardData {
       hiringSources: HIRING_SOURCES,
       pipelineStages: PIPELINE_STAGES,
     },
+    internalMobility: generateInternalMobility(25, rng, now),
+    conversions: generateConversions(15, rng, now),
+    notConverted: generateNotConverted(8, rng, now),
+    vacancies: generateVacancies(20, rng, now),
   }
 }

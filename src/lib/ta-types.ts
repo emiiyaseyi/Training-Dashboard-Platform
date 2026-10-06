@@ -48,10 +48,71 @@ export interface ConfigLists {
   pipelineStages: string[]
 }
 
+/** One row from the `Internal Mobility` sheet tab — a staff member's move between BU/role. */
+export interface InternalMobilityRecord {
+  staffId: string
+  name: string
+  currentBU: string
+  currentRole: string
+  previousBU: string
+  previousRole: string
+  deploymentDate: Date
+  previousGrade: string
+  newGrade: string
+}
+
+/** One row from the `Conversion` sheet tab — an intern who converted to full-time. */
+export interface ConversionRecord {
+  staffId: string
+  name: string
+  bu: string
+  role: string
+  internStartDate: Date | null
+  grade: string
+  conversionEffectiveDate: Date
+  manager: string
+  // Raw passthrough — this sheet only ever lists people who DID convert, so the exact intent of
+  // a per-row "Offer Rate" value isn't fully clear (every row here is already an accepted offer).
+  // Captured as-is rather than guessed at; see computeOfferAcceptanceRate's own comment for how
+  // it's actually used.
+  offerRate: string | null
+  costPerConversion: number | null
+}
+
+/** One row from the `Not Converted` sheet tab — an intern who did NOT convert, with a reason. */
+export interface NotConvertedRecord {
+  staffId: string
+  name: string
+  bu: string
+  role: string
+  employmentStartDate: Date | null
+  grade: string
+  manager: string
+  reason: string
+}
+
+/** One row from the `Vacancies 2026` sheet tab. dateFilled is optional — the sheet as currently
+ * configured doesn't have that column, so Time to Fill can't be computed until it's added; this
+ * stays ready for the moment it is. */
+export interface VacancyRecord {
+  role: string
+  bu: string
+  numberOfVacancies: number
+  location: string
+  grade: string
+  status: string // e.g. "Open" | "Filled Internally" | "Filled Externally"
+  dateOpened: Date | null
+  dateFilled: Date | null
+}
+
 export interface DashboardData {
   records: HireRecord[]
   pipeline: PipelineRecord[]
   config: ConfigLists
+  internalMobility: InternalMobilityRecord[]
+  conversions: ConversionRecord[]
+  notConverted: NotConvertedRecord[]
+  vacancies: VacancyRecord[]
 }
 
 export interface Filters {
