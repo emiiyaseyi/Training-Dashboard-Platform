@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine, Wrench,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine, Wrench, BellOff,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -721,6 +721,29 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   const removeAttendee = async (scheduleId: string, attendeeId: string) => {
     await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/${attendeeId}`, { method: 'DELETE' })
     await loadSchedules()
+  }
+
+  // Manual per-person override — stops THIS attendee's reminders for THIS stage only, by marking
+  // it responded (same field the reminder sweep already checks). Everyone else on the schedule is
+  // untouched and keeps getting reminded normally until they respond.
+  const [stoppingReminderKey, setStoppingReminderKey] = useState<string | null>(null)
+  const stopReminders = async (scheduleId: string, attendeeId: string, stage: 'pre' | 'post1' | 'post2', staffName: string) => {
+    if (!confirm(`Stop ${STAGE_LABELS[stage]} reminders for ${staffName}? This marks them as responded for this stage so the daily reminder sweep skips them — everyone else on this schedule keeps getting reminded normally.`)) return
+    const key = `${scheduleId}:${stage}:${attendeeId}`
+    setStoppingReminderKey(key)
+    try {
+      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/${attendeeId}/stop-reminders`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }),
+      })
+      if (res.ok) {
+        await loadSchedules()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to stop reminders for this attendee.')
+      }
+    } finally {
+      setStoppingReminderKey(null)
+    }
   }
 
   const RESPONDED_FIELD = { pre: 'preSurveyRespondedAt', post1: 'post1SurveyRespondedAt', post2: 'post2SurveyRespondedAt' } as const
@@ -1888,21 +1911,39 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                                       .map(([sentField, respondedField, stage]) => {
                                       const cellKey = `${s.id}:${stage}:${a.id}`
                                       const state = tickState(a[sentField], a[respondedField], settings.expiryEnabled, settings.expiryDays)
+                                      const stopKey = `${s.id}:${stage}:${a.id}`
                                       return (
                                         <td key={sentField} className="py-1.5 pr-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => sendStage(s.id, stage, [a.id])}
-                                            disabled={sendingKey === cellKey}
-                                            title={`${state === 'unsent' ? 'Send' : 'Resend'} ${STAGE_LABELS[stage]} to ${a.staffName} (${state}${state !== 'unsent' ? ' — resending resets the expiry clock' : ''})`}
-                                            className="hover:opacity-70 disabled:opacity-40"
-                                          >
-                                            {sendingKey === cellKey ? (
-                                              <Loader2 className="w-3 h-3 animate-spin text-slate-400 mx-auto" />
-                                            ) : (
-                                              <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
+                                          <div className="inline-flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => sendStage(s.id, stage, [a.id])}
+                                              disabled={sendingKey === cellKey}
+                                              title={`${state === 'unsent' ? 'Send' : 'Resend'} ${STAGE_LABELS[stage]} to ${a.staffName} (${state}${state !== 'unsent' ? ' — resending resets the expiry clock' : ''})`}
+                                              className="hover:opacity-70 disabled:opacity-40"
+                                            >
+                                              {sendingKey === cellKey ? (
+                                                <Loader2 className="w-3 h-3 animate-spin text-slate-400 mx-auto" />
+                                              ) : (
+                                                <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
+                                              )}
+                                            </button>
+                                            {state === 'sent' && (
+                                              <button
+                                                type="button"
+                                                onClick={() => stopReminders(s.id, a.id, stage, a.staffName)}
+                                                disabled={stoppingReminderKey === stopKey}
+                                                title={`Stop ${STAGE_LABELS[stage]} reminders for ${a.staffName} only — everyone else keeps getting reminded until they respond`}
+                                                className="text-slate-300 hover:text-amber-600 disabled:opacity-40"
+                                              >
+                                                {stoppingReminderKey === stopKey ? (
+                                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                                ) : (
+                                                  <BellOff className="w-3 h-3" />
+                                                )}
+                                              </button>
                                             )}
-                                          </button>
+                                          </div>
                                         </td>
                                       )
                                     })}
