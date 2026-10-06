@@ -15,6 +15,11 @@ import { isEligibleForTrainingCoverage, effectiveYearForCoverage, latestRosterSn
 
 export type GapSeverity = 'critical' | 'moderate' | 'healthy'
 
+// A group smaller than this is excluded from every breakdown — too few people for "coverage %"
+// to mean anything (one untrained person in a 3-person group is a dramatic-looking 67%, not a
+// real finding).
+const MIN_GROUP_SIZE = 5
+
 export interface SkillsGapRow {
   groupValue: string
   capability: string
@@ -80,9 +85,18 @@ function buildBreakdown(
   const rows: SkillsGapRow[] = []
   for (const [groupValue, staffKeys] of staffByGroup) {
     const totalStaff = staffKeys.size
-    if (totalStaff === 0) continue
+    // Too small a sample to call a real gap (a single untrained person in a 2-person group reads
+    // as a dramatic "0%" but isn't actually telling us anything) — excluded from every breakdown,
+    // not just the headline list, so the detail tables don't repeat the same noise.
+    if (totalStaff < MIN_GROUP_SIZE) continue
     for (const capability of capabilityNames) {
-      const trainedKeys = trainedKeysByCapability.get(capability) ?? new Set()
+      // Same case-insensitive match computeCapabilityCoverage (the existing, proven Capability
+      // Coverage page) already uses — trainedKeysByCapability is keyed by lowercased capability
+      // text, since a TrainingRecord's own capability string routinely differs in case from the
+      // admin-configured canonical name (e.g. "customer experience" vs "Customer Experience"). An
+      // exact-match lookup here silently failed for almost every record, which is why this showed
+      // 0% across nearly every capability for nearly every group regardless of real training data.
+      const trainedKeys = trainedKeysByCapability.get(capability.toLowerCase()) ?? new Set()
       let staffTrained = 0
       for (const key of staffKeys) if (trainedKeys.has(key)) staffTrained++
       const coverageRatio = (staffTrained / totalStaff) * 100
@@ -97,7 +111,15 @@ function buildBreakdown(
     }
   }
 
-  return rows.sort((a, b) => a.coverageRatio - b.coverageRatio || a.groupValue.localeCompare(b.groupValue))
+  // Lowest coverage first (the table's own stated purpose), but ties — now common since small-
+  // number percentages collide a lot (several groups legitimately at 0%) — break by how many
+  // people are actually missing the capability, not alphabetically, so the more impactful tie
+  // still surfaces first within its own coverage band.
+  return rows.sort((a, b) =>
+    a.coverageRatio - b.coverageRatio ||
+    (b.totalStaff - b.staffTrained) - (a.totalStaff - a.staffTrained) ||
+    a.groupValue.localeCompare(b.groupValue)
+  )
 }
 
 export async function computeSkillsGapReport(filter: PeriodFilter = { mode: 'all' }, buScope?: string[] | null): Promise<SkillsGapReport> {
@@ -141,9 +163,10 @@ export async function computeSkillsGapReport(filter: PeriodFilter = { mode: 'all
   const trainedKeysByCapability = new Map<string, Set<string>>()
   for (const r of trainingRecords) {
     if (!r.capability) continue
+    const capKey = r.capability.toLowerCase()
     const key = normalizeStaffIdKey(r.staffId)
-    if (!trainedKeysByCapability.has(r.capability)) trainedKeysByCapability.set(r.capability, new Set())
-    trainedKeysByCapability.get(r.capability)!.add(key)
+    if (!trainedKeysByCapability.has(capKey)) trainedKeysByCapability.set(capKey, new Set())
+    trainedKeysByCapability.get(capKey)!.add(key)
   }
 
   const capabilityNames = capabilities.map((c) => c.name)
@@ -152,15 +175,17 @@ export async function computeSkillsGapReport(filter: PeriodFilter = { mode: 'all
   const byDepartment = buildBreakdown('department', eligibleRoster, trainedKeysByCapability, capabilityNames, criticalThreshold, moderateThreshold)
   const byRole = buildBreakdown('role', eligibleRoster, trainedKeysByCapability, capabilityNames, criticalThreshold, moderateThreshold)
 
-  // Worst 15 across all three, deduplicated by (dimension label baked into groupValue isn't
-  // unique across dimensions, so tag it) — small, sorted, for the headline section.
+  // Worst 15 across all three (dimension label baked into groupValue isn't unique across
+  // dimensions, so tag it) — ranked by how many people are actually missing the capability, not
+  // raw coverage %, so a gap hitting 170 people outranks one hitting 9 even though both read as
+  // "0%" — the headline list is for where the real impact is, not just the lowest percentage.
   const topGaps = [
     ...byBusinessUnit.map((r) => ({ ...r, groupValue: `${r.groupValue} (BU)` })),
     ...byDepartment.map((r) => ({ ...r, groupValue: `${r.groupValue} (Dept)` })),
     ...byRole.map((r) => ({ ...r, groupValue: `${r.groupValue} (Role)` })),
   ]
     .filter((r) => r.severity === 'critical')
-    .sort((a, b) => a.coverageRatio - b.coverageRatio)
+    .sort((a, b) => (b.totalStaff - b.staffTrained) - (a.totalStaff - a.staffTrained) || a.coverageRatio - b.coverageRatio)
     .slice(0, 15)
 
   return {
