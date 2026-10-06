@@ -1,6 +1,6 @@
 import {
   Users, Target, BarChart2, BadgeCheck, UserCheck, GraduationCap,
-  CreditCard, CheckCircle, Star, Award, ShieldCheck, Layers,
+  CreditCard, CheckCircle, Star, Award, ShieldCheck,
 } from 'lucide-react'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { ReportTile } from './ReportTile'
@@ -26,7 +26,6 @@ export function Slide1ExecutiveOverview({ data, pageNumber, periodLabel }: { dat
         <ReportTile icon={Target} title="Trainings vs Role Relevance" value={rating(data.avgRoleRelevance)} subtitle="How relevant is training to their role?" valueColor={data.avgRoleRelevance >= 4 ? 'text-report-green' : 'text-gold-400'} />
         <ReportTile icon={CheckCircle} title="Trainings vs Expectations Met" value={rating(data.avgExpectationsMet)} subtitle="Extent to which expectations were met" valueColor={data.avgExpectationsMet >= 4 ? 'text-report-green' : 'text-gold-400'} />
         <ReportTile icon={ShieldCheck} title={`${data.hoursReport.hoursThreshold}-Hour Compliance`} value={`${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`} subtitle={`${data.hoursReport.staffMeeting40h} of ${data.totalStaffCount} staff`} valueColor={data.hoursReport.staffMeeting40hPct >= 80 ? 'text-report-green' : data.hoursReport.staffMeeting40hPct >= 50 ? 'text-gold-400' : 'text-report-red'} />
-        <ReportTile icon={Layers} title="Skill Coverage Ratio" value={pct(data.skillCoverageRatio)} subtitle="Avg coverage across Differentiating Capabilities — see Capability Coverage for detail" valueColor={data.skillCoverageRatio >= 70 ? 'text-report-green' : data.skillCoverageRatio >= 40 ? 'text-gold-400' : 'text-report-red'} />
       </div>
     </SlideShell>
   )

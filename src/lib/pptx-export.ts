@@ -64,6 +64,23 @@ export function addTileGrid(slide: PptxSlide, tiles: Tile[], icons: IconImages, 
   const tileW = (PAGE_W - MARGIN * 2 - gap * (cols - 1)) / cols
   const tileH = (bottom - top - gap * (rows - 1)) / rows
 
+  // Title/value/subtitle were previously laid out with the subtitle anchored to the BOTTOM of the
+  // tile (y + tileH - 0.46) while the value box had a fixed height anchored from the TOP (y + 0.76,
+  // h 0.42, ending at y + 1.18) — safe only as long as tileH stayed above ~1.64". That held for the
+  // 3-row grids this was built for, but silently broke (subtitle rendering on top of the value) the
+  // moment a grid grew to 4+ rows and tileH shrank below that. Laid out top-down instead — each
+  // box starts where the previous one ends, so it can never overlap regardless of row count; a
+  // very short tile just clips the subtitle's own height rather than colliding with the value.
+  // Tight enough that the subtitle still gets a couple of lines even at 4 rows (tileH ~1.23"),
+  // not just "doesn't overlap" — a 3-row grid (tileH ~1.70") gets the same offsets plus extra
+  // breathing room below, since nothing here scales UP, only clamps from shrinking too far.
+  const titleY = 0.40
+  const titleH = 0.22
+  const valueY = titleY + titleH
+  const valueH = 0.36
+  const subtitleY = valueY + valueH + 0.04
+  const subtitleH = Math.max(0, tileH - subtitleY)
+
   tiles.forEach((tile, i) => {
     const col = i % cols
     const row = Math.floor(i / cols)
@@ -83,16 +100,16 @@ export function addTileGrid(slide: PptxSlide, tiles: Tile[], icons: IconImages, 
       slide.addShape('ellipse', { x: x + 0.14, y: y + 0.14, w: 0.28, h: 0.28, fill: { color: C.navyDark }, line: { type: 'none' } })
     }
     slide.addText(tile.title, {
-      x: x + 0.14, y: y + 0.48, w: tileW - 0.28, h: 0.3,
+      x: x + 0.14, y: y + 0.48, w: tileW - 0.28, h: titleH,
       fontFace: 'Calibri', fontSize: 12, color: C.navy, bold: false,
     })
     slide.addText(tile.value, {
-      x: x + 0.14, y: y + 0.76, w: tileW - 0.28, h: 0.42,
+      x: x + 0.14, y: y + valueY, w: tileW - 0.28, h: valueH,
       fontFace: 'Georgia', fontSize: 22, bold: true, color: tile.valueColor ?? C.navy,
     })
-    if (tile.subtitle) {
+    if (tile.subtitle && subtitleH > 0) {
       slide.addText(tile.subtitle, {
-        x: x + 0.14, y: y + tileH - 0.46, w: tileW - 0.28, h: 0.4,
+        x: x + 0.14, y: y + subtitleY, w: tileW - 0.28, h: subtitleH,
         fontFace: 'Calibri', fontSize: 9, color: C.gray, valign: 'top',
       })
     }
@@ -118,7 +135,6 @@ function buildSlide1(pptx: PptxGen, data: GroupAnalytics, periodLabel: string, i
     { iconKey: 'target', title: 'Trainings vs Role Relevance', value: rating(data.avgRoleRelevance), subtitle: 'How relevant is training to their role?', valueColor: data.avgRoleRelevance >= 4 ? C.green : C.gold },
     { iconKey: 'checkCircle', title: 'Trainings vs Expectations Met', value: rating(data.avgExpectationsMet), subtitle: 'Extent to which expectations were met', valueColor: data.avgExpectationsMet >= 4 ? C.green : C.gold },
     { iconKey: 'shieldCheck', title: `${data.hoursReport.hoursThreshold}-Hour Compliance`, value: `${data.hoursReport.staffMeeting40hPct.toFixed(0)}%`, subtitle: `${data.hoursReport.staffMeeting40h} of ${data.totalStaffCount} staff`, valueColor: data.hoursReport.staffMeeting40hPct >= 80 ? C.green : data.hoursReport.staffMeeting40hPct >= 50 ? C.gold : C.red },
-    { iconKey: 'layers', title: 'Skill Coverage Ratio', value: pct(data.skillCoverageRatio), subtitle: 'Avg coverage across Differentiating Capabilities — see Capability Coverage for detail', valueColor: data.skillCoverageRatio >= 70 ? C.green : data.skillCoverageRatio >= 40 ? C.gold : C.red },
   ]
   addTileGrid(slide, tiles, icons, 4)
   addFooter(slide, 1, periodLabel)
