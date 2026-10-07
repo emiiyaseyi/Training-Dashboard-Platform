@@ -19,7 +19,8 @@
  *      database's actual constraint enforcement) — but a schema change that
  *      really does drop/truncate real production data still deserves a
  *      manual look before merging, not just this flag rubber-stamping it.
- *   4. Runs `next build`
+ *   4. Enables Row-Level Security on every public-schema table (see step 4's own comment below)
+ *   5. Runs `next build`
  *
  * Required env vars in Vercel:
  *   DATABASE_URL — Supabase's pooled "Transaction" connection string (port 6543,
@@ -54,5 +55,42 @@ execSync('npx prisma generate', { stdio: 'inherit' })
 execSync('npx prisma db push --skip-generate --accept-data-loss', { stdio: 'inherit' })
 console.log('✓ Schema synced to production database')
 
-// 4 — Build Next.js
-execSync('npx next build', { stdio: 'inherit' })
+// 4 — Enable Row-Level Security on every public-schema table. Supabase exposes every public
+// table over its REST/GraphQL data API (callable with just the project's "anon" key, which is
+// meant to be publicly embeddable) UNLESS RLS is on for that table — regardless of whether the
+// app itself ever uses that API. This app only ever reaches Postgres directly via Prisma (never
+// supabase-js), and the role Prisma connects as (Supabase's main "postgres" role) bypasses RLS by
+// default, so this purely closes an otherwise-wide-open, unused attack surface — it can't block
+// the app itself. Idempotent (a no-op on a table that's already enabled), so safe to run on every
+// deploy, including ones that touch no schema; runs here (not a one-off) so a brand-new table
+// created THIS deploy is covered immediately instead of sitting exposed until someone remembers.
+// Runs against DIRECT_URL like the push above, for the same pooler/DDL-reliability reason.
+async function enableRowLevelSecurity() {
+  const { PrismaClient } = require('@prisma/client')
+  const prisma = new PrismaClient({ datasources: { db: { url: process.env.DIRECT_URL } } })
+  try {
+    await prisma.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        r RECORD;
+      BEGIN
+        FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+          EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', r.tablename);
+        END LOOP;
+      END $$;
+    `)
+    console.log('✓ Row-Level Security enabled on all public-schema tables')
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
+enableRowLevelSecurity()
+  .then(() => {
+    // 5 — Build Next.js
+    execSync('npx next build', { stdio: 'inherit' })
+  })
+  .catch((err) => {
+    console.error('✗ Failed to enable Row-Level Security:', err)
+    process.exit(1)
+  })
