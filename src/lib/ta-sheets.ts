@@ -107,8 +107,9 @@ interface HiresParseResult {
   /** Rows whose Resumption Date fell before their Requisition Start Date (almost always a typo'd
    * year on one of the two cells, e.g. 1/1/2006 for 1/1/2026) — the resumption date is dropped for
    * these so a single bad row can't drag Average Time to Fill into a huge negative number, but
-   * the row itself is kept (it's still a real hire). Surfaced so the sheet can be corrected. */
-  suspiciousResumptionDates: number
+   * the row itself is kept (it's still a real hire). Named (not just counted) so the exact row can
+   * be found and corrected in the sheet instead of guessed at. */
+  suspiciousResumptionDates: { candidateName: string; requisitionStartDate: string; resumptionDate: string }[]
 }
 
 /** Yes/No → Accepted/Declined, for sheets using a simple "Offer Acceptance" column instead of a
@@ -122,7 +123,7 @@ function offerAcceptedToStatus(raw: string): OfferStatus | null {
 }
 
 function parseHiresRows(rows: unknown[][]): HiresParseResult {
-  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
+  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: [] }
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
 
@@ -146,7 +147,8 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
   const iHiringSource = findColumn(idx, 'hiringSource')
 
   const unrecognizedCounts = new Map<string, number>()
-  let suspiciousResumptionDates = 0
+  const suspiciousResumptionDates: HiresParseResult['suspiciousResumptionDates'] = []
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10)
 
   const records = body
     .filter((row) => row.some((cell) => cell != null && cell !== ''))
@@ -164,7 +166,11 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
 
       let resumptionDate = parseDateCell(get(iResumption))
       if (resumptionDate && resumptionDate.getTime() < requisitionStartDate.getTime()) {
-        suspiciousResumptionDates += 1
+        suspiciousResumptionDates.push({
+          candidateName: String(get(iName) ?? `row ${i + 2}`),
+          requisitionStartDate: fmtDate(requisitionStartDate),
+          resumptionDate: fmtDate(resumptionDate),
+        })
         resumptionDate = null
       }
 
@@ -403,9 +409,9 @@ export interface TaDashboardResult extends DashboardData {
    * and everything derived from it (time to fill, cost of hire, acceptance rate) if the sheet
    * uses different wording. Empty outside a live connection. */
   unrecognizedOfferStatuses: { value: string; count: number }[]
-  /** Count of Hires rows whose Resumption Date was before their Requisition Start Date (near-
-   * certainly a typo'd year) and so had the resumption date dropped — see parseHiresRows. */
-  suspiciousResumptionDates: number
+  /** Hires rows whose Resumption Date was before their Requisition Start Date (near-certainly a
+   * typo'd year) and so had the resumption date dropped — see parseHiresRows. */
+  suspiciousResumptionDates: { candidateName: string; requisitionStartDate: string; resumptionDate: string }[]
 }
 
 /** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data — with
@@ -417,7 +423,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[ta-sheets] TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID not set — showing sample data.')
     }
-    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
+    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: [] }
   }
 
   try {
@@ -475,6 +481,6 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error connecting to the Talent Acquisition sheet.'
     console.error('[ta-sheets] Falling back to sample data after a connection error:', message)
-    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
+    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: [] }
   }
 }

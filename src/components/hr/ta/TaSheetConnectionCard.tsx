@@ -16,7 +16,7 @@ interface TaStatus {
   } | null
   tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>> | null
   unrecognizedOfferStatuses: { value: string; count: number }[] | null
-  suspiciousResumptionDates: number | null
+  suspiciousResumptionDates: { candidateName: string; requisitionStartDate: string; resumptionDate: string }[] | null
 }
 
 const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
@@ -105,10 +105,15 @@ export function TaSheetConnectionCard() {
             </div>
           )}
 
-          {!!taStatus.suspiciousResumptionDates && (
-            <div className="bg-amber-50 text-amber-700 rounded-xl p-3 text-xs space-y-1">
-              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {taStatus.suspiciousResumptionDates} Hires row{taStatus.suspiciousResumptionDates === 1 ? '' : 's'} have a Resumption Date before the Requisition Start Date</p>
-              <p>Almost certainly a typo&apos;d year (e.g. 1/1/2006 instead of 1/1/2026) — these rows are kept, but the resumption date is ignored for Average Time to Fill until corrected in the sheet.</p>
+          {taStatus.suspiciousResumptionDates && taStatus.suspiciousResumptionDates.length > 0 && (
+            <div className="bg-amber-50 text-amber-700 rounded-xl p-3 text-xs space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {taStatus.suspiciousResumptionDates.length} Hires row{taStatus.suspiciousResumptionDates.length === 1 ? '' : 's'} have a Resumption Date before the Requisition Start Date:</p>
+              <ul className="pl-5 list-disc space-y-0.5">
+                {taStatus.suspiciousResumptionDates.map((r, i) => (
+                  <li key={`${r.candidateName}-${i}`}><span className="font-medium">{r.candidateName}</span> — requisition <span className="font-mono">{r.requisitionStartDate}</span>, resumption <span className="font-mono">{r.resumptionDate}</span></li>
+                ))}
+              </ul>
+              <p>Almost certainly a typo&apos;d year on one of the two dates — these rows are kept, but the resumption date is ignored for Average Time to Fill until corrected in the sheet.</p>
             </div>
           )}
 
