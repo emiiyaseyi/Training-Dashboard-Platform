@@ -110,6 +110,7 @@ interface HiresParseResult {
    * the row itself is kept (it's still a real hire). Named (not just counted) so the exact row can
    * be found and corrected in the sheet instead of guessed at. */
   suspiciousResumptionDates: { candidateName: string; requisitionStartDate: string; resumptionDate: string }[]
+  offerStatusTracksWithdrawals: boolean
 }
 
 /** Yes/No → Accepted/Declined, for sheets using a simple "Offer Acceptance" column instead of a
@@ -123,7 +124,7 @@ function offerAcceptedToStatus(raw: string): OfferStatus | null {
 }
 
 function parseHiresRows(rows: unknown[][]): HiresParseResult {
-  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: [] }
+  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: [], offerStatusTracksWithdrawals: true }
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
 
@@ -200,6 +201,7 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
     records,
     unrecognizedOfferStatuses: [...unrecognizedCounts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count),
     suspiciousResumptionDates,
+    offerStatusTracksWithdrawals: iOfferStatus != null,
   }
 }
 
@@ -463,7 +465,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       tabErrors.conversions = `Sheet has ${rawDataRowCount(conversionRows)} data row(s) but none parsed — every row needs a Conversion Effective Date value in a format JavaScript's Date can read (e.g. "2026-10-06" or "Oct 6, 2026").`
     }
 
-    const { records, unrecognizedOfferStatuses, suspiciousResumptionDates } = parseHiresRows(hiresRows)
+    const { records, unrecognizedOfferStatuses, suspiciousResumptionDates, offerStatusTracksWithdrawals } = parseHiresRows(hiresRows)
 
     return {
       records,
@@ -476,6 +478,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       connectionError: null,
       tabErrors,
       unrecognizedOfferStatuses,
+      offerStatusTracksWithdrawals,
       suspiciousResumptionDates,
     }
   } catch (err) {

@@ -2,6 +2,7 @@ import { Users, Award, Calendar, Table2, UserSearch } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
+import { TaPeriodFilter } from '@/components/hr/ta/TaPeriodFilter'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -27,13 +28,13 @@ export default async function BuRoleDemographicsPage({ searchParams }: { searchP
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} actions={<TaPeriodFilter availableYears={availableYears} />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">BU &amp; Role Demographics</h1>
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 
         <div className="grid gap-4 md:grid-cols-2">
           <ChartBlock title="Headcount by BU" icon={Users}>

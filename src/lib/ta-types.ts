@@ -119,6 +119,11 @@ export interface DashboardData {
   conversions: ConversionRecord[]
   notConverted: NotConvertedRecord[]
   vacancies: VacancyRecord[]
+  /** False when the Hires sheet has no "Offer Status" column and offer outcomes are inferred from
+   * a Yes/No "Offer Acceptance" column instead (see ta-sheets.ts's offerAcceptedToStatus) — that
+   * scheme has no way to express "Withdrawn" at all, so Withdrawal Rate is genuinely unmeasurable
+   * (not "measured at 0%") until the sheet gains a real Offer Status column or a third option. */
+  offerStatusTracksWithdrawals: boolean
 }
 
 export interface Filters {

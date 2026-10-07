@@ -60,7 +60,7 @@ export function PieChart({ labels, values, height = 300, donut = false, showAmou
       margin: showAmounts ? { t: 40, r: 100, b: 50, l: 100 } : { t: 8, r: 8, b: 8, l: 8 },
       paper_bgcolor: 'transparent',
       font: { family: 'var(--font-inter, Inter, system-ui, sans-serif)', size: 11, color: '#64748b' },
-      legend: { orientation: 'h', y: legendY, font: { size: 10 } },
+      legend: { orientation: 'h', y: legendY, font: { size: 9 } },
       showlegend: showLegend,
     }
 

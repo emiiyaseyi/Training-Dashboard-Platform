@@ -1,17 +1,12 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FilterBar } from '@/components/ui/FilterBar'
-import { parsePeriodFilterFromParams, periodToDateRange, filterToParams, type PeriodFilter } from '@/lib/filter-types'
 
 /** Ported from the source repo's components/ui/FilterBar.tsx, restyled — writes the same
- * bu/role/officeType search params lib/ta-filters.ts already reads. The date range is now driven
- * by the same Period popover (All Time/Year to Date/Full Year/Month Range) used across L&D and
- * Talent Management, for a consistent filtering UX across every HR unit — it resolves to concrete
- * from/to ISO dates written into the URL alongside the abstract filterMode/year/fromMonth/toMonth
- * (needed so re-opening the popover after a reload shows the right preset selected, not just a
- * raw date range with no mode attached). */
-export function TaFilterBar({ bus, roles, officeTypes = [], availableYears = [] }: { bus: string[]; roles: string[]; officeTypes?: string[]; availableYears?: number[] }) {
+ * bu/role/officeType search params lib/ta-filters.ts already reads. The date range lives in the
+ * separate TaPeriodFilter, placed in the page header's top-right actions slot (matching L&D's and
+ * Talent Management's FilterBar position) rather than in this card. */
+export function TaFilterBar({ bus, roles, officeTypes = [] }: { bus: string[]; roles: string[]; officeTypes?: string[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -22,22 +17,10 @@ export function TaFilterBar({ bus, roles, officeTypes = [], availableYears = [] 
     router.push(`?${params.toString()}`)
   }
 
-  function setPeriod(f: PeriodFilter) {
-    const params = new URLSearchParams(searchParams.toString())
-    for (const k of ['filterMode', 'year', 'fromMonth', 'toMonth', 'from', 'to']) params.delete(k)
-    for (const [k, v] of Object.entries(filterToParams(f))) params.set(k, v)
-    const { from, to } = periodToDateRange(f)
-    if (from) params.set('from', from.toISOString().slice(0, 10))
-    if (to) params.set('to', to.toISOString().slice(0, 10))
-    router.push(`?${params.toString()}`)
-  }
-
-  const period = parsePeriodFilterFromParams(searchParams)
-  const hasAnyFilter = ['bu', 'role', 'officeType', 'from', 'to'].some((k) => searchParams.get(k))
+  const hasAnyFilter = ['bu', 'role', 'officeType'].some((k) => searchParams.get(k))
 
   return (
     <div className="flex flex-wrap items-center gap-3 bg-white border border-meristem-100 rounded-2xl p-4">
-      <FilterBar availableYears={availableYears} value={period} onChange={setPeriod} />
       <FilterSelect label="Business Unit" value={searchParams.get('bu') ?? ''} options={bus} onChange={(v) => setParam('bu', v)} />
       <FilterSelect label="Role" value={searchParams.get('role') ?? ''} options={roles} onChange={(v) => setParam('role', v)} />
       {officeTypes.length > 0 && <FilterSelect label="Office" value={searchParams.get('officeType') ?? ''} options={officeTypes} onChange={(v) => setParam('officeType', v)} />}

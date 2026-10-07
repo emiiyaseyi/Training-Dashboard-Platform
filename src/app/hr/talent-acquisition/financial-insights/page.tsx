@@ -2,6 +2,7 @@ import { Wallet, Landmark, Users, TrendingUp, UserSearch, Repeat2 } from 'lucide
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
+import { TaPeriodFilter } from '@/components/hr/ta/TaPeriodFilter'
 import { TaStatTile } from '@/components/hr/ta/TaStatTile'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
@@ -30,13 +31,13 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} actions={<TaPeriodFilter availableYears={availableYears} />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">Financial Insights</h1>
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TaStatTile label="Average Cost of Hire" value={avgCost == null ? '—' : formatTaCurrency(avgCost)} icon={Wallet} />
@@ -45,16 +46,16 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
 
         <div className="grid gap-4 md:grid-cols-2">
           <ChartBlock title="Cost Breakdown by Category" icon={Wallet}>
-            {breakdown.every((c) => c.amount === 0) ? <NoData /> : <PieChart labels={breakdown.map((c) => c.category)} values={breakdown.map((c) => c.amount)} donut showAmounts height={260} />}
+            {breakdown.every((c) => c.amount === 0) ? <NoData /> : <PieChart labels={breakdown.map((c) => c.category)} values={breakdown.map((c) => c.amount)} donut showAmounts height={380} />}
           </ChartBlock>
           <ChartBlock title="Total Recruitment Investment by BU" icon={Landmark}>
-            {byBU.length === 0 ? <NoData /> : <BarChart labels={byBU.map((g) => g.key)} values={byBU.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={byBU.map((g) => formatTaCurrency(g.total))} height={Math.max(180, byBU.length * 36)} />}
+            {byBU.length === 0 ? <NoData /> : <BarChart labels={byBU.map((g) => g.key)} values={byBU.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={byBU.map((g) => formatTaCurrency(g.total))} height={Math.max(360, byBU.length * 48)} />}
           </ChartBlock>
           <ChartBlock title="Cost per Hire by Role" icon={Users}>
-            {byRole.length === 0 ? <NoData /> : <BarChart labels={byRole.map((g) => g.key)} values={byRole.map((g) => g.avg)} color="#7A66B0" horizontal showLabels labelText={byRole.map((g) => formatTaCurrency(g.avg))} height={Math.max(180, byRole.length * 36)} />}
+            {byRole.length === 0 ? <NoData /> : <BarChart labels={byRole.map((g) => g.key)} values={byRole.map((g) => g.avg)} color="#7A66B0" horizontal showLabels labelText={byRole.map((g) => formatTaCurrency(g.avg))} height={Math.max(360, byRole.length * 48)} />}
           </ChartBlock>
           <ChartBlock title="Cost per Hire Trend" icon={TrendingUp}>
-            {trend.length === 0 ? <NoData /> : <LineChart labels={trend.map((p) => p.month)} values={trend.map((p) => p.value)} color="#3F7590" height={260} />}
+            {trend.length === 0 ? <NoData /> : <LineChart labels={trend.map((p) => p.month)} values={trend.map((p) => p.value)} color="#3F7590" height={380} />}
           </ChartBlock>
         </div>
       </div>

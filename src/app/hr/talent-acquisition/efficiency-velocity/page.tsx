@@ -2,6 +2,7 @@ import { BarChart3, Clock, Zap, UserSearch } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
+import { TaPeriodFilter } from '@/components/hr/ta/TaPeriodFilter'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { BarChart } from '@/components/charts/BarChart'
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
@@ -26,13 +27,13 @@ export default async function EfficiencyVelocityPage({ searchParams }: { searchP
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} actions={<TaPeriodFilter availableYears={availableYears} />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">Efficiency &amp; Velocity Metrics</h1>
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">

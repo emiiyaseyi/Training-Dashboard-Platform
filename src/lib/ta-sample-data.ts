@@ -201,5 +201,6 @@ export function getSampleTaDashboardData(): DashboardData {
     conversions: generateConversions(15, rng, now),
     notConverted: generateNotConverted(8, rng, now),
     vacancies: generateVacancies(20, rng, now),
+    offerStatusTracksWithdrawals: true,
   }
 }

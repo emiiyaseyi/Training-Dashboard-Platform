@@ -6,6 +6,7 @@ import { TaRingStat } from '@/components/hr/ta/TaRingStat'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { TaAdminLink } from '@/components/hr/ta/TaAdminLink'
 import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
+import { TaPeriodFilter } from '@/components/hr/ta/TaPeriodFilter'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -26,7 +27,7 @@ import {
 // repo's Recharts + CSS-variable theme. Falls back to sample data (banner shown) until
 // TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID are set.
 export default async function TalentAcquisitionPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const { records: allRecords, pipeline, conversions, config, connectionError } = await getTaDashboardData()
+  const { records: allRecords, pipeline, conversions, config, connectionError, offerStatusTracksWithdrawals } = await getTaDashboardData()
   const filters = parseFilters(await searchParams)
   const records = applyFilters(allRecords, filters)
   const usingSampleData = !hasTaCredentials()
@@ -43,12 +44,23 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
     const segRecords = applyFilters(records, { officeType })
     return {
       officeType,
+      totalExtended: totalOffersExtended(segRecords),
+      totalAccepted: totalOffersAccepted(segRecords),
       avgDaysToHire: averageTimeToHireDays(segRecords),
       avgDaysToFill: averageTimeToFillDays(segRecords),
       acceptanceRate: offerAcceptanceRate(segRecords),
-      withdrawalRate: withdrawalRate(segRecords),
+      // Withdrawal isn't representable at all when offer outcomes came from the Yes/No Offer
+      // Acceptance fallback (see ta-sheets.ts) — showing a computed 0% there would read as "no one
+      // withdrew" rather than "can't be measured from this sheet," so it's left unmeasurable (—)
+      // instead, same as every other genuinely-unknown metric in this app.
+      withdrawalRate: offerStatusTracksWithdrawals ? withdrawalRate(segRecords) : null,
     }
   })
+  // Records whose Office Type cell is blank (several of the newer Hires rows) match neither
+  // segment above and would otherwise just silently vanish from "Hiring by Office" with no
+  // indication why — called out here instead so an empty-looking card under a date filter reads
+  // as "these offers have no Office Type set" rather than "the filter is broken."
+  const unspecifiedOfficeCount = records.filter((r) => !officeTypes.includes(r.officeType)).length
 
   const pipelineStages = config.pipelineStages.length > 0
     ? config.pipelineStages
@@ -69,12 +81,17 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} actions={<TaAdminLink />} />
+      <UnitPageHeader
+        title="Talent Acquisition"
+        description="Hiring pipeline, time to fill, cost of hire"
+        icon={<UserSearch className="w-5 h-5 text-meristem-700" />}
+        actions={<div className="flex items-center gap-2"><TaPeriodFilter availableYears={availableYears} /><TaAdminLink /></div>}
+      />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
 
         <p className="text-xs text-slate-400">As of {asOf}</p>
 
@@ -87,7 +104,12 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
         </div>
 
         <div>
-          <p className="text-sm font-bold text-slate-800 mb-3">Hiring by Office</p>
+          <p className="text-sm font-bold text-slate-800 mb-1">Hiring by Office</p>
+          {unspecifiedOfficeCount > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5 mb-2 inline-block">
+              {unspecifiedOfficeCount} offer{unspecifiedOfficeCount === 1 ? '' : 's'} in this view {unspecifiedOfficeCount === 1 ? 'has' : 'have'} no Office Type set in the sheet and {unspecifiedOfficeCount === 1 ? "isn't" : "aren't"} counted in either card below.
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             {segments.map((s) => (
               <div key={s.officeType} className="bg-white border border-meristem-100 rounded-2xl p-5">
@@ -96,6 +118,14 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
                   <p className="text-sm font-bold text-slate-800">{s.officeType} Hiring</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xl font-bold text-slate-800 tabular-nums">{s.totalExtended}</p>
+                    <p className="text-[11px] text-slate-500">Total Offers Extended</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-slate-800 tabular-nums">{s.totalAccepted}</p>
+                    <p className="text-[11px] text-slate-500">Total Offers Accepted</p>
+                  </div>
                   <div>
                     <p className="text-xl font-bold text-slate-800 tabular-nums">{s.avgDaysToHire == null ? '—' : (s.avgDaysToHire / 7).toFixed(1)}</p>
                     <p className="text-[11px] text-slate-500">Avg. weeks to hire</p>
@@ -109,7 +139,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-meristem-50">
                   <TaRingStat percent={s.acceptanceRate} label="Offer acceptance" color="#2F6B2B" icon={CheckCircle2} />
-                  <TaRingStat percent={s.withdrawalRate} label="Withdrawal rate" sublabel="of resolved offers" color="#B0714F" />
+                  <TaRingStat percent={s.withdrawalRate} label="Withdrawal rate" sublabel={offerStatusTracksWithdrawals ? 'of resolved offers' : 'not trackable from this sheet'} color="#B0714F" />
                 </div>
               </div>
             ))}
@@ -151,16 +181,16 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
           <p className="text-sm font-bold text-slate-800 mb-3">Financial Snapshot</p>
           <div className="grid gap-4 md:grid-cols-2">
             <ChartBlock title="Cost Breakdown by Category" icon={Wallet}>
-              {costBreakdown.every((c) => c.amount === 0) ? <NoData /> : <PieChart labels={costBreakdown.map((c) => c.category)} values={costBreakdown.map((c) => c.amount)} donut showAmounts height={260} />}
+              {costBreakdown.every((c) => c.amount === 0) ? <NoData /> : <PieChart labels={costBreakdown.map((c) => c.category)} values={costBreakdown.map((c) => c.amount)} donut showAmounts height={380} />}
             </ChartBlock>
             <ChartBlock title="Total Recruitment Investment by BU" icon={Landmark}>
-              {buSpend.length === 0 ? <NoData /> : <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={buSpend.map((g) => formatTaCurrency(g.total))} height={Math.max(180, buSpend.length * 36)} />}
+              {buSpend.length === 0 ? <NoData /> : <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={buSpend.map((g) => formatTaCurrency(g.total))} height={Math.max(360, buSpend.length * 48)} />}
             </ChartBlock>
             <ChartBlock title="Recruitment Costs" icon={TrendingUp}>
-              {monthlyCosts.length === 0 ? <NoData /> : <LineChart labels={monthlyCosts.map((m) => m.period)} values={monthlyCosts.map((m) => m.value)} color="#2F6B2B" height={260} />}
+              {monthlyCosts.length === 0 ? <NoData /> : <LineChart labels={monthlyCosts.map((m) => m.period)} values={monthlyCosts.map((m) => m.value)} color="#2F6B2B" height={380} />}
             </ChartBlock>
             <ChartBlock title="Top Hiring Sources" icon={Share2}>
-              {hiringSources.length === 0 ? <NoData /> : <BarChart labels={hiringSources.map((g) => g.key)} values={hiringSources.map((g) => g.count)} color="#B0714F" showLabels height={280} />}
+              {hiringSources.length === 0 ? <NoData /> : <BarChart labels={hiringSources.map((g) => g.key)} values={hiringSources.map((g) => g.count)} color="#B0714F" showLabels height={380} />}
             </ChartBlock>
           </div>
         </div>
