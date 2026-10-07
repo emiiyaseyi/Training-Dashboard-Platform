@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { History, Search, ChevronDown, ChevronUp, Loader2, Send, RefreshCw, UserPlus } from 'lucide-react'
+import { History, Search, ChevronDown, ChevronUp, Loader2, Send, RefreshCw, UserPlus, BellOff } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
@@ -286,6 +286,30 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
     }
   }
 
+  // Same manual per-person override as the main Training Schedules survey panel — stops THIS
+  // attendee's reminders for THIS stage only, by marking it responded (the field the reminder
+  // sweep already checks). Everyone else on the schedule keeps getting reminded normally.
+  const [stoppingReminderKey, setStoppingReminderKey] = useState<string | null>(null)
+  const stopReminders = async (scheduleId: string, attendeeId: string, stage: 'post1' | 'post2', staffName: string) => {
+    const stageLabel = stage === 'post1' ? 'Post-1' : 'Post-2'
+    if (!confirm(`Stop ${stageLabel} reminders for ${staffName}? This marks them as responded for this stage so the daily reminder sweep skips them — everyone else on this schedule keeps getting reminded normally.`)) return
+    const key = `${scheduleId}:${stage}:${attendeeId}`
+    setStoppingReminderKey(key)
+    try {
+      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/${attendeeId}/stop-reminders`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }),
+      })
+      if (res.ok) {
+        await load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to stop reminders for this attendee.')
+      }
+    } finally {
+      setStoppingReminderKey(null)
+    }
+  }
+
   const toggleAddMoreSelected = (staffId: string) => {
     setAddMoreSelected((prev) => {
       const next = new Set(prev)
@@ -399,8 +423,42 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                               {schedule.attendees.map((a) => (
                                 <tr key={a.id} className="border-t border-slate-50">
                                   <td className="px-3 py-1.5 text-slate-700">{a.staffName}</td>
-                                  {schedule.post1Enabled && <td className="text-center px-3 py-1.5"><TickCell sentAt={a.post1SurveySentAt} respondedAt={a.post1SurveyRespondedAt} /></td>}
-                                  {schedule.post2Enabled && <td className="text-center px-3 py-1.5"><TickCell sentAt={a.post2SurveySentAt} respondedAt={a.post2SurveyRespondedAt} /></td>}
+                                  {schedule.post1Enabled && (
+                                    <td className="text-center px-3 py-1.5">
+                                      <div className="inline-flex items-center gap-1">
+                                        <TickCell sentAt={a.post1SurveySentAt} respondedAt={a.post1SurveyRespondedAt} />
+                                        {a.post1SurveySentAt && (
+                                          <button
+                                            type="button"
+                                            onClick={() => stopReminders(schedule.id, a.id, 'post1', a.staffName)}
+                                            disabled={stoppingReminderKey === `${schedule.id}:post1:${a.id}`}
+                                            title={`Stop Post-1 reminders for ${a.staffName} only — everyone else keeps getting reminded until they respond`}
+                                            className="text-slate-300 hover:text-amber-600 disabled:opacity-40"
+                                          >
+                                            {stoppingReminderKey === `${schedule.id}:post1:${a.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <BellOff className="w-3 h-3" />}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  )}
+                                  {schedule.post2Enabled && (
+                                    <td className="text-center px-3 py-1.5">
+                                      <div className="inline-flex items-center gap-1">
+                                        <TickCell sentAt={a.post2SurveySentAt} respondedAt={a.post2SurveyRespondedAt} />
+                                        {a.post2SurveySentAt && (
+                                          <button
+                                            type="button"
+                                            onClick={() => stopReminders(schedule.id, a.id, 'post2', a.staffName)}
+                                            disabled={stoppingReminderKey === `${schedule.id}:post2:${a.id}`}
+                                            title={`Stop Post-2 reminders for ${a.staffName} only — everyone else keeps getting reminded until they respond`}
+                                            className="text-slate-300 hover:text-amber-600 disabled:opacity-40"
+                                          >
+                                            {stoppingReminderKey === `${schedule.id}:post2:${a.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <BellOff className="w-3 h-3" />}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
