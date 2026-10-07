@@ -346,6 +346,11 @@ export interface TaDashboardResult extends DashboardData {
    * key, wrong sheet ID, sheet not shared, tab names don't match) — the page shows this as an
    * actionable error banner instead of the whole route crashing with a server-side exception. */
   connectionError: string | null
+  /** Per-optional-tab fetch failure reason (tab not found, sheet not shared with that tab, API
+   * error), keyed the same as DashboardData's optional fields — populated only when that specific
+   * tab's fetch failed; a tab that fetched fine but genuinely has 0 data rows has no entry here.
+   * Lets the admin page explain WHY a tab shows 0 rows instead of just showing 0. */
+  tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>>
 }
 
 /** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data — with
@@ -357,27 +362,30 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[ta-sheets] TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID not set — showing sample data.')
     }
-    return { ...getSampleTaDashboardData(), connectionError: null }
+    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {} }
   }
 
   try {
     const spreadsheetId = process.env.TA_GOOGLE_SHEET_ID as string
     const accessToken = await getTaAccessToken()
 
-    const optionalRange = (range: string, label: string) =>
-      fetchRange(spreadsheetId, range, accessToken).catch(() => {
-        console.warn(`[ta-sheets] No "${label}" tab found — that section will be empty.`)
+    const tabErrors: TaDashboardResult['tabErrors'] = {}
+    const optionalRange = (key: keyof TaDashboardResult['tabErrors'], range: string, label: string) =>
+      fetchRange(spreadsheetId, range, accessToken).catch((err) => {
+        const message = err instanceof Error ? err.message : `Unknown error reading "${label}".`
+        console.warn(`[ta-sheets] No "${label}" tab found — that section will be empty.`, message)
+        tabErrors[key] = message
         return [] as unknown[][]
       })
 
     const [hiresRows, configRows, pipelineRows, internalMobilityRows, conversionRows, notConvertedRows, vacancyRows] = await Promise.all([
       fetchRange(spreadsheetId, HIRES_RANGE, accessToken),
       fetchRange(spreadsheetId, CONFIG_RANGE, accessToken),
-      optionalRange(PIPELINE_RANGE, 'Pipeline'),
-      optionalRange(INTERNAL_MOBILITY_RANGE, 'Internal Mobility'),
-      optionalRange(CONVERSION_RANGE, 'Conversion'),
-      optionalRange(NOT_CONVERTED_RANGE, 'Not Converted'),
-      optionalRange(VACANCIES_RANGE, 'Vacancies 2026'),
+      optionalRange('pipeline', PIPELINE_RANGE, 'Pipeline'),
+      optionalRange('internalMobility', INTERNAL_MOBILITY_RANGE, 'Internal Mobility'),
+      optionalRange('conversions', CONVERSION_RANGE, 'Conversion'),
+      optionalRange('notConverted', NOT_CONVERTED_RANGE, 'Not Converted'),
+      optionalRange('vacancies', VACANCIES_RANGE, 'Vacancies 2026'),
     ])
 
     return {
@@ -389,10 +397,11 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       notConverted: parseNotConvertedRows(notConvertedRows),
       vacancies: parseVacancyRows(vacancyRows),
       connectionError: null,
+      tabErrors,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error connecting to the Talent Acquisition sheet.'
     console.error('[ta-sheets] Falling back to sample data after a connection error:', message)
-    return { ...getSampleTaDashboardData(), connectionError: message }
+    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {} }
   }
 }

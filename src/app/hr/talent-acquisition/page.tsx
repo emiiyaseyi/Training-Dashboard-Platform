@@ -4,6 +4,7 @@ import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaStatTile } from '@/components/hr/ta/TaStatTile'
 import { TaRingStat } from '@/components/hr/ta/TaRingStat'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
+import { TaAdminLink } from '@/components/hr/ta/TaAdminLink'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
@@ -64,7 +65,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
 
   return (
     <div>
-      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} />
+      <UnitPageHeader title="Talent Acquisition" description="Hiring pipeline, time to fill, cost of hire" icon={<UserSearch className="w-5 h-5 text-meristem-700" />} actions={<TaAdminLink />} />
       <TaSubNav />
 
       <div className="p-4 sm:p-8 space-y-6">

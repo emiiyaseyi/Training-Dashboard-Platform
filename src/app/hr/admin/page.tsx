@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { ShieldAlert, Sheet, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Users, Plus, Pencil, X, Loader2 } from 'lucide-react'
+import { ShieldAlert, Sheet, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Users, Plus, Pencil, X, Loader2, RefreshCw } from 'lucide-react'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { HR_UNIT_KEYS, PAGE_LABELS, PERMISSION_LEVELS, PERMISSION_LEVEL_LABELS, type PageKey, type PermissionLevel } from '@/lib/permissions'
 
@@ -17,6 +17,7 @@ interface TaStatus {
   tabRowCounts: {
     hires: number; pipeline: number; internalMobility: number; conversions: number; notConverted: number; vacancies: number
   } | null
+  tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>> | null
 }
 
 const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
@@ -70,6 +71,7 @@ function mergedPermissions(existing: Record<string, string>, draft: DraftPerms):
 export default function HrAdminPage() {
   const { data: session, status } = useSession()
   const [taStatus, setTaStatus] = useState<TaStatus | null>(null)
+  const [refreshingTa, setRefreshingTa] = useState(false)
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -86,17 +88,26 @@ export default function HrAdminPage() {
   const isSuperAdmin = session?.user?.isSuperAdmin
 
   const loadUsers = () => fetch('/api/admin/users').then((r) => (r.ok ? r.json() : Promise.reject(r)))
+  const loadTaStatus = () => fetch('/api/hr/admin/ta-status').then((r) => (r.ok ? r.json() : Promise.reject(r)))
 
   useEffect(() => {
     if (!isSuperAdmin) return
-    Promise.all([
-      fetch('/api/hr/admin/ta-status').then((r) => (r.ok ? r.json() : Promise.reject(r))),
-      loadUsers(),
-    ])
+    Promise.all([loadTaStatus(), loadUsers()])
       .then(([ta, allUsers]) => { setTaStatus(ta); setUsers(allUsers) })
       .catch(() => setLoadError('Could not load HR admin data.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdmin])
+
+  // getTaDashboardData() fetches the Google Sheet live on every call — there's no cache to bust,
+  // so re-checking the connection is just re-running the same request the page loaded with. Lets
+  // the admin confirm a just-edited sheet (new tab, renamed tab, added rows) without a full reload.
+  const refreshTaStatus = () => {
+    setRefreshingTa(true)
+    loadTaStatus()
+      .then(setTaStatus)
+      .catch(() => setLoadError('Could not refresh the Talent Acquisition sheet status.'))
+      .finally(() => setRefreshingTa(false))
+  }
 
   if (status === 'loading') return null
 
@@ -181,9 +192,20 @@ export default function HrAdminPage() {
       {loadError && <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-sm text-rose-700">{loadError}</div>}
 
       <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Sheet className="w-4 h-4 text-meristem-700" />
-          <p className="text-sm font-bold text-slate-800">Talent Acquisition — Google Sheet Connection</p>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Sheet className="w-4 h-4 text-meristem-700" />
+            <p className="text-sm font-bold text-slate-800">Talent Acquisition — Google Sheet Connection</p>
+          </div>
+          {taStatus && (
+            <button
+              onClick={refreshTaStatus}
+              disabled={refreshingTa}
+              className="flex items-center gap-1.5 text-xs font-medium text-meristem-700 bg-meristem-50 hover:bg-meristem-100 disabled:opacity-60 rounded-lg px-3 py-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshingTa ? 'animate-spin' : ''}`} /> {refreshingTa ? 'Checking…' : 'Re-check sheet'}
+            </button>
+          )}
         </div>
 
         {!taStatus ? (
@@ -213,10 +235,12 @@ export default function HrAdminPage() {
                   {TA_TAB_LABELS.map((t) => {
                     const count = taStatus.tabRowCounts![t.key]
                     const missing = count === 0
+                    const error = t.key === 'hires' ? undefined : taStatus.tabErrors?.[t.key]
                     return (
                       <div key={t.key} className={`rounded-lg border px-2.5 py-1.5 text-xs ${missing ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-meristem-100 bg-meristem-50/60 text-slate-700'}`}>
                         <p className="font-medium">{t.sheetName}{t.required ? ' *' : ''}</p>
                         <p className="tabular-nums">{count} row{count === 1 ? '' : 's'}</p>
+                        {error && <p className="mt-0.5 text-[10px] leading-snug text-amber-700/90">{error}</p>}
                       </div>
                     )
                   })}
