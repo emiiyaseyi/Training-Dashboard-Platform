@@ -89,6 +89,18 @@ export function withdrawalRate(records: HireRecord[]): number | null {
   return withdrawn / resolved.length
 }
 
+/** Declined / (Accepted + Declined + Withdrawn) — the exact complement of offerAcceptanceRate
+ * among resolved offers. Used in place of withdrawalRate when the sheet has no way to
+ * distinguish a declined offer from a withdrawn one (see ta-sheets.ts's offerAcceptedToStatus —
+ * a Yes/No "Offer Acceptance" column collapses both into the same "No"), so "the balance of
+ * acceptance" is the only honest thing to report rather than an artificially-separate 0%. */
+export function declinedRate(records: HireRecord[]): number | null {
+  const resolved = records.filter((r) => r.offerStatus !== 'Pending')
+  if (resolved.length === 0) return null
+  const declined = resolved.filter((r) => r.offerStatus === 'Declined').length
+  return declined / resolved.length
+}
+
 export function averageTimeToFillDays(records: HireRecord[]): number | null {
   const days = hires(records).map(timeToFillDays).filter((d): d is number => d != null)
   return avg(days)

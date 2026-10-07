@@ -16,7 +16,7 @@ import { formatTaCurrency } from '@/lib/ta-format'
 import { topNWithOther } from '@/lib/ta-chart-data'
 import {
   applyFilters, averageCostOfHire, averageCostPerConversion, averageTimeToFillDays, averageTimeToFillWeeks, averageTimeToHireDays,
-  costBreakdownByCategory, headcountByBU, hiringSeasonality, hiringSourceBreakdown, monthlyBreakdown,
+  costBreakdownByCategory, declinedRate, headcountByBU, hiringSeasonality, hiringSourceBreakdown, monthlyBreakdown,
   offerAcceptanceRate, pipelineByRole, roleConcentration, totalInvestmentByBU, totalOffersAccepted,
   totalOffersExtended, buVelocityRanking, timeToHireDistribution, withdrawalRate,
 } from '@/lib/ta-metrics'
@@ -49,11 +49,12 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
       avgDaysToHire: averageTimeToHireDays(segRecords),
       avgDaysToFill: averageTimeToFillDays(segRecords),
       acceptanceRate: offerAcceptanceRate(segRecords),
-      // Withdrawal isn't representable at all when offer outcomes came from the Yes/No Offer
-      // Acceptance fallback (see ta-sheets.ts) — showing a computed 0% there would read as "no one
-      // withdrew" rather than "can't be measured from this sheet," so it's left unmeasurable (—)
-      // instead, same as every other genuinely-unknown metric in this app.
-      withdrawalRate: offerStatusTracksWithdrawals ? withdrawalRate(segRecords) : null,
+      // A sheet using the Yes/No Offer Acceptance fallback (see ta-sheets.ts) has no way to tell a
+      // declined offer from a withdrawn one — both are just "No" — so there's no real "Withdrawal
+      // Rate" to report there; Declined Rate (the exact balance of acceptance) is the honest
+      // number instead. A sheet with a real 4-value Offer Status column keeps the genuine,
+      // separately-tracked Withdrawal Rate.
+      secondRate: offerStatusTracksWithdrawals ? withdrawalRate(segRecords) : declinedRate(segRecords),
     }
   })
   // Records whose Office Type cell is blank (several of the newer Hires rows) match neither
@@ -139,7 +140,12 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-meristem-50">
                   <TaRingStat percent={s.acceptanceRate} label="Offer acceptance" color="#2F6B2B" icon={CheckCircle2} />
-                  <TaRingStat percent={s.withdrawalRate} label="Withdrawal rate" sublabel={offerStatusTracksWithdrawals ? 'of resolved offers' : 'not trackable from this sheet'} color="#B0714F" />
+                  <TaRingStat
+                    percent={s.secondRate}
+                    label={offerStatusTracksWithdrawals ? 'Withdrawal rate' : 'Declined rate'}
+                    sublabel={offerStatusTracksWithdrawals ? 'of resolved offers' : "balance of acceptance — sheet can't separate declined vs. withdrawn"}
+                    color="#B0714F"
+                  />
                 </div>
               </div>
             ))}
