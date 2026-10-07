@@ -55,6 +55,8 @@ function generateRecords(count: number, rng: () => number, now: Date): HireRecor
     const medicalCost = isAccepted ? Math.round((rng() * 8000 + 4000) / 100) * 100 : 0
     const airtimeCost = isAccepted ? Math.round((rng() * 2000 + 500) / 100) * 100 : 0
     const feedingCost = isAccepted ? Math.round((rng() * 5000 + 1000) / 100) * 100 : 0
+    const hbuCost = isAccepted && rng() < 0.5 ? Math.round((rng() * 7000 + 3000) / 100) * 100 : 0
+    const teiCost = isAccepted && hbuCost === 0 ? Math.round((rng() * 7000 + 3000) / 100) * 100 : 0
 
     records.push({
       id: `sample-${i}`,
@@ -71,7 +73,9 @@ function generateRecords(count: number, rng: () => number, now: Date): HireRecor
       medicalCost,
       airtimeCost,
       feedingCost,
-      manualTotalCost: isAccepted ? medicalCost + airtimeCost + feedingCost : null,
+      hbuCost,
+      teiCost,
+      manualTotalCost: isAccepted ? medicalCost + airtimeCost + feedingCost + hbuCost + teiCost : null,
     })
   }
   return records.sort((a, b) => a.requisitionStartDate.getTime() - b.requisitionStartDate.getTime())

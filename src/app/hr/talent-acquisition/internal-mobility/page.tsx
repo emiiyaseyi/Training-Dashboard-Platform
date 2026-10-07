@@ -55,7 +55,7 @@ export default async function InternalMobilityPage() {
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1.5">
           <p><strong>Promotion vs. Lateral:</strong> no grade hierarchy is configured anywhere, so these are based only on whether the grade text changed, not which direction it moved — a genuine demotion would currently be counted as a promotion. Flag if this needs a real grade order.</p>
-          <p><strong>Internal Fill Rate</strong> is a current snapshot only (filled internally ÷ all filled vacancies) — it can&apos;t be tracked over time, and <strong>Time to Fill</strong> can&apos;t be computed at all, until the Vacancies 2026 sheet has a Date Filled column.</p>
+          <p><strong>Internal Fill Rate</strong> is a current snapshot only (filled internally ÷ all filled vacancies) — it can&apos;t be tracked over time, and <strong>Time to Fill</strong> can&apos;t be computed at all, until the Vacancies sheet has a Date Filled column.</p>
         </div>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-5">

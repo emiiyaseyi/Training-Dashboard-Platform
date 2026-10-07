@@ -16,6 +16,7 @@ interface TaStatus {
   } | null
   tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>> | null
   unrecognizedOfferStatuses: { value: string; count: number }[] | null
+  suspiciousResumptionDates: number | null
 }
 
 const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
@@ -24,7 +25,7 @@ const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetNa
   { key: 'internalMobility', sheetName: 'Internal Mobility', required: false },
   { key: 'conversions', sheetName: 'Conversion', required: false },
   { key: 'notConverted', sheetName: 'Not Converted', required: false },
-  { key: 'vacancies', sheetName: 'Vacancies 2026', required: false },
+  { key: 'vacancies', sheetName: 'Vacancies', required: false },
 ]
 
 // The TA Google Sheet connection/diagnostics card — pulled out of a page component so it can be
@@ -104,6 +105,13 @@ export function TaSheetConnectionCard() {
             </div>
           )}
 
+          {!!taStatus.suspiciousResumptionDates && (
+            <div className="bg-amber-50 text-amber-700 rounded-xl p-3 text-xs space-y-1">
+              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {taStatus.suspiciousResumptionDates} Hires row{taStatus.suspiciousResumptionDates === 1 ? '' : 's'} have a Resumption Date before the Requisition Start Date</p>
+              <p>Almost certainly a typo&apos;d year (e.g. 1/1/2006 instead of 1/1/2026) — these rows are kept, but the resumption date is ignored for Average Time to Fill until corrected in the sheet.</p>
+            </div>
+          )}
+
           {taStatus.tabRowCounts && (
             <div>
               <p className="text-xs font-medium text-slate-500 mb-1.5">Rows found per tab — 0 usually means that tab is missing or misnamed, not that it&apos;s genuinely empty:</p>
@@ -141,7 +149,7 @@ export function TaSheetConnectionCard() {
                 <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> — the same JSON file&apos;s <span className="font-mono">private_key</span> value, pasted in full (including the BEGIN/END lines) directly into Vercel — never through chat.</li>
                 <li><span className="font-mono">TA_GOOGLE_SHEET_ID</span> — the ID from the sheet&apos;s URL (the long string between <span className="font-mono">/d/</span> and <span className="font-mono">/edit</span>).</li>
               </ul>
-              <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, <span className="font-mono">Config</span>, <span className="font-mono">Internal Mobility</span>, <span className="font-mono">Conversion</span>, <span className="font-mono">Not Converted</span>, and <span className="font-mono">Vacancies 2026</span>.</p>
+              <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, <span className="font-mono">Config</span>, <span className="font-mono">Internal Mobility</span>, <span className="font-mono">Conversion</span>, <span className="font-mono">Not Converted</span>, and <span className="font-mono">Vacancies</span>.</p>
             </div>
           )}
         </div>

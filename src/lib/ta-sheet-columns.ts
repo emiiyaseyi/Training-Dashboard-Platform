@@ -19,12 +19,15 @@ export type SheetField =
   | 'bu'
   | 'requisitionStartDate'
   | 'offerStatus'
+  | 'offerAccepted'
   | 'offerExtendedDate'
   | 'resumptionDate'
   | 'manualTimeToHireWeeks'
   | 'medicalCost'
   | 'airtime'
   | 'feeding'
+  | 'hbuCost'
+  | 'teiCost'
   | 'manualTotalCost'
   | 'officeType'
   | 'hiringSource'
@@ -48,7 +51,7 @@ export type SheetField =
   | 'costPerConversion'
   | 'employmentStartDate'
   | 'reason'
-  // Vacancies 2026 sheet
+  // Vacancies sheet
   | 'numberOfVacancies'
   | 'location'
   | 'status'
@@ -62,12 +65,21 @@ export const HEADER_ALIASES: Record<SheetField, string[]> = {
   bu: ['bu'],
   requisitionStartDate: ['requisition start date', 'requsition start date'],
   offerStatus: ['offer status'],
+  // The actual Hires sheet uses a Yes/No "Offer Acceptance" column instead of a 4-value Offer
+  // Status column — offerStatus (above) is tried first so a sheet that DOES use the richer
+  // Accepted/Declined/Pending/Withdrawn scheme still works unchanged; this is the fallback.
+  offerAccepted: ['offer acceptance', 'offer accepted', 'accepted'],
   offerExtendedDate: ['offer extended date'],
   resumptionDate: ['resumption date'],
   manualTimeToHireWeeks: ['time to hire (week)', 'time to hire(week)', 'time to hire (weeks)', 'time to hire(weeks)'],
   medicalCost: ['pre-employment medical test', 'pre-employment medical test cost', 'medical cost'],
   airtime: ['airtime'],
   feeding: ['feeding'],
+  // Two more cost categories present on the real sheet alongside Medical/Airtime/Feeding — HBU
+  // Cost and TEI Cost are both added into Total Cost there (Total cost = Medical + Airtime +
+  // Feeding + HBU Cost + TEI Cost, one or the other populated per row, never both).
+  hbuCost: ['hbu cost'],
+  teiCost: ['tei cost'],
   manualTotalCost: ['total cost'],
   officeType: ['office type'],
   hiringSource: ['hiring source', 'source'],

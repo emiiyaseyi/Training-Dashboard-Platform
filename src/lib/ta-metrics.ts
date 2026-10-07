@@ -7,7 +7,7 @@ import type { HireRecord, Filters, OfferStatus, PipelineRecord, InternalMobility
 const DAY_MS = 1000 * 60 * 60 * 24
 
 export function computedTotalCost(r: HireRecord): number {
-  return r.medicalCost + r.airtimeCost + r.feedingCost
+  return r.medicalCost + r.airtimeCost + r.feedingCost + r.hbuCost + r.teiCost
 }
 
 export function hasCostMismatch(r: HireRecord, toleranceNaira = 1): boolean {
@@ -120,7 +120,7 @@ export function byOfficeType(records: HireRecord[], officeTypes: string[]): { of
 // ---------- Financial Insights ----------
 
 export interface CostBreakdown {
-  category: 'Medical' | 'Airtime' | 'Feeding'
+  category: 'Medical' | 'Airtime' | 'Feeding' | 'HBU' | 'TEI'
   amount: number
   pct: number
 }
@@ -130,12 +130,16 @@ export function costBreakdownByCategory(records: HireRecord[]): CostBreakdown[] 
   const medical = sum(h.map((r) => r.medicalCost))
   const airtime = sum(h.map((r) => r.airtimeCost))
   const feeding = sum(h.map((r) => r.feedingCost))
-  const total = medical + airtime + feeding
+  const hbu = sum(h.map((r) => r.hbuCost))
+  const tei = sum(h.map((r) => r.teiCost))
+  const total = medical + airtime + feeding + hbu + tei
   const pct = (v: number) => (total === 0 ? 0 : v / total)
   return [
     { category: 'Medical', amount: medical, pct: pct(medical) },
     { category: 'Airtime', amount: airtime, pct: pct(airtime) },
     { category: 'Feeding', amount: feeding, pct: pct(feeding) },
+    { category: 'HBU', amount: hbu, pct: pct(hbu) },
+    { category: 'TEI', amount: tei, pct: pct(tei) },
   ]
 }
 
@@ -439,15 +443,27 @@ export function retentionAfterMobility(mobility: InternalMobilityRecord[], activ
   return retained / mobility.length
 }
 
-/** Share of ALL filled vacancies (Filled Internally + Filled Externally) that were filled
- * internally — a current snapshot ratio only, since there's no Date Filled column to make this
- * trendable over time (see ta-types.ts's VacancyRecord comment). Time to Fill is NOT computable
- * at all without that column — deliberately not built as a function here rather than guessed. */
+/** The real sheet uses short Status values ("Internal", "External", alongside "Open"/"Closed"/
+ * "On hold") rather than "Filled Internally"/"Filled Externally" — matched by substring,
+ * case-insensitively, rather than an exact string, so this isn't a second silent-zero bug of the
+ * same kind as Offer Status. "Open"/"Closed"/"On hold" are intentionally excluded (not yet
+ * filled, or closed without being filled). */
+function vacancyFillChannel(status: string): 'internal' | 'external' | null {
+  const norm = status.trim().toLowerCase()
+  if (norm.includes('internal')) return 'internal'
+  if (norm.includes('external')) return 'external'
+  return null
+}
+
+/** Share of ALL filled vacancies (internal + external) that were filled internally — a current
+ * snapshot ratio only, since there's no Date Filled column to make this trendable over time (see
+ * ta-types.ts's VacancyRecord comment). Time to Fill is NOT computable at all without that
+ * column — deliberately not built as a function here rather than guessed. */
 export function internalFillRate(vacancies: VacancyRecord[]): number | null {
-  const filled = vacancies.filter((v) => v.status === 'Filled Internally' || v.status === 'Filled Externally')
-  if (filled.length === 0) return null
-  const internal = filled.filter((v) => v.status === 'Filled Internally').length
-  return internal / filled.length
+  const channels = vacancies.map((v) => vacancyFillChannel(v.status)).filter((c): c is 'internal' | 'external' => c !== null)
+  if (channels.length === 0) return null
+  const internal = channels.filter((c) => c === 'internal').length
+  return internal / channels.length
 }
 
 // ---------- Conversions ----------

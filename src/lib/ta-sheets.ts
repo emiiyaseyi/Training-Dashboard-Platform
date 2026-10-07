@@ -26,7 +26,7 @@ export const CONFIG_RANGE = "'Config'!A1:F"
 export const INTERNAL_MOBILITY_RANGE = "'Internal Mobility'!A1:I"
 export const CONVERSION_RANGE = "'Conversion'!A1:J"
 export const NOT_CONVERTED_RANGE = "'Not Converted'!A1:H"
-export const VACANCIES_RANGE = "'Vacancies 2026'!A1:H"
+export const VACANCIES_RANGE = "'Vacancies'!A1:H"
 
 // Exported so pages can show an honest "sample data" banner instead of presenting demo numbers
 // as if they were the real recruitment sheet.
@@ -100,14 +100,29 @@ function parseOptionalNumberCell(value: unknown): number | null {
 
 interface HiresParseResult {
   records: HireRecord[]
-  /** Raw Offer Status values that didn't case/whitespace-match Accepted/Declined/Pending/
-   * Withdrawn (and so got counted as Pending) — surfaced on the admin page instead of silently
-   * miscounting hires as still-pending. */
+  /** Raw Offer Status/Offer Acceptance values that didn't match anything recognized (and so got
+   * counted as Pending) — surfaced on the admin page instead of silently miscounting hires as
+   * still-pending. */
   unrecognizedOfferStatuses: { value: string; count: number }[]
+  /** Rows whose Resumption Date fell before their Requisition Start Date (almost always a typo'd
+   * year on one of the two cells, e.g. 1/1/2006 for 1/1/2026) — the resumption date is dropped for
+   * these so a single bad row can't drag Average Time to Fill into a huge negative number, but
+   * the row itself is kept (it's still a real hire). Surfaced so the sheet can be corrected. */
+  suspiciousResumptionDates: number
+}
+
+/** Yes/No → Accepted/Declined, for sheets using a simple "Offer Acceptance" column instead of a
+ * 4-value Offer Status column. No sheet has a visible way to express Pending/Withdrawn in that
+ * scheme, so a value outside Yes/No here is genuinely unrecognized rather than guessed at. */
+function offerAcceptedToStatus(raw: string): OfferStatus | null {
+  const norm = raw.trim().toLowerCase()
+  if (norm === 'yes') return 'Accepted'
+  if (norm === 'no') return 'Declined'
+  return null
 }
 
 function parseHiresRows(rows: unknown[][]): HiresParseResult {
-  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [] }
+  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
 
@@ -117,17 +132,21 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
   const iBU = findColumn(idx, 'bu')
   const iReqStart = findColumn(idx, 'requisitionStartDate')
   const iOfferStatus = findColumn(idx, 'offerStatus')
+  const iOfferAccepted = findColumn(idx, 'offerAccepted')
   const iOfferExtended = findColumn(idx, 'offerExtendedDate')
   const iResumption = findColumn(idx, 'resumptionDate')
   const iManualWeeks = findColumn(idx, 'manualTimeToHireWeeks')
   const iMedical = findColumn(idx, 'medicalCost')
   const iAirtime = findColumn(idx, 'airtime')
   const iFeeding = findColumn(idx, 'feeding')
+  const iHbu = findColumn(idx, 'hbuCost')
+  const iTei = findColumn(idx, 'teiCost')
   const iManualTotal = findColumn(idx, 'manualTotalCost')
   const iOfficeType = findColumn(idx, 'officeType')
   const iHiringSource = findColumn(idx, 'hiringSource')
 
   const unrecognizedCounts = new Map<string, number>()
+  let suspiciousResumptionDates = 0
 
   const records = body
     .filter((row) => row.some((cell) => cell != null && cell !== ''))
@@ -137,9 +156,17 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
       if (!requisitionStartDate) return null
 
       const rawStatus = String(get(iOfferStatus) ?? '').trim()
-      const matched = canonicalOfferStatus(rawStatus)
-      if (!matched && rawStatus) unrecognizedCounts.set(rawStatus, (unrecognizedCounts.get(rawStatus) ?? 0) + 1)
+      const rawAccepted = String(get(iOfferAccepted) ?? '').trim()
+      const matched = iOfferStatus != null ? canonicalOfferStatus(rawStatus) : offerAcceptedToStatus(rawAccepted)
+      const rawForDiagnostics = iOfferStatus != null ? rawStatus : rawAccepted
+      if (!matched && rawForDiagnostics) unrecognizedCounts.set(rawForDiagnostics, (unrecognizedCounts.get(rawForDiagnostics) ?? 0) + 1)
       const offerStatus: OfferStatus = matched ?? 'Pending'
+
+      let resumptionDate = parseDateCell(get(iResumption))
+      if (resumptionDate && resumptionDate.getTime() < requisitionStartDate.getTime()) {
+        suspiciousResumptionDates += 1
+        resumptionDate = null
+      }
 
       return {
         id: String(get(iId) ?? `row-${i}`),
@@ -151,11 +178,13 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
         requisitionStartDate,
         offerStatus,
         offerExtendedDate: parseDateCell(get(iOfferExtended)),
-        resumptionDate: parseDateCell(get(iResumption)),
+        resumptionDate,
         manualTimeToHireWeeks: parseOptionalNumberCell(get(iManualWeeks)),
         medicalCost: parseNumberCell(get(iMedical)),
         airtimeCost: parseNumberCell(get(iAirtime)),
         feedingCost: parseNumberCell(get(iFeeding)),
+        hbuCost: parseNumberCell(get(iHbu)),
+        teiCost: parseNumberCell(get(iTei)),
         manualTotalCost: parseOptionalNumberCell(get(iManualTotal)),
       }
     })
@@ -164,6 +193,7 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
   return {
     records,
     unrecognizedOfferStatuses: [...unrecognizedCounts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count),
+    suspiciousResumptionDates,
   }
 }
 
@@ -368,11 +398,14 @@ export interface TaDashboardResult extends DashboardData {
    * tab's fetch failed; a tab that fetched fine but genuinely has 0 data rows has no entry here.
    * Lets the admin page explain WHY a tab shows 0 rows instead of just showing 0. */
   tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>>
-  /** Raw Hires!Offer Status values that didn't match Accepted/Declined/Pending/Withdrawn even
-   * case/whitespace-insensitively — every one of these rows got counted as Pending, which can
-   * silently zero out Total Offers Accepted and everything derived from it (time to fill, cost of
-   * hire, acceptance rate) if the sheet uses different wording. Empty outside a live connection. */
+  /** Raw Hires!Offer Status/Offer Acceptance values that didn't match anything recognized — every
+   * one of these rows got counted as Pending, which can silently zero out Total Offers Accepted
+   * and everything derived from it (time to fill, cost of hire, acceptance rate) if the sheet
+   * uses different wording. Empty outside a live connection. */
   unrecognizedOfferStatuses: { value: string; count: number }[]
+  /** Count of Hires rows whose Resumption Date was before their Requisition Start Date (near-
+   * certainly a typo'd year) and so had the resumption date dropped — see parseHiresRows. */
+  suspiciousResumptionDates: number
 }
 
 /** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data — with
@@ -384,7 +417,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[ta-sheets] TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID not set — showing sample data.')
     }
-    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {}, unrecognizedOfferStatuses: [] }
+    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
   }
 
   try {
@@ -407,7 +440,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       optionalRange('internalMobility', INTERNAL_MOBILITY_RANGE, 'Internal Mobility'),
       optionalRange('conversions', CONVERSION_RANGE, 'Conversion'),
       optionalRange('notConverted', NOT_CONVERTED_RANGE, 'Not Converted'),
-      optionalRange('vacancies', VACANCIES_RANGE, 'Vacancies 2026'),
+      optionalRange('vacancies', VACANCIES_RANGE, 'Vacancies'),
     ])
 
     const internalMobility = parseInternalMobilityRows(internalMobilityRows)
@@ -424,7 +457,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       tabErrors.conversions = `Sheet has ${rawDataRowCount(conversionRows)} data row(s) but none parsed — every row needs a Conversion Effective Date value in a format JavaScript's Date can read (e.g. "2026-10-06" or "Oct 6, 2026").`
     }
 
-    const { records, unrecognizedOfferStatuses } = parseHiresRows(hiresRows)
+    const { records, unrecognizedOfferStatuses, suspiciousResumptionDates } = parseHiresRows(hiresRows)
 
     return {
       records,
@@ -437,10 +470,11 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       connectionError: null,
       tabErrors,
       unrecognizedOfferStatuses,
+      suspiciousResumptionDates,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error connecting to the Talent Acquisition sheet.'
     console.error('[ta-sheets] Falling back to sample data after a connection error:', message)
-    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {}, unrecognizedOfferStatuses: [] }
+    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {}, unrecognizedOfferStatuses: [], suspiciousResumptionDates: 0 }
   }
 }

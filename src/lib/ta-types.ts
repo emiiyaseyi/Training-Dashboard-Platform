@@ -23,6 +23,10 @@ export interface HireRecord {
   medicalCost: number
   airtimeCost: number
   feedingCost: number
+  /** Two more real cost categories on the sheet, one or the other populated per row — see
+   * ta-sheet-columns.ts's comment. Included in computedTotalCost() alongside the other three. */
+  hbuCost: number
+  teiCost: number
   manualTotalCost: number | null
 }
 
@@ -93,7 +97,7 @@ export interface NotConvertedRecord {
   reason: string
 }
 
-/** One row from the `Vacancies 2026` sheet tab. dateFilled is optional — the sheet as currently
+/** One row from the `Vacancies` sheet tab. dateFilled is optional — the sheet as currently
  * configured doesn't have that column, so Time to Fill can't be computed until it's added; this
  * stays ready for the moment it is. */
 export interface VacancyRecord {
