@@ -15,7 +15,10 @@ import { canonicalOfferStatus, isOfferStatus } from './ta-metrics'
 import { getSampleTaDashboardData } from './ta-sample-data'
 import { findColumn, headerIndex, normalizeHeader } from './ta-sheet-columns'
 
-const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
+// Full read/write — the TA Admin data editor writes rows back to this sheet (see
+// ta-sheets-write.ts), confirmed set up with the service account shared as Editor, not just
+// Viewer, on the actual Google Sheet.
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 
 // Sheet names are single-quoted per Google's A1 notation — required whenever a name contains a
 // space (bare `Internal Mobility!A1:I` is INVALID_ARGUMENT, "Unable to parse range"); harmless to
@@ -34,7 +37,7 @@ export function hasTaCredentials(): boolean {
   return Boolean(process.env.TA_GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY && process.env.TA_GOOGLE_SHEET_ID)
 }
 
-async function getTaAccessToken(): Promise<string> {
+export async function getTaAccessToken(): Promise<string> {
   const email = process.env.TA_GOOGLE_SERVICE_ACCOUNT_EMAIL
   const rawKey = process.env.TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
   if (!email || !rawKey) {
@@ -55,7 +58,7 @@ async function getTaAccessToken(): Promise<string> {
   return token.access_token
 }
 
-async function fetchRange(spreadsheetId: string, range: string, accessToken: string): Promise<unknown[][]> {
+export async function fetchRange(spreadsheetId: string, range: string, accessToken: string): Promise<unknown[][]> {
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -98,7 +101,7 @@ function parseOptionalNumberCell(value: unknown): number | null {
   return parseNumberCell(value)
 }
 
-interface HiresParseResult {
+export interface HiresParseResult {
   records: HireRecord[]
   /** Raw Offer Status/Offer Acceptance values that didn't match anything recognized (and so got
    * counted as Pending) — surfaced on the admin page instead of silently miscounting hires as
@@ -123,7 +126,7 @@ function offerAcceptedToStatus(raw: string): OfferStatus | null {
   return null
 }
 
-function parseHiresRows(rows: unknown[][]): HiresParseResult {
+export function parseHiresRows(rows: unknown[][]): HiresParseResult {
   if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [], suspiciousResumptionDates: [], offerStatusTracksWithdrawals: true }
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -152,8 +155,9 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
   const fmtDate = (d: Date) => d.toISOString().slice(0, 10)
 
   const records = body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row, i): HireRecord | null => {
+    .map((row, i) => ({ row, rowNumber: i + 2 })) // row 1 is the header; body[0] is sheet row 2
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): HireRecord | null => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       const requisitionStartDate = parseDateCell(get(iReqStart))
       if (!requisitionStartDate) return null
@@ -168,7 +172,7 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
       let resumptionDate = parseDateCell(get(iResumption))
       if (resumptionDate && resumptionDate.getTime() < requisitionStartDate.getTime()) {
         suspiciousResumptionDates.push({
-          candidateName: String(get(iName) ?? `row ${i + 2}`),
+          candidateName: String(get(iName) ?? `row ${rowNumber}`),
           requisitionStartDate: fmtDate(requisitionStartDate),
           resumptionDate: fmtDate(resumptionDate),
         })
@@ -176,7 +180,8 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
       }
 
       return {
-        id: String(get(iId) ?? `row-${i}`),
+        rowNumber,
+        id: String(get(iId) ?? `row-${rowNumber}`),
         candidateName: String(get(iName) ?? ''),
         role: String(get(iRole) ?? ''),
         bu: String(get(iBU) ?? ''),
@@ -205,7 +210,7 @@ function parseHiresRows(rows: unknown[][]): HiresParseResult {
   }
 }
 
-function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
+export function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
   if (rows.length === 0) return []
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -220,14 +225,16 @@ function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
   const iStage = findColumn(idx, 'currentStage')
 
   return body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row, i): PipelineRecord | null => {
+    .map((row, i) => ({ row, rowNumber: i + 2 }))
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): PipelineRecord | null => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       const requisitionStartDate = parseDateCell(get(iReqStart))
       if (!requisitionStartDate) return null
 
       return {
-        id: String(get(iId) ?? `pipeline-row-${i}`),
+        rowNumber,
+        id: String(get(iId) ?? `pipeline-row-${rowNumber}`),
         candidateName: String(get(iName) ?? ''),
         role: String(get(iRole) ?? ''),
         bu: String(get(iBU) ?? ''),
@@ -240,7 +247,7 @@ function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
     .filter((r): r is PipelineRecord => r !== null)
 }
 
-function parseInternalMobilityRows(rows: unknown[][]): InternalMobilityRecord[] {
+export function parseInternalMobilityRows(rows: unknown[][]): InternalMobilityRecord[] {
   if (rows.length === 0) return []
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -256,10 +263,12 @@ function parseInternalMobilityRows(rows: unknown[][]): InternalMobilityRecord[] 
   const iNewGrade = findColumn(idx, 'newGrade')
 
   return body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row): InternalMobilityRecord => {
+    .map((row, i) => ({ row, rowNumber: i + 2 }))
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): InternalMobilityRecord => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       return {
+        rowNumber,
         staffId: String(get(iStaffId) ?? '').trim(),
         name: String(get(iName) ?? ''),
         currentBU: String(get(iCurrentBU) ?? ''),
@@ -273,7 +282,7 @@ function parseInternalMobilityRows(rows: unknown[][]): InternalMobilityRecord[] 
     })
 }
 
-function parseConversionRows(rows: unknown[][]): ConversionRecord[] {
+export function parseConversionRows(rows: unknown[][]): ConversionRecord[] {
   if (rows.length === 0) return []
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -290,12 +299,14 @@ function parseConversionRows(rows: unknown[][]): ConversionRecord[] {
   const iCost = findColumn(idx, 'costPerConversion')
 
   return body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row): ConversionRecord | null => {
+    .map((row, i) => ({ row, rowNumber: i + 2 }))
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): ConversionRecord | null => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       const conversionEffectiveDate = parseDateCell(get(iEffectiveDate))
       if (!conversionEffectiveDate) return null
       return {
+        rowNumber,
         staffId: String(get(iStaffId) ?? '').trim(),
         name: String(get(iName) ?? ''),
         bu: String(get(iBU) ?? ''),
@@ -311,7 +322,7 @@ function parseConversionRows(rows: unknown[][]): ConversionRecord[] {
     .filter((r): r is ConversionRecord => r !== null)
 }
 
-function parseNotConvertedRows(rows: unknown[][]): NotConvertedRecord[] {
+export function parseNotConvertedRows(rows: unknown[][]): NotConvertedRecord[] {
   if (rows.length === 0) return []
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -326,10 +337,12 @@ function parseNotConvertedRows(rows: unknown[][]): NotConvertedRecord[] {
   const iReason = findColumn(idx, 'reason')
 
   return body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row): NotConvertedRecord => {
+    .map((row, i) => ({ row, rowNumber: i + 2 }))
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): NotConvertedRecord => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       return {
+        rowNumber,
         staffId: String(get(iStaffId) ?? '').trim(),
         name: String(get(iName) ?? ''),
         bu: String(get(iBU) ?? ''),
@@ -342,7 +355,7 @@ function parseNotConvertedRows(rows: unknown[][]): NotConvertedRecord[] {
     })
 }
 
-function parseVacancyRows(rows: unknown[][]): VacancyRecord[] {
+export function parseVacancyRows(rows: unknown[][]): VacancyRecord[] {
   if (rows.length === 0) return []
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
@@ -357,10 +370,12 @@ function parseVacancyRows(rows: unknown[][]): VacancyRecord[] {
   const iDateFilled = findColumn(idx, 'dateFilled')
 
   return body
-    .filter((row) => row.some((cell) => cell != null && cell !== ''))
-    .map((row): VacancyRecord => {
+    .map((row, i) => ({ row, rowNumber: i + 2 }))
+    .filter(({ row }) => row.some((cell) => cell != null && cell !== ''))
+    .map(({ row, rowNumber }): VacancyRecord => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
       return {
+        rowNumber,
         role: String(get(iRole) ?? ''),
         bu: String(get(iBU) ?? ''),
         numberOfVacancies: parseNumberCell(get(iCount)),

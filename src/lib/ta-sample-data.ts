@@ -59,6 +59,7 @@ function generateRecords(count: number, rng: () => number, now: Date): HireRecor
     const teiCost = isAccepted && hbuCost === 0 ? Math.round((rng() * 7000 + 3000) / 100) * 100 : 0
 
     records.push({
+      rowNumber: i + 2,
       id: `sample-${i}`,
       candidateName: `Sample Candidate ${i + 1}`,
       role: role.name,
@@ -88,6 +89,7 @@ function generatePipeline(count: number, rng: () => number, now: Date): Pipeline
     const role = pick(rng, ROLES)
     const stageIndex = Math.min(PIPELINE_STAGES.length - 1, Math.floor(rng() * rng() * PIPELINE_STAGES.length * 1.4))
     records.push({
+      rowNumber: i + 2,
       id: `pipeline-sample-${i}`,
       candidateName: `Pipeline Candidate ${i + 1}`,
       role: role.name,
@@ -112,6 +114,7 @@ function generateInternalMobility(count: number, rng: () => number, _now: Date):
     const { previous, next } = gradeStep(rng)
     const lateral = rng() < 0.3
     records.push({
+      rowNumber: i + 2,
       staffId: `SAMP-${1000 + i}`,
       name: `Sample Staff ${i + 1}`,
       currentBU: pick(rng, BUS),
@@ -132,6 +135,7 @@ function generateConversions(count: number, rng: () => number, now: Date): Conve
     const internStartDate = daysAgo(now, Math.floor(rng() * 400) + 180)
     const cost = Math.round((rng() * 50000 + 20000) / 1000) * 1000
     records.push({
+      rowNumber: i + 2,
       staffId: `SAMP-C${2000 + i}`,
       name: `Sample Intern ${i + 1}`,
       bu: pick(rng, BUS),
@@ -151,6 +155,7 @@ function generateNotConverted(count: number, rng: () => number, now: Date): NotC
   const records: NotConvertedRecord[] = []
   for (let i = 0; i < count; i++) {
     records.push({
+      rowNumber: i + 2,
       staffId: `SAMP-N${3000 + i}`,
       name: `Sample Intern (Not Converted) ${i + 1}`,
       bu: pick(rng, BUS),
@@ -170,6 +175,7 @@ function generateVacancies(count: number, rng: () => number, now: Date): Vacancy
     const status = pick(rng, VACANCY_STATUSES)
     const dateOpened = daysAgo(now, Math.floor(rng() * 180) + 10)
     records.push({
+      rowNumber: i + 2,
       role: pick(rng, ROLES).name,
       bu: pick(rng, BUS),
       numberOfVacancies: Math.floor(rng() * 3) + 1,

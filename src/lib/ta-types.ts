@@ -9,6 +9,9 @@ export type OfficeType = string
 
 /** One row from the `Hires` sheet tab, parsed into typed form. */
 export interface HireRecord {
+  /** 1-indexed row number on the actual sheet (row 1 = header) — lets the TA Admin editor write
+   * an update back to the exact cell it came from. Not shown on any analytics page. */
+  rowNumber: number
   id: string
   candidateName: string
   role: string
@@ -32,6 +35,7 @@ export interface HireRecord {
 
 /** One row from the `Pipeline` sheet tab — candidates still in progress. */
 export interface PipelineRecord {
+  rowNumber: number
   id: string
   candidateName: string
   role: string
@@ -56,6 +60,7 @@ export interface ConfigLists {
  * deploymentMonth is month-only by design (e.g. "January") — the sheet doesn't track a day or
  * year for this, so it's kept as free text rather than forced into a Date. */
 export interface InternalMobilityRecord {
+  rowNumber: number
   staffId: string
   name: string
   currentBU: string
@@ -69,6 +74,7 @@ export interface InternalMobilityRecord {
 
 /** One row from the `Conversion` sheet tab — an intern who converted to full-time. */
 export interface ConversionRecord {
+  rowNumber: number
   staffId: string
   name: string
   bu: string
@@ -87,6 +93,7 @@ export interface ConversionRecord {
 
 /** One row from the `Not Converted` sheet tab — an intern who did NOT convert, with a reason. */
 export interface NotConvertedRecord {
+  rowNumber: number
   staffId: string
   name: string
   bu: string
@@ -101,6 +108,7 @@ export interface NotConvertedRecord {
  * configured doesn't have that column, so Time to Fill can't be computed until it's added; this
  * stays ready for the moment it is. */
 export interface VacancyRecord {
+  rowNumber: number
   role: string
   bu: string
   numberOfVacancies: number
