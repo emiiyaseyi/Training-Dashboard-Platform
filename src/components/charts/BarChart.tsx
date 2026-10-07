@@ -91,6 +91,12 @@ export function BarChart({
         showgrid: !horizontal,
         gridcolor: '#f1f5f9',
         zeroline: false,
+        // Only yaxis had this before — on a vertical chart with long/rotated category names
+        // (e.g. "Client Relationship Officer"), Plotly couldn't grow the bottom margin to fit
+        // them without this, so the rotated labels crept up into the plot area and visually
+        // collided with short bars' value labels (a bar for a small count like 3 sits right at
+        // the baseline, exactly where the overlap happened — looked like a garbled character).
+        automargin: true,
         ...(horizontal ? percentAxis : {}),
       },
       yaxis: {
