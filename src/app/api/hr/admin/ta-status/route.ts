@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/auth'
+import { requirePermission } from '@/lib/session-guard'
 import { getTaDashboardData } from '@/lib/ta-sheets'
 
-// Super-admin only, by explicit request — this is infrastructure/credential status, not a
-// permission any HR unit viewer should see, so it's gated on isSuperAdmin directly rather than
-// through the generic PageKey permission system.
+// Gated on canAdmin for hr-talent-acquisition — same access-right scheme as every other HR unit
+// admin page/route (Talent Management, etc.), not isSuperAdmin only.
 export async function GET() {
-  const session = await auth()
-  if (!session?.user?.isSuperAdmin) {
-    return NextResponse.json({ error: 'Super admin access required.' }, { status: 403 })
-  }
+  const gate = await requirePermission('hr-talent-acquisition', 'admin')
+  if (gate instanceof NextResponse) return gate
 
   const emailConfigured = Boolean(process.env.TA_GOOGLE_SERVICE_ACCOUNT_EMAIL)
   const keyConfigured = Boolean(process.env.TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)

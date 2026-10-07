@@ -1,17 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useSession } from 'next-auth/react'
 import { Settings } from 'lucide-react'
+import { usePagePermission } from '@/lib/use-page-permission'
 
 // Mirrors the "TM Admin" button on the Talent Management landing page, pointing at the
-// TA-specific admin sub-route (/hr/talent-acquisition/admin) rather than the shared, cross-unit
-// /hr/admin settings page. That TA admin page is gated on isSuperAdmin directly (see its own
-// comment) rather than the generic HR permission system — so this checks isSuperAdmin, not
-// canAdmin, to avoid showing a button that 403s for a unit-level HR admin.
+// TA-specific admin sub-route (/hr/talent-acquisition/admin) — same canAdmin gating as every
+// other HR unit's admin button, not isSuperAdmin only.
 export function TaAdminLink() {
-  const { data: session } = useSession()
-  if (!session?.user?.isSuperAdmin) return null
+  const { canAdmin } = usePagePermission()
+  if (!canAdmin) return null
 
   return (
     <Link

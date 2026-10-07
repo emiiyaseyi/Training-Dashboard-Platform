@@ -5,26 +5,24 @@ import { useSession } from 'next-auth/react'
 import { ArrowLeft, ShieldAlert } from 'lucide-react'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { TaSheetConnectionCard } from '@/components/hr/ta/TaSheetConnectionCard'
+import { usePagePermission } from '@/lib/use-page-permission'
 
-// Mirrors the Talent Management admin page's shape (own sub-route, back link, header), but the
-// content here is just the Google Sheet connection/credential diagnostics — TA has no DB-backed
-// records to edit (see ta-sheets.ts's file header: it's a live per-request fetch, nothing is
-// persisted), so there's no roster/record editor to port over. Gated on isSuperAdmin, same as the
-// underlying /api/hr/admin/ta-status route — this is infrastructure/credential status, not
-// something a unit-level TA admin necessarily needs either (see that route's own comment).
+// Mirrors the Talent Management admin page's shape (own sub-route, back link, header, and — per
+// explicit instruction — the same access-right scheme: gated on canAdmin for this unit's page
+// permission, same as TM Admin and every other HR unit admin page, rather than isSuperAdmin only.
 export default function TalentAcquisitionAdminPage() {
-  const { data: session, status } = useSession()
-  const isSuperAdmin = session?.user?.isSuperAdmin
+  const { status } = useSession()
+  const { canAdmin } = usePagePermission()
 
   if (status === 'loading') return null
 
-  if (!isSuperAdmin) {
+  if (!canAdmin) {
     return (
       <ErrorState
         icon={ShieldAlert}
         iconClassName="text-meristem-200"
         title="Access restricted"
-        description="Talent Acquisition admin settings are visible to Super Admins only."
+        description="You don't have admin access to Talent Acquisition."
         href="/hr/talent-acquisition"
         linkLabel="← Back to dashboard"
       />
