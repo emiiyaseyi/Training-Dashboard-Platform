@@ -11,7 +11,7 @@ import { JWT } from 'google-auth-library'
 import { createPrivateKey } from 'crypto'
 import { normalizePrivateKey } from './google-sheets'
 import type { ConfigLists, DashboardData, HireRecord, OfferStatus, PipelineRecord, InternalMobilityRecord, ConversionRecord, NotConvertedRecord, VacancyRecord } from './ta-types'
-import { isOfferStatus } from './ta-metrics'
+import { canonicalOfferStatus, isOfferStatus } from './ta-metrics'
 import { getSampleTaDashboardData } from './ta-sample-data'
 import { findColumn, headerIndex, normalizeHeader } from './ta-sheet-columns'
 
@@ -98,8 +98,16 @@ function parseOptionalNumberCell(value: unknown): number | null {
   return parseNumberCell(value)
 }
 
-function parseHiresRows(rows: unknown[][]): HireRecord[] {
-  if (rows.length === 0) return []
+interface HiresParseResult {
+  records: HireRecord[]
+  /** Raw Offer Status values that didn't case/whitespace-match Accepted/Declined/Pending/
+   * Withdrawn (and so got counted as Pending) — surfaced on the admin page instead of silently
+   * miscounting hires as still-pending. */
+  unrecognizedOfferStatuses: { value: string; count: number }[]
+}
+
+function parseHiresRows(rows: unknown[][]): HiresParseResult {
+  if (rows.length === 0) return { records: [], unrecognizedOfferStatuses: [] }
   const [header, ...body] = rows as string[][]
   const idx = headerIndex(header)
 
@@ -119,7 +127,9 @@ function parseHiresRows(rows: unknown[][]): HireRecord[] {
   const iOfficeType = findColumn(idx, 'officeType')
   const iHiringSource = findColumn(idx, 'hiringSource')
 
-  return body
+  const unrecognizedCounts = new Map<string, number>()
+
+  const records = body
     .filter((row) => row.some((cell) => cell != null && cell !== ''))
     .map((row, i): HireRecord | null => {
       const get = (index: number | undefined) => (index == null ? undefined : row[index])
@@ -127,7 +137,9 @@ function parseHiresRows(rows: unknown[][]): HireRecord[] {
       if (!requisitionStartDate) return null
 
       const rawStatus = String(get(iOfferStatus) ?? '').trim()
-      const offerStatus: OfferStatus = isOfferStatus(rawStatus) ? rawStatus : 'Pending'
+      const matched = canonicalOfferStatus(rawStatus)
+      if (!matched && rawStatus) unrecognizedCounts.set(rawStatus, (unrecognizedCounts.get(rawStatus) ?? 0) + 1)
+      const offerStatus: OfferStatus = matched ?? 'Pending'
 
       return {
         id: String(get(iId) ?? `row-${i}`),
@@ -148,6 +160,11 @@ function parseHiresRows(rows: unknown[][]): HireRecord[] {
       }
     })
     .filter((r): r is HireRecord => r !== null)
+
+  return {
+    records,
+    unrecognizedOfferStatuses: [...unrecognizedCounts.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count),
+  }
 }
 
 function parsePipelineRows(rows: unknown[][]): PipelineRecord[] {
@@ -351,6 +368,11 @@ export interface TaDashboardResult extends DashboardData {
    * tab's fetch failed; a tab that fetched fine but genuinely has 0 data rows has no entry here.
    * Lets the admin page explain WHY a tab shows 0 rows instead of just showing 0. */
   tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>>
+  /** Raw Hires!Offer Status values that didn't match Accepted/Declined/Pending/Withdrawn even
+   * case/whitespace-insensitively — every one of these rows got counted as Pending, which can
+   * silently zero out Total Offers Accepted and everything derived from it (time to fill, cost of
+   * hire, acceptance rate) if the sheet uses different wording. Empty outside a live connection. */
+  unrecognizedOfferStatuses: { value: string; count: number }[]
 }
 
 /** Fetches and parses the Hires/Pipeline/Config tabs. Falls back to bundled sample data — with
@@ -362,7 +384,7 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
     if (process.env.NODE_ENV === 'production') {
       console.warn('[ta-sheets] TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID not set — showing sample data.')
     }
-    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {} }
+    return { ...getSampleTaDashboardData(), connectionError: null, tabErrors: {}, unrecognizedOfferStatuses: [] }
   }
 
   try {
@@ -402,8 +424,10 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       tabErrors.conversions = `Sheet has ${rawDataRowCount(conversionRows)} data row(s) but none parsed — every row needs a Conversion Effective Date value in a format JavaScript's Date can read (e.g. "2026-10-06" or "Oct 6, 2026").`
     }
 
+    const { records, unrecognizedOfferStatuses } = parseHiresRows(hiresRows)
+
     return {
-      records: parseHiresRows(hiresRows),
+      records,
       config: parseConfigColumns(configRows),
       pipeline: parsePipelineRows(pipelineRows),
       internalMobility,
@@ -412,10 +436,11 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       vacancies: parseVacancyRows(vacancyRows),
       connectionError: null,
       tabErrors,
+      unrecognizedOfferStatuses,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error connecting to the Talent Acquisition sheet.'
     console.error('[ta-sheets] Falling back to sample data after a connection error:', message)
-    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {} }
+    return { ...getSampleTaDashboardData(), connectionError: message, tabErrors: {}, unrecognizedOfferStatuses: [] }
   }
 }

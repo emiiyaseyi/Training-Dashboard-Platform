@@ -1,4 +1,4 @@
-import { Send, CheckCircle2, Clock, Wallet, UserSearch, Building2, GitBranch, Landmark, TrendingUp, Share2, BarChart3, Zap, Users, Award, Calendar } from 'lucide-react'
+import { Send, CheckCircle2, Clock, Wallet, UserSearch, Building2, GitBranch, Landmark, TrendingUp, Share2, BarChart3, Zap, Users, Award, Calendar, Repeat2 } from 'lucide-react'
 import { UnitPageHeader } from '@/components/hr/UnitPageHeader'
 import { TaSubNav } from '@/components/hr/ta/TaSubNav'
 import { TaStatTile } from '@/components/hr/ta/TaStatTile'
@@ -13,7 +13,7 @@ import { parseFilters, type SearchParams } from '@/lib/ta-filters'
 import { formatTaCurrency } from '@/lib/ta-format'
 import { topNWithOther } from '@/lib/ta-chart-data'
 import {
-  applyFilters, averageCostOfHire, averageTimeToFillDays, averageTimeToFillWeeks, averageTimeToHireDays,
+  applyFilters, averageCostOfHire, averageCostPerConversion, averageTimeToFillDays, averageTimeToFillWeeks, averageTimeToHireDays,
   costBreakdownByCategory, headcountByBU, hiringSeasonality, hiringSourceBreakdown, monthlyBreakdown,
   offerAcceptanceRate, pipelineByRole, roleConcentration, totalInvestmentByBU, totalOffersAccepted,
   totalOffersExtended, buVelocityRanking, timeToHireDistribution, withdrawalRate,
@@ -25,7 +25,7 @@ import {
 // repo's Recharts + CSS-variable theme. Falls back to sample data (banner shown) until
 // TA_GOOGLE_SERVICE_ACCOUNT_EMAIL/TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY/TA_GOOGLE_SHEET_ID are set.
 export default async function TalentAcquisitionPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
-  const { records: allRecords, pipeline, config, connectionError } = await getTaDashboardData()
+  const { records: allRecords, pipeline, conversions, config, connectionError } = await getTaDashboardData()
   const filters = parseFilters(await searchParams)
   const records = applyFilters(allRecords, filters)
   const usingSampleData = !hasTaCredentials()
@@ -33,6 +33,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
   const avgWeeks = averageTimeToFillWeeks(records)
   const avgDays = averageTimeToFillDays(records)
   const avgCost = averageCostOfHire(records)
+  const avgCostPerConversion = averageCostPerConversion(conversions)
 
   const officeTypes = config.officeTypes.length > 0 ? config.officeTypes : ['Front Office', 'Back Office']
   const segments = officeTypes.map((officeType) => {
@@ -73,11 +74,12 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
 
         <p className="text-xs text-slate-400">As of {asOf}</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <TaStatTile label="Total Offers Extended" value={String(totalOffersExtended(records))} icon={Send} />
           <TaStatTile label="Total Offers Accepted" value={String(totalOffersAccepted(records))} icon={CheckCircle2} />
           <TaStatTile label="Average Time to Fill" value={avgWeeks == null ? '—' : `${avgWeeks.toFixed(1)} weeks`} sublabel={avgDays == null ? undefined : `${avgDays.toFixed(0)} days`} icon={Clock} />
           <TaStatTile label="Average Cost of Hire" value={avgCost == null ? '—' : formatTaCurrency(avgCost)} icon={Wallet} />
+          <TaStatTile label="Average Cost per Conversion" value={avgCostPerConversion == null ? '—' : formatTaCurrency(avgCostPerConversion)} sublabel={`${conversions.length} conversion${conversions.length === 1 ? '' : 's'}`} icon={Repeat2} />
         </div>
 
         <div>
@@ -145,16 +147,16 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
           <p className="text-sm font-bold text-slate-800 mb-3">Financial Snapshot</p>
           <div className="grid gap-4 md:grid-cols-2">
             <ChartBlock title="Cost Breakdown by Category" icon={Wallet}>
-              <PieChart labels={costBreakdown.map((c) => c.category)} values={costBreakdown.map((c) => c.amount)} donut showAmounts height={260} />
+              {costBreakdown.every((c) => c.amount === 0) ? <NoData /> : <PieChart labels={costBreakdown.map((c) => c.category)} values={costBreakdown.map((c) => c.amount)} donut showAmounts height={260} />}
             </ChartBlock>
             <ChartBlock title="Total Recruitment Investment by BU" icon={Landmark}>
-              <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={buSpend.map((g) => formatTaCurrency(g.total))} height={Math.max(180, buSpend.length * 36)} />
+              {buSpend.length === 0 ? <NoData /> : <BarChart labels={buSpend.map((g) => g.key)} values={buSpend.map((g) => g.total)} color="#2F6B2B" horizontal showLabels labelText={buSpend.map((g) => formatTaCurrency(g.total))} height={Math.max(180, buSpend.length * 36)} />}
             </ChartBlock>
             <ChartBlock title="Recruitment Costs" icon={TrendingUp}>
-              <LineChart labels={monthlyCosts.map((m) => m.period)} values={monthlyCosts.map((m) => m.value)} color="#2F6B2B" height={260} />
+              {monthlyCosts.length === 0 ? <NoData /> : <LineChart labels={monthlyCosts.map((m) => m.period)} values={monthlyCosts.map((m) => m.value)} color="#2F6B2B" height={260} />}
             </ChartBlock>
             <ChartBlock title="Top Hiring Sources" icon={Share2}>
-              <BarChart labels={hiringSources.map((g) => g.key)} values={hiringSources.map((g) => g.count)} color="#B0714F" showLabels height={280} />
+              {hiringSources.length === 0 ? <NoData /> : <BarChart labels={hiringSources.map((g) => g.key)} values={hiringSources.map((g) => g.count)} color="#B0714F" showLabels height={280} />}
             </ChartBlock>
           </div>
         </div>
@@ -163,7 +165,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
           <p className="text-sm font-bold text-slate-800 mb-3">Efficiency Snapshot</p>
           <div className="grid gap-4 md:grid-cols-2">
             <ChartBlock title="Time-to-Hire Distribution" icon={BarChart3}>
-              <BarChart labels={distribution.map((b) => b.label)} values={distribution.map((b) => b.count)} color="#5C8FB0" horizontal showLabels height={180} />
+              {distribution.every((b) => b.count === 0) ? <NoData /> : <BarChart labels={distribution.map((b) => b.label)} values={distribution.map((b) => b.count)} color="#5C8FB0" horizontal showLabels height={180} />}
             </ChartBlock>
             <ChartBlock title="Fastest BUs to Onboard (top 3)" icon={Zap}>
               {buVelocity.length === 0 ? (
@@ -186,10 +188,10 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
           <p className="text-sm font-bold text-slate-800 mb-3">Demographics Snapshot</p>
           <div className="grid gap-4 md:grid-cols-2">
             <ChartBlock title="Headcount by BU" icon={Users}>
-              <BarChart labels={headcount.map((g) => g.key)} values={headcount.map((g) => g.count)} color="#2F6B2B" showLabels height={240} />
+              {headcount.length === 0 ? <NoData /> : <BarChart labels={headcount.map((g) => g.key)} values={headcount.map((g) => g.count)} color="#2F6B2B" showLabels height={240} />}
             </ChartBlock>
             <ChartBlock title="Top Roles by Concentration" icon={Award}>
-              <BarChart labels={topRoles.map((g) => g.key)} values={topRoles.map((g) => g.count)} color="#7A66B0" showLabels height={240} />
+              {topRoles.length === 0 ? <NoData /> : <BarChart labels={topRoles.map((g) => g.key)} values={topRoles.map((g) => g.count)} color="#7A66B0" showLabels height={240} />}
             </ChartBlock>
           </div>
         </div>
@@ -197,7 +199,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
         <div>
           <p className="text-sm font-bold text-slate-800 mb-3">Trend Snapshot</p>
           <ChartBlock title="Hiring Seasonality" icon={Calendar}>
-            <LineChart labels={seasonality.map((p) => p.period)} values={seasonality.map((p) => p.count)} color="#3F7590" height={260} />
+            {seasonality.length === 0 ? <NoData /> : <LineChart labels={seasonality.map((p) => p.period)} values={seasonality.map((p) => p.count)} color="#3F7590" height={260} />}
           </ChartBlock>
         </div>
       </div>
@@ -215,4 +217,11 @@ function ChartBlock({ title, icon: Icon, children }: { title: string; icon: Reac
       {children}
     </div>
   )
+}
+
+// Plotly renders an empty-but-visible chart frame for a zeroed/empty series — indistinguishable
+// from "still loading" or "broken" at a glance. An explicit message instead makes "no data for
+// this filter" visually distinct from every chart that does have data.
+function NoData() {
+  return <p className="text-sm text-slate-400 py-8 text-center">No data for this period/filter.</p>
 }

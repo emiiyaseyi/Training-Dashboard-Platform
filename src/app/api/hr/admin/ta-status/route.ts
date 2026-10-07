@@ -17,10 +17,10 @@ export async function GET() {
   const serviceAccountEmail = process.env.TA_GOOGLE_SERVICE_ACCOUNT_EMAIL || null
 
   if (!emailConfigured || !keyConfigured || !sheetIdConfigured) {
-    return NextResponse.json({ emailConfigured, keyConfigured, sheetIdConfigured, serviceAccountEmail, connected: false, connectionError: null, usingSampleData: true, tabRowCounts: null, tabErrors: null })
+    return NextResponse.json({ emailConfigured, keyConfigured, sheetIdConfigured, serviceAccountEmail, connected: false, connectionError: null, usingSampleData: true, tabRowCounts: null, tabErrors: null, unrecognizedOfferStatuses: null })
   }
 
-  const { connectionError, records, pipeline, internalMobility, conversions, notConverted, vacancies, tabErrors } = await getTaDashboardData()
+  const { connectionError, records, pipeline, internalMobility, conversions, notConverted, vacancies, tabErrors, unrecognizedOfferStatuses } = await getTaDashboardData()
   // Per-tab row counts — Hires/Config are required (a failure there sets connectionError and the
   // whole response falls back to sample data), but Pipeline/Internal Mobility/Conversion/Not
   // Converted/Vacancies 2026 each fail SILENTLY into an empty array if their tab isn't found or
@@ -45,5 +45,6 @@ export async function GET() {
     usingSampleData: Boolean(connectionError),
     tabRowCounts,
     tabErrors: connectionError ? null : tabErrors,
+    unrecognizedOfferStatuses: connectionError ? null : unrecognizedOfferStatuses,
   })
 }

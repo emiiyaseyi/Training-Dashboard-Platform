@@ -15,6 +15,7 @@ interface TaStatus {
     hires: number; pipeline: number; internalMobility: number; conversions: number; notConverted: number; vacancies: number
   } | null
   tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>> | null
+  unrecognizedOfferStatuses: { value: string; count: number }[] | null
 }
 
 const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
@@ -88,6 +89,18 @@ export function TaSheetConnectionCard() {
                 <p className="font-semibold">{taStatus.connected ? 'Connected — live data is showing on the Talent Acquisition pages.' : 'Connection failed — showing sample data on the Talent Acquisition pages.'}</p>
                 {taStatus.connectionError && <p className="mt-1">{taStatus.connectionError}</p>}
               </div>
+            </div>
+          )}
+
+          {taStatus.unrecognizedOfferStatuses && taStatus.unrecognizedOfferStatuses.length > 0 && (
+            <div className="bg-rose-50 text-rose-700 rounded-xl p-3 text-xs space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Hires!Offer Status has values that don&apos;t match Accepted/Declined/Pending/Withdrawn:</p>
+              <ul className="pl-5 list-disc space-y-0.5">
+                {taStatus.unrecognizedOfferStatuses.map((u) => (
+                  <li key={u.value}><span className="font-mono">&quot;{u.value}&quot;</span> — {u.count} row{u.count === 1 ? '' : 's'} (counted as Pending)</li>
+                ))}
+              </ul>
+              <p>Fix these in the sheet (or ask for the exact wording to be added as a recognized synonym) — Total Offers Accepted and everything derived from it (time to fill, cost of hire, acceptance rate) excludes these rows until then.</p>
             </div>
           )}
 

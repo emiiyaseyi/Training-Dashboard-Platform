@@ -36,15 +36,15 @@ export default async function BuRoleDemographicsPage({ searchParams }: { searchP
 
         <div className="grid gap-4 md:grid-cols-2">
           <ChartBlock title="Headcount by BU" icon={Users}>
-            <BarChart labels={headcount.map((g) => g.key)} values={headcount.map((g) => g.count)} color="#2F6B2B" showLabels height={Math.max(180, headcount.length * 30)} horizontal />
+            {headcount.length === 0 ? <NoData /> : <BarChart labels={headcount.map((g) => g.key)} values={headcount.map((g) => g.count)} color="#2F6B2B" showLabels height={Math.max(180, headcount.length * 30)} horizontal />}
           </ChartBlock>
           <ChartBlock title="Role Concentration" icon={Award}>
-            <BarChart labels={roles.map((g) => g.key)} values={roles.map((g) => g.count)} color="#7A66B0" showLabels height={Math.max(180, roles.length * 30)} horizontal />
+            {roles.length === 0 ? <NoData /> : <BarChart labels={roles.map((g) => g.key)} values={roles.map((g) => g.count)} color="#7A66B0" showLabels height={Math.max(180, roles.length * 30)} horizontal />}
           </ChartBlock>
         </div>
 
         <ChartBlock title="Hiring Seasonality" icon={Calendar}>
-          <LineChart labels={seasonality.map((p) => p.period)} values={seasonality.map((p) => p.count)} color="#3F7590" height={260} />
+          {seasonality.length === 0 ? <NoData /> : <LineChart labels={seasonality.map((p) => p.period)} values={seasonality.map((p) => p.count)} color="#3F7590" height={260} />}
         </ChartBlock>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-5">
@@ -98,4 +98,8 @@ function ChartBlock({ title, icon: Icon, children }: { title: string; icon: Reac
       {children}
     </div>
   )
+}
+
+function NoData() {
+  return <p className="text-sm text-slate-400 py-8 text-center">No data for this period/filter.</p>
 }

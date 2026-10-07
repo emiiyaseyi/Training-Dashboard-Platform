@@ -38,7 +38,11 @@ export default async function EfficiencyVelocityPage({ searchParams }: { searchP
             <BarChart3 className="w-4 h-4 text-meristem-700" />
             <p className="text-sm font-bold text-slate-800">Time-to-Hire Distribution</p>
           </div>
-          <BarChart labels={distribution.map((b) => b.label)} values={distribution.map((b) => b.count)} color="#5C8FB0" horizontal showLabels height={180} />
+          {distribution.every((b) => b.count === 0) ? (
+            <p className="text-sm text-slate-400 py-8 text-center">No data for this period/filter.</p>
+          ) : (
+            <BarChart labels={distribution.map((b) => b.label)} values={distribution.map((b) => b.count)} color="#5C8FB0" horizontal showLabels height={180} />
+          )}
         </div>
 
         <div className="bg-white border border-meristem-100 rounded-2xl p-5">

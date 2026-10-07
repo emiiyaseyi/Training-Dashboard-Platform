@@ -347,6 +347,18 @@ export function isOfferStatus(value: string): value is OfferStatus {
   return ['Accepted', 'Declined', 'Pending', 'Withdrawn'].includes(value)
 }
 
+const OFFER_STATUSES: OfferStatus[] = ['Accepted', 'Declined', 'Pending', 'Withdrawn']
+
+/** Case/whitespace-tolerant match against the canonical Offer Status values — the sheet column is
+ * free text, so "accepted", "ACCEPTED ", etc. all need to land on the same status as "Accepted".
+ * Returns null (caller decides the fallback) rather than silently defaulting, so a genuinely
+ * unrecognized value (a typo, an extra status the sheet started using) can be surfaced instead of
+ * quietly miscounted as Pending. */
+export function canonicalOfferStatus(raw: string): OfferStatus | null {
+  const norm = raw.trim().toLowerCase()
+  return OFFER_STATUSES.find((s) => s.toLowerCase() === norm) ?? null
+}
+
 // ---------- Pipeline (open roles) ----------
 
 export function applyPipelineFilters(pipeline: PipelineRecord[], filters: Partial<Filters>): PipelineRecord[] {
