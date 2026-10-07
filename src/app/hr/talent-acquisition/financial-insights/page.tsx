@@ -8,7 +8,7 @@ import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
-import { parseFilters, type SearchParams } from '@/lib/ta-filters'
+import { parseFilters, distinctRequisitionYears, type SearchParams } from '@/lib/ta-filters'
 import { formatTaCurrency } from '@/lib/ta-format'
 import { applyFilters, averageCostOfHire, averageCostPerConversion, costBreakdownByCategory, costPerHireByRole, costPerHireTrend, totalInvestmentByBU } from '@/lib/ta-metrics'
 
@@ -19,6 +19,7 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
   const filters = parseFilters(await searchParams)
   const filtered = applyFilters(records, filters)
   const usingSampleData = !hasTaCredentials()
+  const availableYears = distinctRequisitionYears(records)
 
   const avgCost = averageCostOfHire(filtered)
   const avgCostPerConversion = averageCostPerConversion(conversions)
@@ -35,7 +36,7 @@ export default async function FinancialInsightsPage({ searchParams }: { searchPa
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">Financial Insights</h1>
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <TaStatTile label="Average Cost of Hire" value={avgCost == null ? '—' : formatTaCurrency(avgCost)} icon={Wallet} />

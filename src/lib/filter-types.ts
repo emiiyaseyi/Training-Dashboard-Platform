@@ -71,6 +71,24 @@ export function parsePeriodFilterFromParams(sp: URLSearchParams): PeriodFilter {
   }
 }
 
+/** Resolves a PeriodFilter down to a concrete [from, to] Date range — for callers (like Talent
+ * Acquisition) that filter records against a continuous date range rather than matching discrete
+ * month/year buckets the way activeMonthIndices()'s consumers do. `to` is end-of-day so a record
+ * dated on the boundary day itself is included. */
+export function periodToDateRange(f: PeriodFilter): { from: Date | null; to: Date | null } {
+  if (f.mode === 'all') return { from: null, to: null }
+  const now = new Date()
+  const year = f.year ?? currentYear()
+  if (f.mode === 'year') return { from: new Date(year, 0, 1), to: new Date(year, 11, 31, 23, 59, 59, 999) }
+  if (f.mode === 'ytd') return { from: new Date(year, 0, 1), to: now }
+  if (f.mode === 'range') {
+    const fromIdx = MONTHS.indexOf((f.fromMonth ?? 'January') as Month)
+    const toIdx = MONTHS.indexOf((f.toMonth ?? currentMonthName()) as Month)
+    return { from: new Date(year, fromIdx, 1), to: new Date(year, toIdx + 1, 0, 23, 59, 59, 999) }
+  }
+  return { from: null, to: null }
+}
+
 export function activeMonthIndices(f: PeriodFilter): number[] | null {
   if (f.mode === 'all' || f.mode === 'year') return null
   const now = new Date()

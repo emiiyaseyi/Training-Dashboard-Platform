@@ -6,7 +6,7 @@ import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
-import { parseFilters, type SearchParams } from '@/lib/ta-filters'
+import { parseFilters, distinctRequisitionYears, type SearchParams } from '@/lib/ta-filters'
 import { formatTaCurrency } from '@/lib/ta-format'
 import { topNWithOther } from '@/lib/ta-chart-data'
 import { applyFilters, headcountByBU, hiringSeasonality, monthlyBreakdown, roleConcentration } from '@/lib/ta-metrics'
@@ -18,6 +18,7 @@ export default async function BuRoleDemographicsPage({ searchParams }: { searchP
   const filters = parseFilters(await searchParams)
   const filtered = applyFilters(records, filters)
   const usingSampleData = !hasTaCredentials()
+  const availableYears = distinctRequisitionYears(records)
 
   const headcount = headcountByBU(filtered)
   const roles = topNWithOther(roleConcentration(filtered), 10)
@@ -32,7 +33,7 @@ export default async function BuRoleDemographicsPage({ searchParams }: { searchP
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
         <h1 className="text-lg font-bold text-slate-800">BU &amp; Role Demographics</h1>
-        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} />
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
 
         <div className="grid gap-4 md:grid-cols-2">
           <ChartBlock title="Headcount by BU" icon={Users}>

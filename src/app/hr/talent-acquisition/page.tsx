@@ -5,11 +5,12 @@ import { TaStatTile } from '@/components/hr/ta/TaStatTile'
 import { TaRingStat } from '@/components/hr/ta/TaRingStat'
 import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/TaSampleDataBanner'
 import { TaAdminLink } from '@/components/hr/ta/TaAdminLink'
+import { TaFilterBar } from '@/components/hr/ta/TaFilterBar'
 import { BarChart } from '@/components/charts/BarChart'
 import { PieChart } from '@/components/charts/PieChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
-import { parseFilters, type SearchParams } from '@/lib/ta-filters'
+import { parseFilters, distinctRequisitionYears, type SearchParams } from '@/lib/ta-filters'
 import { formatTaCurrency } from '@/lib/ta-format'
 import { topNWithOther } from '@/lib/ta-chart-data'
 import {
@@ -29,6 +30,8 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
   const filters = parseFilters(await searchParams)
   const records = applyFilters(allRecords, filters)
   const usingSampleData = !hasTaCredentials()
+
+  const availableYears = distinctRequisitionYears(allRecords)
 
   const avgWeeks = averageTimeToFillWeeks(records)
   const avgDays = averageTimeToFillDays(records)
@@ -71,6 +74,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
 
       <div className="p-4 sm:p-8 space-y-6">
         {connectionError ? <TaConnectionErrorBanner message={connectionError} /> : usingSampleData && <TaSampleDataBanner />}
+        <TaFilterBar bus={config.bus} roles={config.roles} officeTypes={config.officeTypes} availableYears={availableYears} />
 
         <p className="text-xs text-slate-400">As of {asOf}</p>
 

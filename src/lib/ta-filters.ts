@@ -1,7 +1,14 @@
 // Talent Acquisition — ported from github.com/emiiyaseyi/Talent-Recruitment-Dashboard
 // (lib/filters.ts), unchanged.
 
-import type { Filters } from './ta-types'
+import type { Filters, HireRecord } from './ta-types'
+
+/** Years actually present in the Hires sheet's Requisition Start Date column, newest first —
+ * feeds the Period filter's Year picker so it offers real years instead of a guessed range. */
+export function distinctRequisitionYears(records: HireRecord[]): number[] {
+  const years = new Set(records.map((r) => r.requisitionStartDate.getFullYear()))
+  return [...years].sort((a, b) => b - a)
+}
 
 export type SearchParams = Record<string, string | string[] | undefined>
 
