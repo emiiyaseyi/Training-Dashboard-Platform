@@ -494,23 +494,36 @@ export function AlreadyAttendedTrainingsPanel({ onScheduleCreated }: Props) {
                           ))}
                         </div>
 
-                        <label className="text-xs text-slate-500 block max-w-xs">
-                          Training month
-                          <input
-                            type="month"
-                            value={startDate.slice(0, 7)}
-                            onChange={(e) => {
-                              const ym = e.target.value // "YYYY-MM"
-                              if (!ym) return
-                              const monthStart = `${ym}-01`
-                              setStartDate(monthStart)
-                              setEndDate(monthStart)
-                            }}
-                            className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
-                          />
-                        </label>
+                        <div className="grid grid-cols-2 gap-3 max-w-sm">
+                          <label className="text-xs text-slate-500 block">
+                            Start date
+                            <input
+                              type="date"
+                              value={startDate}
+                              onChange={(e) => {
+                                const next = e.target.value
+                                if (!next) return
+                                setStartDate(next)
+                                // Keep end date from ever being before the new start date — bumping it
+                                // forward rather than leaving an invalid (end < start) pair silently set.
+                                if (endDate && endDate < next) setEndDate(next)
+                              }}
+                              className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                            />
+                          </label>
+                          <label className="text-xs text-slate-500 block">
+                            End date
+                            <input
+                              type="date"
+                              value={endDate}
+                              min={startDate || undefined}
+                              onChange={(e) => { if (e.target.value) setEndDate(e.target.value) }}
+                              className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                            />
+                          </label>
+                        </div>
                         <p className="text-[11px] text-slate-400">
-                          Defaulted to {g.month} {g.year} — the month recorded against this training in the sheet. Change it if that needs correcting before sending.
+                          Defaulted to the 1st of {g.month} {g.year} — the sheet only ever recorded a month, not a day. Set the actual dates this training ran before sending.
                         </p>
 
                         <div>
