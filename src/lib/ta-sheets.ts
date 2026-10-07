@@ -17,13 +17,16 @@ import { findColumn, headerIndex, normalizeHeader } from './ta-sheet-columns'
 
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 
-export const HIRES_RANGE = 'Hires!A1:O'
-export const PIPELINE_RANGE = 'Pipeline!A1:H'
-export const CONFIG_RANGE = 'Config!A1:F'
-export const INTERNAL_MOBILITY_RANGE = 'Internal Mobility!A1:I'
-export const CONVERSION_RANGE = 'Conversion!A1:J'
-export const NOT_CONVERTED_RANGE = 'Not Converted!A1:H'
-export const VACANCIES_RANGE = 'Vacancies 2026!A1:H'
+// Sheet names are single-quoted per Google's A1 notation — required whenever a name contains a
+// space (bare `Internal Mobility!A1:I` is INVALID_ARGUMENT, "Unable to parse range"); harmless to
+// quote the single-word ones too, so every range here is quoted for consistency.
+export const HIRES_RANGE = "'Hires'!A1:O"
+export const PIPELINE_RANGE = "'Pipeline'!A1:H"
+export const CONFIG_RANGE = "'Config'!A1:F"
+export const INTERNAL_MOBILITY_RANGE = "'Internal Mobility'!A1:I"
+export const CONVERSION_RANGE = "'Conversion'!A1:J"
+export const NOT_CONVERTED_RANGE = "'Not Converted'!A1:H"
+export const VACANCIES_RANGE = "'Vacancies 2026'!A1:H"
 
 // Exported so pages can show an honest "sample data" banner instead of presenting demo numbers
 // as if they were the real recruitment sheet.
