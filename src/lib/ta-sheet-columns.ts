@@ -36,7 +36,7 @@ export type SheetField =
   | 'currentRole'
   | 'previousBU'
   | 'previousRole'
-  | 'deploymentDate'
+  | 'deploymentMonth'
   | 'previousGrade'
   | 'newGrade'
   // Conversion / Not Converted sheets (also reuse staffId, name, bu, role, grade)
@@ -78,7 +78,7 @@ export const HEADER_ALIASES: Record<SheetField, string[]> = {
   currentRole: ['current role'],
   previousBU: ['previous bu'],
   previousRole: ['previous role'],
-  deploymentDate: ['deployment date'],
+  deploymentMonth: ['deployment month', 'deployment date'],
   previousGrade: ['previous grade'],
   newGrade: ['new grade'],
   grade: ['grade'],

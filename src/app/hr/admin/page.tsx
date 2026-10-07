@@ -2,32 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { ShieldAlert, Sheet, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Users, Plus, Pencil, X, Loader2, RefreshCw } from 'lucide-react'
+import Link from 'next/link'
+import { ShieldAlert, Sheet, ExternalLink, Users, Plus, Pencil, X, Loader2, ChevronRight } from 'lucide-react'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { HR_UNIT_KEYS, PAGE_LABELS, PERMISSION_LEVELS, PERMISSION_LEVEL_LABELS, type PageKey, type PermissionLevel } from '@/lib/permissions'
-
-interface TaStatus {
-  emailConfigured: boolean
-  keyConfigured: boolean
-  sheetIdConfigured: boolean
-  serviceAccountEmail: string | null
-  connected: boolean
-  connectionError: string | null
-  usingSampleData: boolean
-  tabRowCounts: {
-    hires: number; pipeline: number; internalMobility: number; conversions: number; notConverted: number; vacancies: number
-  } | null
-  tabErrors: Partial<Record<'pipeline' | 'internalMobility' | 'conversions' | 'notConverted' | 'vacancies', string>> | null
-}
-
-const TA_TAB_LABELS: { key: keyof NonNullable<TaStatus['tabRowCounts']>; sheetName: string; required: boolean }[] = [
-  { key: 'hires', sheetName: 'Hires', required: true },
-  { key: 'pipeline', sheetName: 'Pipeline', required: false },
-  { key: 'internalMobility', sheetName: 'Internal Mobility', required: false },
-  { key: 'conversions', sheetName: 'Conversion', required: false },
-  { key: 'notConverted', sheetName: 'Not Converted', required: false },
-  { key: 'vacancies', sheetName: 'Vacancies 2026', required: false },
-]
 
 interface AdminUser {
   id: string
@@ -70,8 +48,6 @@ function mergedPermissions(existing: Record<string, string>, draft: DraftPerms):
 
 export default function HrAdminPage() {
   const { data: session, status } = useSession()
-  const [taStatus, setTaStatus] = useState<TaStatus | null>(null)
-  const [refreshingTa, setRefreshingTa] = useState(false)
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -88,26 +64,14 @@ export default function HrAdminPage() {
   const isSuperAdmin = session?.user?.isSuperAdmin
 
   const loadUsers = () => fetch('/api/admin/users').then((r) => (r.ok ? r.json() : Promise.reject(r)))
-  const loadTaStatus = () => fetch('/api/hr/admin/ta-status').then((r) => (r.ok ? r.json() : Promise.reject(r)))
 
   useEffect(() => {
     if (!isSuperAdmin) return
-    Promise.all([loadTaStatus(), loadUsers()])
-      .then(([ta, allUsers]) => { setTaStatus(ta); setUsers(allUsers) })
+    loadUsers()
+      .then(setUsers)
       .catch(() => setLoadError('Could not load HR admin data.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuperAdmin])
-
-  // getTaDashboardData() fetches the Google Sheet live on every call — there's no cache to bust,
-  // so re-checking the connection is just re-running the same request the page loaded with. Lets
-  // the admin confirm a just-edited sheet (new tab, renamed tab, added rows) without a full reload.
-  const refreshTaStatus = () => {
-    setRefreshingTa(true)
-    loadTaStatus()
-      .then(setTaStatus)
-      .catch(() => setLoadError('Could not refresh the Talent Acquisition sheet status.'))
-      .finally(() => setRefreshingTa(false))
-  }
 
   if (status === 'loading') return null
 
@@ -191,86 +155,19 @@ export default function HrAdminPage() {
 
       {loadError && <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 text-sm text-rose-700">{loadError}</div>}
 
-      <div className="bg-white border border-meristem-100 rounded-2xl p-5">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <Sheet className="w-4 h-4 text-meristem-700" />
+      <Link
+        href="/hr/talent-acquisition/admin"
+        className="flex items-center justify-between gap-2 bg-white border border-meristem-100 rounded-2xl p-5 hover:border-meristem-200 hover:bg-meristem-50/40 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Sheet className="w-4 h-4 text-meristem-700" />
+          <div>
             <p className="text-sm font-bold text-slate-800">Talent Acquisition — Google Sheet Connection</p>
+            <p className="text-xs text-slate-500 mt-0.5">Credentials, live connection status, and per-tab row diagnostics — moved to its own page.</p>
           </div>
-          {taStatus && (
-            <button
-              onClick={refreshTaStatus}
-              disabled={refreshingTa}
-              className="flex items-center gap-1.5 text-xs font-medium text-meristem-700 bg-meristem-50 hover:bg-meristem-100 disabled:opacity-60 rounded-lg px-3 py-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshingTa ? 'animate-spin' : ''}`} /> {refreshingTa ? 'Checking…' : 'Re-check sheet'}
-            </button>
-          )}
         </div>
-
-        {!taStatus ? (
-          <p className="text-sm text-slate-400">Loading…</p>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <StatusRow label="TA_GOOGLE_SERVICE_ACCOUNT_EMAIL" ok={taStatus.emailConfigured} />
-              <StatusRow label="TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY" ok={taStatus.keyConfigured} />
-              <StatusRow label="TA_GOOGLE_SHEET_ID" ok={taStatus.sheetIdConfigured} />
-            </div>
-
-            {taStatus.emailConfigured && taStatus.keyConfigured && taStatus.sheetIdConfigured && (
-              <div className={`flex items-start gap-2 rounded-xl p-3 text-xs ${taStatus.connected ? 'bg-meristem-50 text-meristem-800' : 'bg-rose-50 text-rose-700'}`}>
-                {taStatus.connected ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                <div>
-                  <p className="font-semibold">{taStatus.connected ? 'Connected — live data is showing on the Talent Acquisition pages.' : 'Connection failed — showing sample data on the Talent Acquisition pages.'}</p>
-                  {taStatus.connectionError && <p className="mt-1">{taStatus.connectionError}</p>}
-                </div>
-              </div>
-            )}
-
-            {taStatus.tabRowCounts && (
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-1.5">Rows found per tab — 0 usually means that tab is missing or misnamed, not that it&apos;s genuinely empty:</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {TA_TAB_LABELS.map((t) => {
-                    const count = taStatus.tabRowCounts![t.key]
-                    const missing = count === 0
-                    const error = t.key === 'hires' ? undefined : taStatus.tabErrors?.[t.key]
-                    return (
-                      <div key={t.key} className={`rounded-lg border px-2.5 py-1.5 text-xs ${missing ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-meristem-100 bg-meristem-50/60 text-slate-700'}`}>
-                        <p className="font-medium">{t.sheetName}{t.required ? ' *' : ''}</p>
-                        <p className="tabular-nums">{count} row{count === 1 ? '' : 's'}</p>
-                        {error && <p className="mt-0.5 text-[10px] leading-snug text-amber-700/90">{error}</p>}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {taStatus.serviceAccountEmail && (
-              <p className="text-xs text-slate-500">
-                Service account: <span className="font-mono text-slate-700">{taStatus.serviceAccountEmail}</span> — share the recruitment Google Sheet with this address as at least Viewer.
-              </p>
-            )}
-
-            {(!taStatus.emailConfigured || !taStatus.keyConfigured || !taStatus.sheetIdConfigured) && (
-              <div className="bg-amber-50 text-amber-700 rounded-xl p-3 text-xs space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p>Missing environment variable(s) — set these in Vercel (Project → Settings → Environment Variables → Production), then redeploy:</p>
-                </div>
-                <ul className="pl-6 list-disc space-y-1">
-                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_EMAIL</span> — the service account&apos;s email address (from the downloaded JSON key file&apos;s <span className="font-mono">client_email</span> field).</li>
-                  <li><span className="font-mono">TA_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</span> — the same JSON file&apos;s <span className="font-mono">private_key</span> value, pasted in full (including the BEGIN/END lines) directly into Vercel — never through chat.</li>
-                  <li><span className="font-mono">TA_GOOGLE_SHEET_ID</span> — the ID from the sheet&apos;s URL (the long string between <span className="font-mono">/d/</span> and <span className="font-mono">/edit</span>).</li>
-                </ul>
-                <p>The sheet also needs to be shared with that service account email as at least Viewer, with tabs named <span className="font-mono">Hires</span>, <span className="font-mono">Pipeline</span>, <span className="font-mono">Config</span>, <span className="font-mono">Internal Mobility</span>, <span className="font-mono">Conversion</span>, <span className="font-mono">Not Converted</span>, and <span className="font-mono">Vacancies 2026</span>.</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+      </Link>
 
       {saveError && (
         <div className="flex items-center justify-between gap-3 bg-rose-50 border border-rose-100 rounded-2xl p-3 text-xs text-rose-700">
@@ -455,15 +352,6 @@ function PermissionGrid({ draft, onChange }: { draft: DraftPerms; onChange: (d: 
           </label>
         ))}
       </div>
-    </div>
-  )
-}
-
-function StatusRow({ label, ok }: { label: string; ok: boolean }) {
-  return (
-    <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium ${ok ? 'bg-meristem-50 text-meristem-800' : 'bg-rose-50 text-rose-700'}`}>
-      {ok ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <XCircle className="w-3.5 h-3.5 shrink-0" />}
-      <span className="font-mono truncate">{label}</span>
     </div>
   )
 }

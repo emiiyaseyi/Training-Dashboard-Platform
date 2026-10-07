@@ -23,6 +23,7 @@ const STATUSES: OfferStatus[] = ['Accepted', 'Accepted', 'Accepted', 'Declined',
 const GRADES = ['Officer', 'Senior Officer', 'Assistant Manager', 'Manager', 'Senior Manager']
 const VACANCY_STATUSES = ['Open', 'Filled Internally', 'Filled Externally']
 const NOT_CONVERTED_REASONS = ['Declined Offer', 'Performance', 'Role Not Available', 'Resigned Before Decision']
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 function mulberry32(seed: number) {
   return function () {
@@ -101,7 +102,7 @@ function gradeStep(rng: () => number): { previous: string; next: string } {
   return { previous: GRADES[i], next: GRADES[i + 1] }
 }
 
-function generateInternalMobility(count: number, rng: () => number, now: Date): InternalMobilityRecord[] {
+function generateInternalMobility(count: number, rng: () => number, _now: Date): InternalMobilityRecord[] {
   const records: InternalMobilityRecord[] = []
   for (let i = 0; i < count; i++) {
     const { previous, next } = gradeStep(rng)
@@ -113,7 +114,7 @@ function generateInternalMobility(count: number, rng: () => number, now: Date): 
       currentRole: pick(rng, ROLES).name,
       previousBU: pick(rng, BUS),
       previousRole: pick(rng, ROLES).name,
-      deploymentDate: daysAgo(now, Math.floor(rng() * 365)),
+      deploymentMonth: pick(rng, MONTHS),
       previousGrade: previous,
       newGrade: lateral ? previous : next,
     })

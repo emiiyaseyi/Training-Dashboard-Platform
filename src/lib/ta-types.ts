@@ -48,7 +48,9 @@ export interface ConfigLists {
   pipelineStages: string[]
 }
 
-/** One row from the `Internal Mobility` sheet tab — a staff member's move between BU/role. */
+/** One row from the `Internal Mobility` sheet tab — a staff member's move between BU/role.
+ * deploymentMonth is month-only by design (e.g. "January") — the sheet doesn't track a day or
+ * year for this, so it's kept as free text rather than forced into a Date. */
 export interface InternalMobilityRecord {
   staffId: string
   name: string
@@ -56,7 +58,7 @@ export interface InternalMobilityRecord {
   currentRole: string
   previousBU: string
   previousRole: string
-  deploymentDate: Date
+  deploymentMonth: string
   previousGrade: string
   newGrade: string
 }
