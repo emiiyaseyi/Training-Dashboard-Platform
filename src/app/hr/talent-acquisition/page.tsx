@@ -143,7 +143,7 @@ export default async function TalentAcquisitionPage({ searchParams }: { searchPa
                   <TaRingStat
                     percent={s.secondRate}
                     label={offerStatusTracksWithdrawals ? 'Withdrawal rate' : 'Declined rate'}
-                    sublabel={offerStatusTracksWithdrawals ? 'of resolved offers' : "balance of acceptance — sheet can't separate declined vs. withdrawn"}
+                    sublabel="of resolved offers"
                     color="#B0714F"
                   />
                 </div>
