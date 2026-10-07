@@ -391,12 +391,28 @@ export async function getTaDashboardData(): Promise<TaDashboardResult> {
       optionalRange('vacancies', VACANCIES_RANGE, 'Vacancies 2026'),
     ])
 
+    const internalMobility = parseInternalMobilityRows(internalMobilityRows)
+    const conversions = parseConversionRows(conversionRows)
+
+    // Both parsers require a valid Deployment Date / Conversion Effective Date to build a record
+    // (see each parser's comment) — a row with that cell blank, or in a text format Date() can't
+    // parse (e.g. "06-10-2026", ambiguous dash-separated), silently drops out. The sheet fetch
+    // itself succeeds in that case (no entry in tabErrors), so without this check a sheet with
+    // real data rows but an unparseable date column looks identical to a genuinely empty tab.
+    const rawDataRowCount = (rows: unknown[][]) => Math.max(0, rows.filter((row) => row.some((cell) => cell != null && cell !== '')).length - 1)
+    if (internalMobility.length === 0 && rawDataRowCount(internalMobilityRows) > 0 && !tabErrors.internalMobility) {
+      tabErrors.internalMobility = `Sheet has ${rawDataRowCount(internalMobilityRows)} data row(s) but none parsed — every row needs a Deployment Date value in a format JavaScript's Date can read (e.g. "2026-10-06" or "Oct 6, 2026"; ambiguous dash formats like "06-10-2026" often fail to parse).`
+    }
+    if (conversions.length === 0 && rawDataRowCount(conversionRows) > 0 && !tabErrors.conversions) {
+      tabErrors.conversions = `Sheet has ${rawDataRowCount(conversionRows)} data row(s) but none parsed — every row needs a Conversion Effective Date value in a format JavaScript's Date can read (e.g. "2026-10-06" or "Oct 6, 2026").`
+    }
+
     return {
       records: parseHiresRows(hiresRows),
       config: parseConfigColumns(configRows),
       pipeline: parsePipelineRows(pipelineRows),
-      internalMobility: parseInternalMobilityRows(internalMobilityRows),
-      conversions: parseConversionRows(conversionRows),
+      internalMobility,
+      conversions,
       notConverted: parseNotConvertedRows(notConvertedRows),
       vacancies: parseVacancyRows(vacancyRows),
       connectionError: null,
