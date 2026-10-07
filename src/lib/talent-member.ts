@@ -233,6 +233,15 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   // TrainingRecord away from "TM" (e.g. to "External Training"). That per-person override takes
   // precedence over the schedule's own type wherever it exists.
   const recordTypeById = new Map(yearTrainingRecords.map((r) => [r.id, r.trainingType]))
+  // A schedule's businessUnit is ONE shared value for the whole training, same limitation as
+  // trainingType above — it's whatever BU was selected when the schedule was created, not
+  // per-attendee. A multi-BU training (the common case for a cross-BU cohort like a leadership
+  // programme) showed every attendee under that single BU regardless of their own, even after
+  // "Fix Business Unit from Roster" corrected each person's own linked TrainingRecord — that tool
+  // only ever touched TrainingRecord.businessUnit, which this code wasn't reading. Preferring the
+  // per-person linked record's BU here (falling back to the schedule's shared one only when there
+  // isn't a linked record) makes the two consistent.
+  const recordBUById = new Map(yearTrainingRecords.map((r) => [r.id, r.businessUnit]))
   const isOverriddenAwayFromTM = (linkedTrainingRecordId: string | null) => {
     if (!linkedTrainingRecordId) return false
     const rt = recordTypeById.get(linkedTrainingRecordId)
@@ -253,7 +262,7 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
         source: 'schedule',
         staffId: att.staffId,
         staffName: att.staffName,
-        businessUnit: sched.businessUnit,
+        businessUnit: (att.linkedTrainingRecordId && recordBUById.get(att.linkedTrainingRecordId)) || sched.businessUnit,
         trainingName: sched.trainingName,
         startDate: sched.startDate,
         endDate: sched.endDate,
