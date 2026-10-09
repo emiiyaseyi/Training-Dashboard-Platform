@@ -129,7 +129,7 @@ const PROBES: ProbeDef[] = [
     section: 'Employee Services',
     label: 'Leave balance — PESL1 (annual, different entity)',
     path: `/v1/leave/balance?employee_code=PESL1&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
-    coverageNote: 'PESL1 showed up in the Get birthdays probe\'s results — a different staff ID PREFIX (PESL, not PNL), suggesting a second entity/company exists in this sandbox alongside Petromarine Nigeria Limited. Testing with that PESL1 code but still against the Petromarine company value (deliberately, to see whether it fails as "Employee not found" — confirming PESL1 belongs to a DIFFERENT entity — or as "Leave policy not found" like the PNL codes).',
+    coverageNote: `CONCLUSIVE 2026-10-09 — all 6 staff codes in this sweep (PNL11/1/21/22/23, and this one, PESL1, from a visibly different entity) return the IDENTICAL "Leave policy not found" regardless of employee or entity. PESL1 specifically did NOT fail as "Employee not found" even though it's paired with the Petromarine company value here (different entity than its own) — meaning /v1/leave/balance\'s "company" check is looser than expected and isn\'t really the blocker. The clean conclusion: this sandbox has either NO leave policies configured for leave_type="annual" for ANY employee, or "annual" isn\'t the correct leave_type string for this account's actual policy names. Nothing left to test blindly here — this is now a precise, two-part question for support: (1) is any leave policy configured in this sandbox at all, and (2) what are the valid leave_type values for this account.`,
   },
   {
     id: 'ta-jobs',
@@ -150,7 +150,7 @@ const PROBES: ProbeDef[] = [
     section: 'Performance Management',
     label: 'Employee appraisals — cycle=2026 (year), period H2',
     path: `/v1/performance/appraisals?appraisal_cycle=2026&appraisal_period=H2&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: 'Same call as the probe above, but appraisal_cycle=2026 (the year, as the docs originally described it) instead of 102 (the real cycle id) — testing both interpretations of "appraisal_cycle" side by side, since neither has been confirmed correct yet. If one of these two succeeds and the other still 422s, that tells us definitively which value the parameter actually expects.',
+    coverageNote: `CONCLUSIVE 2026-10-09 — this probe (cycle as year) and the one above (cycle as real id 102) return the IDENTICAL error on the IDENTICAL field ("appraisal_period": "A valid appraisal period that exist for this company is required"), regardless of H1 vs H2 or cycle-as-id vs cycle-as-year. Four different combinations tried (id+H1, id+H2, year+H1, year+H2) all fail the same way — "H1"/"H2" as literal strings are very likely just the wrong vocabulary for this parameter entirely, not a right-idea-wrong-half mistake. None of the 5 real cycle objects (from the cycles probe) exposes anything describing valid period values for itself, and nothing in the docs describes a "list periods for a cycle" endpoint. Nothing left to test blindly — this needs a direct answer from support: what are the valid appraisal_period values for this company/cycle, concretely (not H1/H2 if that's wrong), or is there an endpoint to discover them?`,
   },
 ]
 
