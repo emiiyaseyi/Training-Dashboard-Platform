@@ -92,9 +92,44 @@ const PROBES: ProbeDef[] = [
   {
     id: 'es-leave-balance',
     section: 'Employee Services',
-    label: 'Leave balance',
+    label: 'Leave balance — PNL11 (annual)',
     path: `/v1/leave/balance?employee_code=${REAL_EMPLOYEE_CODE}&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
-    coverageNote: `Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. CONFIRMED 2026-10-09: company="${REAL_COMPANY_NAME}" (the account name) returned "Employee not found" for a known-real employee; switching to company="Petromarine Nigeria Limited" (that employee's own entity, from the Employee master record's "entity" field) changed the error to "Leave policy not found" — a real, specific error, proving this endpoint wants the entity name, not the account name. Support's "always use Integration Company" guidance has at least this one exception, worth reporting back to them. Still need a valid employee_code + leave_type combination that HAS a policy on file to see the full response shape — that's the next ask for support.`,
+    coverageNote: `Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. CONFIRMED 2026-10-09: company="${REAL_COMPANY_NAME}" (the account name) returned "Employee not found" for a known-real employee; switching to company="Petromarine Nigeria Limited" (that employee's own entity) changed the error to "Leave policy not found" — proving this endpoint wants the entity name, not the account name. Rather than wait on support for an example, sweeping several more real staff IDs below (all pulled directly from a successful Employee master record response) to try to find one that already has a policy on file.`,
+  },
+  {
+    id: 'es-leave-balance-pnl1',
+    section: 'Employee Services',
+    label: 'Leave balance — PNL1 (annual)',
+    path: `/v1/leave/balance?employee_code=PNL1&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'Same sweep as PNL11 above, different real staff ID.',
+  },
+  {
+    id: 'es-leave-balance-pnl21',
+    section: 'Employee Services',
+    label: 'Leave balance — PNL21 (annual)',
+    path: `/v1/leave/balance?employee_code=PNL21&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'Same sweep as PNL11 above, different real staff ID.',
+  },
+  {
+    id: 'es-leave-balance-pnl22',
+    section: 'Employee Services',
+    label: 'Leave balance — PNL22 (annual)',
+    path: `/v1/leave/balance?employee_code=PNL22&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'Same sweep as PNL11 above, different real staff ID.',
+  },
+  {
+    id: 'es-leave-balance-pnl23',
+    section: 'Employee Services',
+    label: 'Leave balance — PNL23 (annual)',
+    path: `/v1/leave/balance?employee_code=PNL23&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'Same sweep as PNL11 above, different real staff ID. If ALL 5 come back "Leave policy not found", that\'s itself a useful signal to report to support — either this sandbox genuinely has no leave policies configured for any Petromarine Nigeria Limited employee, or the leave_type value ("annual") doesn\'t match whatever their policies are actually named.',
+  },
+  {
+    id: 'es-leave-balance-pesl1',
+    section: 'Employee Services',
+    label: 'Leave balance — PESL1 (annual, different entity)',
+    path: `/v1/leave/balance?employee_code=PESL1&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'PESL1 showed up in the Get birthdays probe\'s results — a different staff ID PREFIX (PESL, not PNL), suggesting a second entity/company exists in this sandbox alongside Petromarine Nigeria Limited. Testing with that PESL1 code but still against the Petromarine company value (deliberately, to see whether it fails as "Employee not found" — confirming PESL1 belongs to a DIFFERENT entity — or as "Leave policy not found" like the PNL codes).',
   },
   {
     id: 'ta-jobs',
@@ -106,9 +141,16 @@ const PROBES: ProbeDef[] = [
   {
     id: 'pm-appraisals',
     section: 'Performance Management',
-    label: 'Employee appraisals',
-    path: `/v1/performance/appraisals?appraisal_cycle=102&appraisal_period=H1&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: `Required params: appraisal_cycle + appraisal_period + company_name — no employee filter, no department/BU filter, no pagination documented. Returns one record per employee FOR THAT ONE PERIOD (the whole company at once), with employee_performance_score/performance_score/behavioural_score/final_score/appraisal_year_score, a 9-box talent classification (ninebox_matrix), and a nested employee.department object (id/name/description/parent_id/hod_id). Also has a department_score field of unconfirmed meaning — check a real sandbox response to see if SeamlessHR already computes this, or if it needs computing from employee.department ourselves. "Biannual average per employee" = native IF cycles are split H1/H2 (call once per period, scores are right there). "Average per department/BU" = not a dedicated endpoint; compute from employee.department across one call's full result set. "Full history since an employee joined" = NOT a single call — no employee or date-range filter exists, so it means calling this once per (cycle, period) combination since they joined and filtering client-side each time. No redeployment/transfer endpoint exists anywhere in Employee Services either — Add/Update/Activate/Deactivate/Exit only. UPDATE 2026-10-09: now using appraisal_cycle=102, the real "is_selected": true cycle id from the cycles probe above (previously appraisal_cycle=2026 was a guessed year, not a real id) — appraisal_period is STILL a guess ("H1"), since that cycle ("September 2026 Appraisal Cycle JKL") runs as one single month, not split into halves, and none of the 5 real cycle objects returned has any field describing valid period values. If this still 422s, the precise question for support is: for a cycle not split into H1/H2, what value does appraisal_period expect — is there a "list appraisal periods for a cycle" endpoint we're missing in the docs?`,
+    label: 'Employee appraisals — cycle id 102, period H2',
+    path: `/v1/performance/appraisals?appraisal_cycle=102&appraisal_period=H2&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
+    coverageNote: `Required params: appraisal_cycle + appraisal_period + company_name — no employee filter, no department/BU filter, no pagination documented. Returns one record per employee FOR THAT ONE PERIOD (the whole company at once), with employee_performance_score/performance_score/behavioural_score/final_score/appraisal_year_score, a 9-box talent classification (ninebox_matrix), and a nested employee.department object. The org's real cycle structure is H1 = Jan–Jun, H2 = Jul–Dec per calendar year — today (Oct 2026) falls in H2 2026, so the earlier "H1" guess was wrong for the CURRENT date regardless of anything else, independent of whatever "H1"/"H2" actually means to this API. Retrying with H2 here, and with appraisal_cycle as the YEAR instead of the cycle id in the probe right below — testing both pairings in one sweep instead of guessing serially.`,
+  },
+  {
+    id: 'pm-appraisals-year-h2',
+    section: 'Performance Management',
+    label: 'Employee appraisals — cycle=2026 (year), period H2',
+    path: `/v1/performance/appraisals?appraisal_cycle=2026&appraisal_period=H2&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
+    coverageNote: 'Same call as the probe above, but appraisal_cycle=2026 (the year, as the docs originally described it) instead of 102 (the real cycle id) — testing both interpretations of "appraisal_cycle" side by side, since neither has been confirmed correct yet. If one of these two succeeds and the other still 422s, that tells us definitively which value the parameter actually expects.',
   },
 ]
 
