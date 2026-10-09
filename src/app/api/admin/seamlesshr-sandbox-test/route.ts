@@ -62,7 +62,7 @@ const DIAGNOSTIC_PROBES: ProbeDef[] = [
     section: 'Diagnostics',
     label: 'Get holidays (Employee Services, zero required params)',
     path: `/v1/employees/holidays?employee_code=${REAL_EMPLOYEE_CODE}`,
-    coverageNote: `Support's answer: "There is no issue with it, please retry with Integration Company and an employee on that company." This endpoint takes NO company parameter at all (confirmed from its docs), so that part of their guidance doesn't literally apply here — the only thing to vary is employee_code, which previously used the undocumented default ("Employee001", who may not exist in this sandbox). Now passing employee_code=${REAL_EMPLOYEE_CODE} explicitly (confirmed to be a real employee via the Employee master record probe) instead of relying on the default. If this still fails identically, it's a genuine endpoint-specific issue independent of company/employee — worth re-raising with support as exactly that, since their "retry with Integration Company" answer doesn't address a company-less endpoint.`,
+    coverageNote: `RESOLVED 2026-10-09 — the actual fix was passing a real employee_code (${REAL_EMPLOYEE_CODE}) instead of relying on the undocumented default ("Employee001", who doesn't exist in this sandbox); the "company" part of support's answer never applied here since this endpoint takes no company parameter at all. Now returns real holiday data (Christmas Day, Boxing Day, each with id/date/company_id/regions).`,
   },
   {
     id: 'discover-birthdays',
@@ -93,22 +93,15 @@ const PROBES: ProbeDef[] = [
     id: 'es-leave-balance',
     section: 'Employee Services',
     label: 'Leave balance',
-    path: `/v1/leave/balance?employee_code=${REAL_EMPLOYEE_CODE}&leave_type=annual&company=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: 'Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. UPDATE 2026-10-09: with company="Integration Company" this now returns "Employee not found" for PNL11 — but PNL11 definitely exists (confirmed via a successful Employee master record call, no company param there, entity "Petromarine Nigeria Limited"). So "always use Integration Company" doesn\'t hold universally for every endpoint. Testing the alternative directly in the probe right below instead of guessing again next round.',
-  },
-  {
-    id: 'es-leave-balance-entity-name',
-    section: 'Employee Services',
-    label: 'Leave balance (retry with entity name instead of account name)',
     path: `/v1/leave/balance?employee_code=${REAL_EMPLOYEE_CODE}&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
-    coverageNote: 'Same call as the probe above, but with company set to the employee\'s own entity ("Petromarine Nigeria Limited", from the Employee master record\'s "entity" field) instead of the account name ("Integration Company"). If THIS one succeeds (or returns "Leave policy not found" rather than "Employee not found"), it confirms /v1/leave/balance wants the entity name specifically, not the account name — the opposite of what support said applies "across the endpoint" generally. Worth reporting that distinction back to them either way, since their guidance didn\'t carve out an exception for this endpoint.',
+    coverageNote: `Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. CONFIRMED 2026-10-09: company="${REAL_COMPANY_NAME}" (the account name) returned "Employee not found" for a known-real employee; switching to company="Petromarine Nigeria Limited" (that employee's own entity, from the Employee master record's "entity" field) changed the error to "Leave policy not found" — a real, specific error, proving this endpoint wants the entity name, not the account name. Support's "always use Integration Company" guidance has at least this one exception, worth reporting back to them. Still need a valid employee_code + leave_type combination that HAS a policy on file to see the full response shape — that's the next ask for support.`,
   },
   {
     id: 'ta-jobs',
     section: 'Talent Acquisition',
     label: 'Job postings',
     path: '/v1/rms/jobs?page=1',
-    coverageNote: 'GAP: this only returns public job-posting metadata (title, location, status). Requisitions (role/BU/office type/hiring manager), candidate pipeline stages, hiring source, and offer records have NO matching endpoint anywhere in SeamlessHR’s published docs — not available via this API at all, regardless of credentials. Also returned 404 "Route not found" in the last live test, same as every other /v1/rms/* path tried (companies, countries) even though those need no company-specific data at all — suggests the whole RMS/Recruitment module may not be provisioned on this account, separate from the documented data gaps.',
+    coverageNote: 'Talent Acquisition in this app IS the Recruitment module in SeamlessHR’s own terms (/v1/rms/* = RMS = Recruitment Management System) — this isn’t a separate, parallel gap from the companies/countries 404s above, it’s the exact same CONFIRMED cause: "RMS module is currently not available on the Sandbox." Beyond the sandbox-availability block, there are also documented data gaps worth knowing regardless: this endpoint only ever returns public job-posting metadata (title, location, status) — requisitions (role/BU/office type/hiring manager), candidate pipeline stages, hiring source, and offer records have NO matching endpoint anywhere in SeamlessHR’s published docs, not available via this API at all even once RMS is enabled.',
   },
   {
     id: 'pm-appraisals',
