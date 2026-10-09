@@ -61,8 +61,8 @@ const DIAGNOSTIC_PROBES: ProbeDef[] = [
     id: 'discover-holidays',
     section: 'Diagnostics',
     label: 'Get holidays (Employee Services, zero required params)',
-    path: '/v1/employees/holidays',
-    coverageNote: 'Support\'s answer: "There is no issue with it, please retry with Integration Company and an employee on that company." Retrying now with the corrected company name — if this still fails, the next step is asking support for a specific employee_code confirmed to belong to "Integration Company" (this endpoint takes no company parameter directly, so the fix is really about which employee_code default/value applies).',
+    path: `/v1/employees/holidays?employee_code=${REAL_EMPLOYEE_CODE}`,
+    coverageNote: `Support's answer: "There is no issue with it, please retry with Integration Company and an employee on that company." This endpoint takes NO company parameter at all (confirmed from its docs), so that part of their guidance doesn't literally apply here — the only thing to vary is employee_code, which previously used the undocumented default ("Employee001", who may not exist in this sandbox). Now passing employee_code=${REAL_EMPLOYEE_CODE} explicitly (confirmed to be a real employee via the Employee master record probe) instead of relying on the default. If this still fails identically, it's a genuine endpoint-specific issue independent of company/employee — worth re-raising with support as exactly that, since their "retry with Integration Company" answer doesn't address a company-less endpoint.`,
   },
   {
     id: 'discover-birthdays',
@@ -76,7 +76,7 @@ const DIAGNOSTIC_PROBES: ProbeDef[] = [
     section: 'Diagnostics',
     label: 'List appraisal cycles (real company now plugged in)',
     path: `/v1/performance/cycles?company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: `The empty result ("total": 0) is CONFIRMED a bug by SeamlessHR support, reported to their team in charge — not something to work around on our side. Still worth re-running with the corrected company_name ("Integration Company") in case that alone surfaces seeded data, but if it's still empty, we're blocked on their fix before field-mapping can be confirmed for appraisals.`,
+    coverageNote: `RESOLVED 2026-10-09 — the empty result WAS the wrong company_name, not the bug support thought it was: with "Integration Company" this now returns 5 real appraisal cycles (ids 2/35/69/102/103), including one marked "is_selected": true — id 102, "September 2026 Appraisal Cycle JKL" (2026-09-01 to 2026-09-30). None of the 5 objects has a field literally called "period"/"H1"/"H2" — that value for the appraisals probe below was a docs-reading guess that still needs confirming against a real successful call.`,
   },
 ]
 
@@ -94,7 +94,14 @@ const PROBES: ProbeDef[] = [
     section: 'Employee Services',
     label: 'Leave balance',
     path: `/v1/leave/balance?employee_code=${REAL_EMPLOYEE_CODE}&leave_type=annual&company=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: 'Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. Progress: the generic error is gone, now correctly reporting "Leave policy not found" for PNL11 — a real, specific error rather than a guessed-parameter failure. Support asked us for a valid employee_code + leave_type combination WITH a policy on file, which we don\'t have yet — that\'s the next thing to request from them directly to see the full response shape.',
+    coverageNote: 'Covers: days taken, days left, total/available balance — but only one employee + one leave type per call (no bulk "all balances" endpoint), so a full sync means one call per employee per leave type. UPDATE 2026-10-09: with company="Integration Company" this now returns "Employee not found" for PNL11 — but PNL11 definitely exists (confirmed via a successful Employee master record call, no company param there, entity "Petromarine Nigeria Limited"). So "always use Integration Company" doesn\'t hold universally for every endpoint. Testing the alternative directly in the probe right below instead of guessing again next round.',
+  },
+  {
+    id: 'es-leave-balance-entity-name',
+    section: 'Employee Services',
+    label: 'Leave balance (retry with entity name instead of account name)',
+    path: `/v1/leave/balance?employee_code=${REAL_EMPLOYEE_CODE}&leave_type=annual&company=${encodeURIComponent('Petromarine Nigeria Limited')}`,
+    coverageNote: 'Same call as the probe above, but with company set to the employee\'s own entity ("Petromarine Nigeria Limited", from the Employee master record\'s "entity" field) instead of the account name ("Integration Company"). If THIS one succeeds (or returns "Leave policy not found" rather than "Employee not found"), it confirms /v1/leave/balance wants the entity name specifically, not the account name — the opposite of what support said applies "across the endpoint" generally. Worth reporting that distinction back to them either way, since their guidance didn\'t carve out an exception for this endpoint.',
   },
   {
     id: 'ta-jobs',
@@ -107,8 +114,8 @@ const PROBES: ProbeDef[] = [
     id: 'pm-appraisals',
     section: 'Performance Management',
     label: 'Employee appraisals',
-    path: `/v1/performance/appraisals?appraisal_cycle=2026&appraisal_period=H1&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
-    coverageNote: `Required params: appraisal_cycle (year) + appraisal_period (H1/H2) + company_name — no employee filter, no department/BU filter, no pagination documented. Returns one record per employee FOR THAT ONE PERIOD (the whole company at once), with employee_performance_score/performance_score/behavioural_score/final_score/appraisal_year_score, a 9-box talent classification (ninebox_matrix), and a nested employee.department object (id/name/description/parent_id/hod_id). Also has a department_score field of unconfirmed meaning — check a real sandbox response to see if SeamlessHR already computes this, or if it needs computing from employee.department ourselves. "Biannual average per employee" = native (call once per H1/H2, the scores are right there). "Average per department/BU" = not a dedicated endpoint; compute from employee.department across one call's full result set. "Full history since an employee joined" = NOT a single call — no employee or date-range filter exists, so it means calling this once per (cycle, period) combination since they joined and filtering client-side each time. No redeployment/transfer endpoint exists anywhere in Employee Services either — Add/Update/Activate/Deactivate/Exit only; Update Employee could overwrite the BU field but gives no history of past moves. Blocked the same way as the appraisal cycles probe above — SeamlessHR confirmed the empty appraisal cycle data in sandbox is a bug on their end, so appraisal_cycle=2026 is still a guess with nothing real to substitute it with yet. Revisit once their team fixes the seeded sandbox data.`,
+    path: `/v1/performance/appraisals?appraisal_cycle=102&appraisal_period=H1&company_name=${encodeURIComponent(REAL_COMPANY_NAME)}`,
+    coverageNote: `Required params: appraisal_cycle + appraisal_period + company_name — no employee filter, no department/BU filter, no pagination documented. Returns one record per employee FOR THAT ONE PERIOD (the whole company at once), with employee_performance_score/performance_score/behavioural_score/final_score/appraisal_year_score, a 9-box talent classification (ninebox_matrix), and a nested employee.department object (id/name/description/parent_id/hod_id). Also has a department_score field of unconfirmed meaning — check a real sandbox response to see if SeamlessHR already computes this, or if it needs computing from employee.department ourselves. "Biannual average per employee" = native IF cycles are split H1/H2 (call once per period, scores are right there). "Average per department/BU" = not a dedicated endpoint; compute from employee.department across one call's full result set. "Full history since an employee joined" = NOT a single call — no employee or date-range filter exists, so it means calling this once per (cycle, period) combination since they joined and filtering client-side each time. No redeployment/transfer endpoint exists anywhere in Employee Services either — Add/Update/Activate/Deactivate/Exit only. UPDATE 2026-10-09: now using appraisal_cycle=102, the real "is_selected": true cycle id from the cycles probe above (previously appraisal_cycle=2026 was a guessed year, not a real id) — appraisal_period is STILL a guess ("H1"), since that cycle ("September 2026 Appraisal Cycle JKL") runs as one single month, not split into halves, and none of the 5 real cycle objects returned has any field describing valid period values. If this still 422s, the precise question for support is: for a cycle not split into H1/H2, what value does appraisal_period expect — is there a "list appraisal periods for a cycle" endpoint we're missing in the docs?`,
   },
 ]
 
