@@ -639,3 +639,115 @@ export function declinedRateBySource(records: HireRecord[]): SourceDeclineRate[]
     .filter((s) => s.totalOffers > 0)
     .sort((a, b) => (b.declineRate ?? 0) - (a.declineRate ?? 0))
 }
+
+// ---------- Predictive ----------
+
+export interface RequisitionRiskScore {
+  id: string
+  candidateName: string
+  role: string
+  bu: string
+  hiringSource: string
+  daysElapsed: number
+  expectedDays: number | null
+  risk: 'on-track' | 'trending-late' | 'at-risk' | 'unknown'
+}
+
+const RISK_SAMPLE_MIN = 2
+
+/** Scores every still-open (Pending) hire against how long SIMILAR hires have historically taken,
+ * instead of just listing "these are aging" with no sense of whether that's actually a problem
+ * yet — e.g. 30 days elapsed is fine for a role that normally takes 10 weeks, but a red flag for
+ * one that normally takes 3. Falls back from (source+role) -> role-only -> overall average as the
+ * benchmark, in order of how much history actually supports it (same escalating-fallback idea as
+ * sourceRoleBottlenecks' MIN_BOTTLENECK_SAMPLE above). Scores against Hires records specifically
+ * (not Pipeline) because that's where real historical AND currently-open data both exist right
+ * now; the same scoring applies unchanged once Pipeline has real rows to score. */
+export function requisitionRiskScores(records: HireRecord[], asOf: Date = new Date()): RequisitionRiskScore[] {
+  const accepted = hires(records)
+  const bySourceRole = new Map<string, number[]>()
+  const byRole = new Map<string, number[]>()
+  const overall: number[] = []
+  for (const r of accepted) {
+    const days = timeToFillDays(r)
+    if (days == null) continue
+    overall.push(days)
+    const roleArr = byRole.get(r.role) ?? []
+    roleArr.push(days)
+    byRole.set(r.role, roleArr)
+    if (r.hiringSource) {
+      const key = `${r.hiringSource}|${r.role}`
+      const arr = bySourceRole.get(key) ?? []
+      arr.push(days)
+      bySourceRole.set(key, arr)
+    }
+  }
+  const overallAvg = avg(overall)
+
+  return records
+    .filter((r) => r.offerStatus === 'Pending')
+    .map((r): RequisitionRiskScore => {
+      const daysElapsed = (asOf.getTime() - r.requisitionStartDate.getTime()) / DAY_MS
+      const sourceRoleSamples = bySourceRole.get(`${r.hiringSource}|${r.role}`) ?? []
+      const roleSamples = byRole.get(r.role) ?? []
+      const expectedDays =
+        sourceRoleSamples.length >= RISK_SAMPLE_MIN ? avg(sourceRoleSamples) :
+        roleSamples.length >= RISK_SAMPLE_MIN ? avg(roleSamples) :
+        overallAvg
+      let risk: RequisitionRiskScore['risk'] = 'unknown'
+      if (expectedDays != null && expectedDays > 0) {
+        const ratio = daysElapsed / expectedDays
+        risk = ratio < 0.7 ? 'on-track' : ratio <= 1.3 ? 'trending-late' : 'at-risk'
+      }
+      return { id: r.id, candidateName: r.candidateName, role: r.role, bu: r.bu, hiringSource: r.hiringSource, daysElapsed, expectedDays, risk }
+    })
+    .sort((a, b) => b.daysElapsed - a.daysElapsed)
+}
+
+// ---------- Prescriptive ----------
+
+export interface RecommendedSource {
+  role: string
+  recommendedSource: string
+  avgTimeToFillDays: number
+  declineRate: number | null
+  alternativesConsidered: number
+}
+
+/** For each role with more than one Hiring Source on record, recommends the one with the best
+ * historical combination of speed (Time to Fill) and quality (low Decline Rate) — a composite
+ * score, since a fast source with a high decline rate isn't actually the better choice. The score
+ * is deliberately simple (each measure normalized 0-1 against this role's own candidates, summed,
+ * lower wins) rather than a tuned/opaque formula, so the reasoning stays explainable. */
+export function recommendedSourceByRole(records: HireRecord[]): RecommendedSource[] {
+  const byRole = new Map<string, Map<string, HireRecord[]>>()
+  for (const r of records) {
+    if (!r.role || !r.hiringSource) continue
+    const sources = byRole.get(r.role) ?? new Map<string, HireRecord[]>()
+    const arr = sources.get(r.hiringSource) ?? []
+    arr.push(r)
+    sources.set(r.hiringSource, arr)
+    byRole.set(r.role, sources)
+  }
+
+  const result: RecommendedSource[] = []
+  for (const [role, sources] of byRole.entries()) {
+    if (sources.size < 2) continue // nothing to recommend between with only one source on record
+    const candidates = [...sources.entries()]
+      .map(([hiringSource, recs]) => {
+        const days = hires(recs).map(timeToFillDays).filter((d): d is number => d != null)
+        if (days.length < MIN_BOTTLENECK_SAMPLE) return null
+        const resolved = recs.filter((r) => r.offerStatus !== 'Pending')
+        const declined = resolved.filter((r) => r.offerStatus === 'Declined').length
+        return { hiringSource, avgTimeToFillDays: avg(days) ?? 0, declineRate: resolved.length > 0 ? declined / resolved.length : null }
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+    if (candidates.length < 2) continue
+
+    const maxDays = Math.max(...candidates.map((c) => c.avgTimeToFillDays))
+    const scoreOf = (c: (typeof candidates)[number]) => (maxDays > 0 ? c.avgTimeToFillDays / maxDays : 0) + (c.declineRate ?? 0)
+    const best = candidates.reduce((bestSoFar, c) => (scoreOf(c) < scoreOf(bestSoFar) ? c : bestSoFar))
+    result.push({ role, recommendedSource: best.hiringSource, avgTimeToFillDays: best.avgTimeToFillDays, declineRate: best.declineRate, alternativesConsidered: candidates.length })
+  }
+  return result.sort((a, b) => a.role.localeCompare(b.role))
+}

@@ -3,7 +3,7 @@
 // this actually means" headline a human diagnosing the data would say out loud, computed fresh
 // from whatever the current filter/period shows — never a static string.
 
-import type { SourceRoleBottleneck, PipelineStageBottleneck, SourceDeclineRate } from './ta-metrics'
+import type { SourceRoleBottleneck, PipelineStageBottleneck, SourceDeclineRate, RequisitionRiskScore, RecommendedSource } from './ta-metrics'
 
 // Below this ratio, the worst entry isn't meaningfully different from the norm — a flat "nothing
 // stands out" headline is more honest than manufacturing a finding out of ordinary variance.
@@ -51,4 +51,28 @@ export function declineRateHeadline(declineRates: SourceDeclineRate[], overallDe
     return `No Hiring Source shows a meaningfully elevated decline rate — the highest, ${worst.hiringSource}, is close to your overall rate of ${(overallDeclineRate * 100).toFixed(0)}%.`
   }
   return `${worst.hiringSource} has the highest decline rate at ${((worst.declineRate ?? 0) * 100).toFixed(0)}% — ${r.toFixed(1)}x your overall rate of ${(overallDeclineRate * 100).toFixed(0)}%. Candidates sourced this way are declining offers notably more often than average.`
+}
+
+export function requisitionRiskHeadline(scores: RequisitionRiskScore[]): string {
+  if (scores.length === 0) return 'No open (Pending) requisitions to score right now.'
+  const atRisk = scores.filter((s) => s.risk === 'at-risk')
+  const trendingLate = scores.filter((s) => s.risk === 'trending-late')
+  if (atRisk.length === 0 && trendingLate.length === 0) {
+    return `All ${scores.length} open requisition${scores.length === 1 ? '' : 's'} ${scores.length === 1 ? 'is' : 'are'} tracking close to the historical pace for their role and source — nothing flagged as at risk right now.`
+  }
+  if (atRisk.length > 0) {
+    const worst = atRisk[0]
+    return `${atRisk.length} of ${scores.length} open requisition${scores.length === 1 ? '' : 's'} ${atRisk.length === 1 ? 'is' : 'are'} at risk of missing their expected fill date — ${worst.candidateName} (${worst.role}, ${worst.bu}) has been open ${worst.daysElapsed.toFixed(0)} days against a typical ${worst.expectedDays?.toFixed(0) ?? '—'} for that role/source. Worth escalating before they slip further.`
+  }
+  const worst = trendingLate[0]
+  return `${trendingLate.length} of ${scores.length} open requisition${scores.length === 1 ? '' : 's'} ${trendingLate.length === 1 ? 'is' : 'are'} trending late — none critical yet, but ${worst.candidateName} (${worst.role}) is already past the typical pace and worth a check-in.`
+}
+
+export function recommendedSourceHeadline(recommendations: RecommendedSource[]): string {
+  if (recommendations.length === 0) {
+    return 'Not enough roles with 2+ Hiring Sources tried, and 2+ hires per source, to compare sources against each other yet.'
+  }
+  const top = recommendations[0]
+  const declineText = top.declineRate == null ? 'no decline data yet' : `a ${(top.declineRate * 100).toFixed(0)}% decline rate`
+  return `${recommendations.length} role${recommendations.length === 1 ? '' : 's'} now ${recommendations.length === 1 ? 'has' : 'have'} enough history to compare sources. For ${top.role}, ${top.recommendedSource} is the best-performing source tried so far — ${(top.avgTimeToFillDays / 7).toFixed(1)} weeks to fill on average with ${declineText}, out of ${top.alternativesConsidered} sources compared.`
 }
