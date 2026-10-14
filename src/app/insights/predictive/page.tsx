@@ -107,7 +107,7 @@ export default function LdPredictiveInsightsPage() {
 
         {tab === 'budget' && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Projects each business unit's full-year spend from its spend-to-date and months elapsed, flagging overrun risk before it actually happens — not just after.</p>
+            <p className="text-xs text-slate-500">Projects each business unit&apos;s full-year spend from its spend-to-date and months elapsed, flagging overrun risk before it actually happens — not just after.</p>
             <NarrativeInsight title="Prediction" insights={[budgetRiskHeadline(data.budgetRisks)]} />
             <DataTable
               columns={[
@@ -132,7 +132,7 @@ export default function LdPredictiveInsightsPage() {
 
         {tab === 'hours' && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Staff currently below the training-hours pace needed to hit the annual target — flagged while there's still time to act, not discovered at year end.</p>
+            <p className="text-xs text-slate-500">Staff currently below the training-hours pace needed to hit the annual target — flagged while there&apos;s still time to act, not discovered at year end.</p>
             <NarrativeInsight title="Prediction" insights={[hoursComplianceHeadline(data.hoursRisks, data.totalStaffWithHours)]} />
             <DataTable
               columns={[
