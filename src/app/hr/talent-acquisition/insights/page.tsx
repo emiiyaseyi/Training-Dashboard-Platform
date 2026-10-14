@@ -7,7 +7,8 @@ import { TaSampleDataBanner, TaConnectionErrorBanner } from '@/components/hr/ta/
 import { getTaDashboardData, hasTaCredentials } from '@/lib/ta-sheets'
 import { parseFilters, distinctRequisitionYears, type SearchParams } from '@/lib/ta-filters'
 import { formatTaCurrency } from '@/lib/ta-format'
-import { applyFilters, sourceRoleBottlenecks, pipelineStageBottlenecks, declinedRateBySource } from '@/lib/ta-metrics'
+import { applyFilters, sourceRoleBottlenecks, pipelineStageBottlenecks, declinedRateBySource, averageTimeToFillDays, declinedRate } from '@/lib/ta-metrics'
+import { timeToFillHeadline, pipelineStageHeadline, declineRateHeadline } from '@/lib/ta-insights-narrative'
 
 // Diagnostic layer for Talent Acquisition — the first of four stages (Descriptive -> Diagnostic
 // -> Predictive -> Prescriptive) this unit is being walked through. Deliberately a separate tab
@@ -29,6 +30,14 @@ export default async function TalentAcquisitionInsightsPage({ searchParams }: { 
   const bottlenecks = sourceRoleBottlenecks(records).slice(0, 10)
   const stageBottlenecks = pipelineStageBottlenecks(pipeline, pipelineStages)
   const declineRates = declinedRateBySource(records)
+
+  // Baselines each headline compares its worst finding against — computed from the SAME filtered
+  // record set as the tables above, so the sentence always matches what's actually on screen.
+  const overallAvgFillDays = averageTimeToFillDays(records)
+  const overallDeclineRate = declinedRate(records)
+  const timeToFillText = timeToFillHeadline(bottlenecks, overallAvgFillDays)
+  const pipelineStageText = pipelineStageHeadline(stageBottlenecks)
+  const declineRateText = declineRateHeadline(declineRates, overallDeclineRate)
 
   return (
     <div>
@@ -53,7 +62,8 @@ export default async function TalentAcquisitionInsightsPage({ searchParams }: { 
             <Clock className="w-4 h-4 text-meristem-700" />
             <p className="text-sm font-bold text-slate-800">Time to Fill &amp; Cost Bottlenecks</p>
           </div>
-          <p className="text-xs text-slate-500 mb-4">A blended &quot;Average Time to Fill&quot; hides which specific Hiring Source + Role combination is actually slow. Ranked worst-first; combinations with fewer than 2 hires are excluded as too thin a sample to trust.</p>
+          <p className="text-xs text-slate-500 mb-3">A blended &quot;Average Time to Fill&quot; hides which specific Hiring Source + Role combination is actually slow. Ranked worst-first; combinations with fewer than 2 hires are excluded as too thin a sample to trust.</p>
+          <p className="text-sm text-slate-800 bg-meristem-50 border border-meristem-100 rounded-xl px-3 py-2.5 mb-4">{timeToFillText}</p>
           {bottlenecks.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">No hiring-source + role combination has enough hires in this period/filter to rank.</p>
           ) : (
@@ -89,7 +99,8 @@ export default async function TalentAcquisitionInsightsPage({ searchParams }: { 
             <GitBranch className="w-4 h-4 text-meristem-700" />
             <p className="text-sm font-bold text-slate-800">Pipeline Stage Bottlenecks</p>
           </div>
-          <p className="text-xs text-slate-500 mb-4">Where open requisitions are stuck RIGHT NOW, aggregated across every candidate by current stage — not just that some are aging, but which specific stage in the process is the real chokepoint.</p>
+          <p className="text-xs text-slate-500 mb-3">Where open requisitions are stuck RIGHT NOW, aggregated across every candidate by current stage — not just that some are aging, but which specific stage in the process is the real chokepoint.</p>
+          <p className="text-sm text-slate-800 bg-meristem-50 border border-meristem-100 rounded-xl px-3 py-2.5 mb-4">{pipelineStageText}</p>
           {stageBottlenecks.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">No open pipeline candidates in this period/filter.</p>
           ) : (
@@ -121,7 +132,8 @@ export default async function TalentAcquisitionInsightsPage({ searchParams }: { 
             <XCircle className="w-4 h-4 text-meristem-700" />
             <p className="text-sm font-bold text-slate-800">Decline Rate by Hiring Source</p>
           </div>
-          <p className="text-xs text-slate-500 mb-4">A source that looks cheap or fast can still be producing weak-fit candidates if its decline rate is high — invisible in a single blended acceptance rate across all sources.</p>
+          <p className="text-xs text-slate-500 mb-3">A source that looks cheap or fast can still be producing weak-fit candidates if its decline rate is high — invisible in a single blended acceptance rate across all sources.</p>
+          <p className="text-sm text-slate-800 bg-meristem-50 border border-meristem-100 rounded-xl px-3 py-2.5 mb-4">{declineRateText}</p>
           {declineRates.length === 0 ? (
             <p className="text-sm text-slate-400 py-6 text-center">No resolved offers (Accepted/Declined) with a Hiring Source in this period/filter.</p>
           ) : (
