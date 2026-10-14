@@ -544,3 +544,98 @@ export function averageCostPerConversion(conversions: ConversionRecord[]): numbe
 export function conversionDropOffReasons(notConverted: NotConvertedRecord[]): GroupedCount[] {
   return countByKey(notConverted, (r) => r.reason)
 }
+
+// ---------- Diagnostic Insights ----------
+// The point of this section isn't another "what happened" number — it's finding WHICH specific
+// combination of factors is actually driving a blended average, which a single top-level metric
+// (like the Executive Summary's overall Average Time to Fill) hides by design.
+
+export interface SourceRoleBottleneck {
+  hiringSource: string
+  role: string
+  avgTimeToFillDays: number
+  avgCost: number
+  count: number
+}
+
+// Combinations with fewer than this many hires are excluded — too thin a sample to be a real
+// signal rather than noise (one unusually slow hire skewing an "average" of one).
+const MIN_BOTTLENECK_SAMPLE = 2
+
+/** Ranks real (Hiring Source, Role) combinations by how slow they are to fill, worst first —
+ * "hiring is slow" is rarely true evenly across the board; this finds the specific pairing
+ * actually dragging the overall average down. */
+export function sourceRoleBottlenecks(records: HireRecord[]): SourceRoleBottleneck[] {
+  const map = new Map<string, { hiringSource: string; role: string; days: number[]; costs: number[] }>()
+  for (const r of hires(records)) {
+    if (!r.hiringSource || !r.role) continue
+    const days = timeToFillDays(r)
+    if (days == null) continue
+    const key = `${r.hiringSource}|${r.role}`
+    const entry = map.get(key) ?? { hiringSource: r.hiringSource, role: r.role, days: [], costs: [] }
+    entry.days.push(days)
+    entry.costs.push(computedTotalCost(r))
+    map.set(key, entry)
+  }
+  return [...map.values()]
+    .filter((e) => e.days.length >= MIN_BOTTLENECK_SAMPLE)
+    .map((e) => ({
+      hiringSource: e.hiringSource,
+      role: e.role,
+      avgTimeToFillDays: avg(e.days) ?? 0,
+      avgCost: avg(e.costs) ?? 0,
+      count: e.days.length,
+    }))
+    .sort((a, b) => b.avgTimeToFillDays - a.avgTimeToFillDays)
+}
+
+export interface PipelineStageBottleneck {
+  stage: string
+  count: number
+  avgDaysElapsed: number
+}
+
+/** Where candidates are actually stuck RIGHT NOW, aggregated across every open requisition by
+ * current pipeline stage — not just "there are N aging requisitions" (Efficiency & Velocity
+ * already shows that), but which specific stage in the process is the real chokepoint. */
+export function pipelineStageBottlenecks(pipeline: PipelineRecord[], stages: string[], asOf: Date = new Date()): PipelineStageBottleneck[] {
+  const byStage = new Map<string, number[]>()
+  for (const r of pipeline) {
+    const daysElapsed = (asOf.getTime() - r.requisitionStartDate.getTime()) / DAY_MS
+    const arr = byStage.get(r.currentStage) ?? []
+    arr.push(daysElapsed)
+    byStage.set(r.currentStage, arr)
+  }
+  return stages
+    .map((stage) => ({ stage, count: (byStage.get(stage) ?? []).length, avgDaysElapsed: avg(byStage.get(stage) ?? []) ?? 0 }))
+    .filter((s) => s.count > 0)
+    .sort((a, b) => b.avgDaysElapsed - a.avgDaysElapsed)
+}
+
+export interface SourceDeclineRate {
+  hiringSource: string
+  declineRate: number | null
+  totalOffers: number
+  declined: number
+}
+
+/** Declined / resolved offers, per Hiring Source — a source that looks cheap or fast can still be
+ * producing weak-fit candidates if its decline rate is high; this is invisible in a blended
+ * acceptance rate across all sources. */
+export function declinedRateBySource(records: HireRecord[]): SourceDeclineRate[] {
+  const bySource = new Map<string, HireRecord[]>()
+  for (const r of records) {
+    if (!r.hiringSource) continue
+    const arr = bySource.get(r.hiringSource) ?? []
+    arr.push(r)
+    bySource.set(r.hiringSource, arr)
+  }
+  return [...bySource.entries()]
+    .map(([hiringSource, recs]) => {
+      const resolved = recs.filter((r) => r.offerStatus !== 'Pending')
+      const declined = resolved.filter((r) => r.offerStatus === 'Declined').length
+      return { hiringSource, declineRate: resolved.length > 0 ? declined / resolved.length : null, totalOffers: resolved.length, declined }
+    })
+    .filter((s) => s.totalOffers > 0)
+    .sort((a, b) => (b.declineRate ?? 0) - (a.declineRate ?? 0))
+}

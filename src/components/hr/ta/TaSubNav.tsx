@@ -10,6 +10,10 @@ const TABS = [
   { href: '/hr/talent-acquisition/efficiency-velocity', label: 'Efficiency & Velocity' },
   { href: '/hr/talent-acquisition/internal-mobility', label: 'Internal Mobility' },
   { href: '/hr/talent-acquisition/conversions', label: 'Conversions' },
+  // Diagnostic/predictive/prescriptive layer — deliberately a separate tab from the descriptive
+  // views above rather than folded into them, so "what happened" and "why/what's next" stay
+  // visually distinct instead of one page trying to be both.
+  { href: '/hr/talent-acquisition/insights', label: 'Insights' },
 ]
 
 /** Sub-navigation between the 4 Talent Acquisition views — ported 1:1 from the source repo's
