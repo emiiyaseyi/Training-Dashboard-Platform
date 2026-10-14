@@ -25,10 +25,11 @@ import {
   Users,
   ArrowLeftRight,
   Target,
+  Brain,
 } from 'lucide-react'
 import { hasAccess, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
-const ANALYTICS_PAGE_COUNT = 8
+const ANALYTICS_PAGE_COUNT = 9
 
 const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
   { href: '/',               label: 'Executive Overview',      icon: LayoutDashboard, page: 'executive-overview' },
@@ -39,6 +40,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/skills-gaps',    label: 'Skills & Competency Gaps', icon: Target,         page: 'skills-gaps' },
   { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
   { href: '/talent-members', label: 'Talent Members',          icon: Award,           page: 'talent-members' },
+  { href: '/insights',       label: 'Insights',                icon: Brain,           page: 'insights' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
   { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
   { href: '/admin/employees', label: 'Employees',              icon: Users,           page: 'admin-settings' },
@@ -78,7 +80,11 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const managementItems = visibleItems.filter((item) => navItems.indexOf(item) >= ANALYTICS_PAGE_COUNT)
 
   const renderLink = ({ href, label, icon: Icon }: (typeof navItems)[number]) => {
-    const active = pathname === href
+    // Exact match for every item except Insights, which fans out into /insights/diagnostic,
+    // /insights/predictive and /insights/prescriptive — a prefix match there, but NOT applied
+    // generally, since several /admin/* items share the '/admin' prefix and would otherwise all
+    // light up together.
+    const active = href === '/insights' ? pathname.startsWith('/insights') : pathname === href
     return (
       <Link
         key={href}

@@ -9,6 +9,10 @@ export const PAGE_KEYS = [
   'talent-members',
   'report-generation',
   'upload-data',
+  // Diagnostic/Predictive/Prescriptive layer on top of the existing descriptive L&D reports above
+  // — one page key covers all three stages (/insights/diagnostic, /insights/predictive,
+  // /insights/prescriptive), same as how one key already covers several TA sub-pages.
+  'insights',
   'admin-settings',
   // HR Dashboard — a separate section (own layout/sidebar, see src/app/hr) sitting alongside the
   // Learning Intelligence pages above, not replacing them. 'hr-summary' gates the cross-unit
@@ -39,6 +43,7 @@ export const PAGE_LABELS: Record<PageKey, string> = {
   'talent-members': 'Talent Members',
   'report-generation': 'Report Generation',
   'upload-data': 'Upload & Data',
+  insights: 'Insights',
   'admin-settings': 'Admin Settings',
   'hr-summary': 'HR Summary',
   'hr-employee-services': 'HR — Employee Services',
@@ -60,6 +65,7 @@ export const PAGE_ROUTES: Record<PageKey, string> = {
   'talent-members': '/talent-members',
   'report-generation': '/reports',
   'upload-data': '/upload',
+  insights: '/insights',
   'admin-settings': '/admin',
   'hr-summary': '/hr',
   'hr-employee-services': '/hr/employee-services',
