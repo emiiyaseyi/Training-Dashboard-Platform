@@ -46,12 +46,53 @@ export interface DuplicateNameGroup {
   candidates: DuplicateNameCandidate[] // [0] is the newest — the suggested "keep this one"
 }
 
+// A staff member whose current email doesn't look like it was built from their own name, using
+// the company's firstnamelastname@domain convention — the exact class of bug that produces
+// swapped-email rows (two people's Email cells accidentally copy-pasted into the wrong rows).
+// suggestedEmail is a best-guess reconstruction (editable before accepting, not auto-applied).
+export interface EmailMismatchRow {
+  id: string
+  staffId: string
+  name: string
+  currentEmail: string
+  suggestedEmail: string
+  businessUnit: string
+  // If the CURRENT (wrong-looking) email actually matches some OTHER active staff member's own
+  // name pattern, that's a strong signal of exactly this kind of two-person swap — surfaced so
+  // the admin doesn't have to go hunt for who it really belongs to.
+  possibleOwner: { staffId: string; name: string } | null
+}
+
 export interface StaffQualityAudit {
   rows: StaffQualityRow[]
   flaggedCount: number
   totalStaff: number
   duplicateIdGroups: DuplicateIdGroup[]
   duplicateNameGroups: DuplicateNameGroup[]
+  emailMismatches: EmailMismatchRow[]
+}
+
+// letters-only, lowercased — names never legitimately contain digits, so digits are never part of
+// the "expected" pattern (but ARE kept when reading the real email, see actualLocalPart, so a
+// deliberate numeric disambiguation suffix like "johnsmith2@" isn't flagged as a mismatch).
+function cleanNamePart(s: string): string {
+  return s.toLowerCase().replace(/[^a-z]/g, '')
+}
+
+function expectedLocalPart(firstName: string, lastName: string): string {
+  return `${cleanNamePart(firstName)}${cleanNamePart(lastName)}`
+}
+
+function actualLocalPart(email: string): string {
+  return email.trim().toLowerCase().split('@')[0].replace(/[^a-z0-9]/g, '')
+}
+
+// A numeric suffix (name collision disambiguation) is tolerated — only flagged when the email's
+// local part doesn't even START with the person's own expected firstname+lastname.
+function emailMatchesNamePattern(email: string, firstName: string, lastName: string): boolean {
+  const expected = expectedLocalPart(firstName, lastName)
+  if (!expected) return true // nothing to check a name-less record against — don't flag
+  return actualLocalPart(email).startsWith(expected)
 }
 
 // Roster uploads accumulate over time (same "most recent row per Staff ID wins" convention as
@@ -71,6 +112,10 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
   const duplicateIdGroups: DuplicateIdGroup[] = []
   const emailSeen = new Map<string, string[]>() // lowercased email -> staffIds
   const nameSeen = new Map<string, DuplicateNameCandidate[]>() // lowercased full name -> one candidate per distinct Staff ID
+  // Active staff only, carried separately from `rows` (which includes inactive/exited staff too,
+  // just without issues pushed for them) — the email/name pattern check below only makes sense
+  // for current staff, same as every other check in this function.
+  const activeRows: { id: string; staffId: string; name: string; firstName: string; lastName: string; email: string; businessUnit: string }[] = []
 
   for (const [key, list] of groups) {
     const latest = list[list.length - 1]
@@ -88,6 +133,13 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
       if (!latest.businessUnit.trim()) issues.push('Missing Business Unit')
       if (latest.lineManagerStaffId && normalizeStaffIdKey(latest.lineManagerStaffId) === key) {
         issues.push('Line manager is set to self')
+      }
+      if (latest.firstName.trim() && latest.lastName.trim() && latest.email?.trim()) {
+        activeRows.push({
+          id: latest.id, staffId: latest.staffId, name,
+          firstName: latest.firstName, lastName: latest.lastName,
+          email: latest.email, businessUnit: latest.businessUnit,
+        })
       }
     }
 
@@ -168,6 +220,33 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
       return { name, candidates: byCreatedAtDesc }
     })
 
+  // Email/name pattern mismatches — built from activeRows (active staff with both a usable name
+  // and an email already present; missing email is its own separate issue above). The "possible
+  // owner" cross-match needs every active person's expected pattern computed first, hence the
+  // separate map before the flagging loop.
+  const expectedPatternOwners = new Map<string, { staffId: string; name: string }>()
+  for (const r of activeRows) {
+    const pattern = expectedLocalPart(r.firstName, r.lastName)
+    if (pattern) expectedPatternOwners.set(pattern, { staffId: r.staffId, name: r.name })
+  }
+
+  const emailMismatches: EmailMismatchRow[] = []
+  for (const r of activeRows) {
+    if (emailMatchesNamePattern(r.email, r.firstName, r.lastName)) continue
+
+    const domain = r.email.includes('@') ? r.email.split('@')[1] : 'meristemng.com'
+    const possible = expectedPatternOwners.get(actualLocalPart(r.email))
+    emailMismatches.push({
+      id: r.id,
+      staffId: r.staffId,
+      name: r.name,
+      currentEmail: r.email,
+      suggestedEmail: `${expectedLocalPart(r.firstName, r.lastName)}@${domain}`,
+      businessUnit: r.businessUnit,
+      possibleOwner: possible && possible.staffId !== r.staffId ? possible : null,
+    })
+  }
+
   const flagged = rows.filter((r) => r.issues.length > 0)
 
   return {
@@ -176,6 +255,7 @@ export async function auditStaffQuality(): Promise<StaffQualityAudit> {
     totalStaff: rows.length,
     duplicateIdGroups,
     duplicateNameGroups,
+    emailMismatches,
   }
 }
 

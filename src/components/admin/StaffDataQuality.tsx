@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search, DownloadCloud } from 'lucide-react'
+import { Users, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Sparkles, X, Copy, Search, DownloadCloud, Mail, XCircle } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
 
@@ -43,12 +43,23 @@ interface DuplicateNameGroup {
   candidates: DuplicateNameCandidate[] // [0] = newest, the suggested "keep"
 }
 
+interface EmailMismatchRow {
+  id: string
+  staffId: string
+  name: string
+  currentEmail: string
+  suggestedEmail: string
+  businessUnit: string
+  possibleOwner: { staffId: string; name: string } | null
+}
+
 interface Audit {
   rows: StaffQualityRow[]
   flaggedCount: number
   totalStaff: number
   duplicateIdGroups: DuplicateIdGroup[]
   duplicateNameGroups: DuplicateNameGroup[]
+  emailMismatches: EmailMismatchRow[]
 }
 
 interface RosterStaff {
@@ -103,6 +114,15 @@ export function StaffDataQuality() {
   const [mergingKey, setMergingKey] = useState<string | null>(null)
   const [mergingAll, setMergingAll] = useState(false)
   const [mergeResult, setMergeResult] = useState<{ merged: number; deletedRosterRows: number; repointedRecords: number } | null>(null)
+
+  // Email/Name Mismatch review — edited suggestions and dismissed rows live only in this
+  // component's state (not persisted anywhere), so a dismissed row comes back on a real page
+  // reload since nothing changed about the underlying record — there's no "ignore" column in the
+  // schema for this, same as every other check in this panel.
+  const [mismatchEdits, setMismatchEdits] = useState<Record<string, string>>({})
+  const [dismissedMismatchIds, setDismissedMismatchIds] = useState<Set<string>>(new Set())
+  const [acceptingMismatches, setAcceptingMismatches] = useState(false)
+  const [mismatchResult, setMismatchResult] = useState<{ accepted: number; sheetUpdated: number; sheetFailed: number; failures: string[] } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -186,6 +206,51 @@ export function StaffDataQuality() {
     }
   }
 
+  const emailForMismatch = (r: EmailMismatchRow) => mismatchEdits[r.id] ?? r.suggestedEmail
+
+  const acceptMismatches = async (targets: EmailMismatchRow[]) => {
+    if (targets.length === 0) return
+    setAcceptingMismatches(true)
+    setMismatchResult(null)
+    try {
+      const items = targets.map((r) => ({ id: r.id, staffId: r.staffId, email: emailForMismatch(r) }))
+      const res = await fetch('/api/admin/staff-quality/email-mismatches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && Array.isArray(data.results)) {
+        type Result = { id: string; success: boolean; error?: string; sheetSync: { attempted: boolean; success: boolean; reason?: string } }
+        const results = data.results as Result[]
+        const byId = new Map(targets.map((r) => [r.id, r]))
+        const failures = results
+          .filter((r) => r.success && r.sheetSync.attempted && !r.sheetSync.success)
+          .map((r) => `${byId.get(r.id)?.name || r.id}: ${r.sheetSync.reason || 'sheet not updated'}`)
+        setMismatchResult({
+          accepted: results.filter((r) => r.success).length,
+          sheetUpdated: results.filter((r) => r.success && r.sheetSync.success).length,
+          sheetFailed: results.filter((r) => r.success && r.sheetSync.attempted && !r.sheetSync.success).length,
+          failures,
+        })
+        setMismatchEdits((prev) => {
+          const next = { ...prev }
+          for (const r of targets) delete next[r.id]
+          return next
+        })
+        await load()
+      } else {
+        alert(data.error || 'Failed to accept correction(s).')
+      }
+    } finally {
+      setAcceptingMismatches(false)
+    }
+  }
+
+  const dismissMismatch = (id: string) => {
+    setDismissedMismatchIds((prev) => new Set(prev).add(id))
+  }
+
   const backfillFromSheet = async () => {
     setBackfilling(true)
     setBackfillResult(null)
@@ -253,6 +318,7 @@ export function StaffDataQuality() {
 
   const currentManager = draft ? roster.find((r) => r.staffId.toUpperCase() === draft.lineManagerStaffId.toUpperCase()) : undefined
 
+  const visibleMismatches = (audit?.emailMismatches || []).filter((m) => !dismissedMismatchIds.has(m.id))
   const duplicateShadowedTotal = audit?.duplicateIdGroups.reduce((s, g) => s + g.shadowed.length, 0) || 0
   const q = rowQuery.trim().toLowerCase()
   const filteredRows = audit ? (q ? audit.rows.filter((r) => r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q)) : audit.rows) : []
@@ -263,7 +329,7 @@ export function StaffDataQuality() {
     <SectionCard
       icon={Users}
       title="Staff Data Quality"
-      description="Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs and names. Click any record to fix it."
+      description="Flags missing Staff ID, name, email, or Business Unit, plus duplicate Staff IDs/names and emails that don't match the staff member's own name. Click any record to fix it."
       headerActions={
         <>
           <button
@@ -451,6 +517,92 @@ export function StaffDataQuality() {
                         </tr>
                       )
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {visibleMismatches.length > 0 && (
+            <div className="border border-sky-200 bg-sky-50 rounded-lg p-3">
+              <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                <p className="text-xs font-medium text-sky-800 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" /> Email doesn&apos;t match the staff member&apos;s own name — company convention is firstnamelastname@domain
+                </p>
+                <button
+                  onClick={() => acceptMismatches(visibleMismatches)}
+                  disabled={acceptingMismatches}
+                  className="flex items-center gap-1.5 text-xs font-medium text-sky-800 border border-sky-300 rounded-lg px-2.5 py-1 hover:bg-sky-100 disabled:opacity-50 shrink-0"
+                >
+                  {acceptingMismatches ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Accept All ({visibleMismatches.length})
+                </button>
+              </div>
+
+              {mismatchResult && (
+                <div className="text-xs bg-white border border-sky-200 rounded-lg px-3 py-2 mb-2 space-y-1">
+                  <p className="text-emerald-700">
+                    Accepted {mismatchResult.accepted} correction(s) — {mismatchResult.sheetUpdated} also written to the Comprehensive Staff List sheet.
+                  </p>
+                  {mismatchResult.sheetFailed > 0 && (
+                    <div className="text-amber-700">
+                      <p>{mismatchResult.sheetFailed} saved to the database but NOT to the sheet:</p>
+                      <ul className="pl-3 list-disc">
+                        {mismatchResult.failures.map((f, i) => <li key={i}>{f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-sky-700 border-b border-sky-200">
+                      <th className="text-left font-medium py-1.5 pr-3">Staff</th>
+                      <th className="text-left font-medium py-1.5 pr-3">Current Email</th>
+                      <th className="text-left font-medium py-1.5 pr-3">Corrected Email</th>
+                      <th className="py-1.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleMismatches.map((m) => (
+                      <tr key={m.id} className="border-b border-sky-100 align-top">
+                        <td className="py-2 pr-3 text-sky-900 font-medium">
+                          {m.name}
+                          <span className="block text-sky-500 font-normal">{m.staffId} · {m.businessUnit}</span>
+                        </td>
+                        <td className="py-2 pr-3 text-sky-700">
+                          {m.currentEmail}
+                          {m.possibleOwner && (
+                            <span className="block text-amber-700 mt-0.5">looks like it may belong to {m.possibleOwner.name} ({m.possibleOwner.staffId})</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <input
+                            value={emailForMismatch(m)}
+                            onChange={(e) => setMismatchEdits((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                            className="w-full border border-sky-300 rounded-md px-2 py-1 text-xs"
+                          />
+                        </td>
+                        <td className="py-2 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => acceptMismatches([m])}
+                            disabled={acceptingMismatches}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-sky-600 rounded-md px-2 py-1 hover:bg-sky-700 disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Accept
+                          </button>
+                          <button
+                            onClick={() => dismissMismatch(m.id)}
+                            disabled={acceptingMismatches}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-600 rounded-md px-2 py-1 hover:bg-sky-100 disabled:opacity-50 ml-1"
+                          >
+                            <XCircle className="w-3 h-3" /> Reject
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
