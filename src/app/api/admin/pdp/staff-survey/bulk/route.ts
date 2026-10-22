@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
 import { getAppBaseUrl } from '@/lib/app-url'
-import { buildPDPStaffEmail } from '@/lib/pdp-email'
+import { firstNameOf, formatDeadline, renderPDPEmail } from '@/lib/pdp-email'
+import { resolvePDPEmailTemplate } from '@/lib/pdp-email-templates'
 
 interface BulkBody { action: 'delete' | 'resend'; ids: string[] }
 
@@ -33,7 +34,10 @@ export async function POST(req: NextRequest) {
     const skipped: { name: string; reason: string }[] = []
     for (const s of surveys) {
       if (!s.email) { skipped.push({ name: s.staffName, reason: 'No email address on file.' }); continue }
-      const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, deadline: new Date(Date.now() + s.cycle.expiryDays * 86400000) })
+      const template = await resolvePDPEmailTemplate(s.cycleId, 'staffSurvey')
+      const { subject, html } = renderPDPEmail('staffSurvey', template, {
+        firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(new Date(Date.now() + s.cycle.expiryDays * 86400000)),
+      }, `${baseUrl}/survey/pdp/${s.surveyToken}`)
       try {
         await sendMail({ to: s.email, subject, html })
         await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { sentAt: new Date(), reminderAt: new Date() } })

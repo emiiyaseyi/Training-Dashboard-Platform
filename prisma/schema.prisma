@@ -1027,6 +1027,27 @@ model PDPCycle {
   sections         PDPSection[]
   questions        PDPQuestion[]
   reviews          PDPReview[]
+  emailTemplates   PDPEmailTemplate[]
+}
+
+// Admin-editable copy for each of the three PDP email kinds, per cycle — no hardcoded subject/body
+// in pdp-email.ts beyond a built-in DEFAULT used when no row exists yet for a (cycle, kind) pair
+// (so existing cycles keep working unchanged until an admin actually customizes one). `body` is
+// plain paragraphs separated by a blank line, with {{token}} placeholders substituted at send time
+// (see PDP_EMAIL_TOKENS in pdp-email.ts for the token set each kind supports).
+model PDPEmailTemplate {
+  id               String   @id @default(cuid())
+  cycleId          String
+  kind             String   // 'staffSurvey' | 'managerValidation' | 'managerTeam'
+  subject          String
+  body             String
+  buttonLabel      String
+  showFallbackLink Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+
+  cycle PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, kind])
 }
 
 // Admin-configurable, ordered sections of the PDP form — seeded with Meristem's standard 2027 PDP
@@ -1134,6 +1155,13 @@ model PDPStaffSurvey {
   sentAt          DateTime?
   respondedAt     DateTime?
   reminderAt      DateTime?
+  // Snapshot of whether this launch batch requires line-manager validation, captured from the
+  // Launch Track A panel at send time — NOT read live from PDPCycle.requireManagerValidation, so
+  // relaunching the same cycle later with the toggle flipped doesn't retroactively change what
+  // already-sent surveys do (this is what previously looked like "some people have it ticked, some
+  // don't" — that's correct, expected behaviour once it's a per-launch snapshot rather than a
+  // single cycle-wide value that can drift between launches).
+  requireManagerValidation Boolean @default(true)
 
   cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   validations PDPManagerValidation[]
@@ -1152,7 +1180,12 @@ model PDPManagerValidation {
   managerName    String?
   email          String?
   surveyToken    String    @unique @default(cuid())
-  answers        String?   // JSON
+  answers        String?   // JSON: the manager's own answers to the validation (Yes/Partly/No etc.) question set
+  // JSON PDPFormAnswers: the manager's edited copy of the STAFF's submitted answers (capabilities,
+  // development needs, etc.), prefilled from the staff submission the first time this is loaded.
+  // Diffed against the staff's original `PDPStaffSurvey.answers` at render time (not stored as a
+  // separate log) so the validate page can show what the manager changed.
+  editedAnswers  String?
   sentAt         DateTime?
   respondedAt    DateTime?
   reminderAt     DateTime?

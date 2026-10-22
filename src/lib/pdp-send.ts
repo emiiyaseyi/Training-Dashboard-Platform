@@ -6,7 +6,10 @@ import { loadRosterDirectory } from './staff-directory'
 import { normalizeStaffIdKey } from './staff-id'
 import { buildPDPPrefillIndex, getPDPPrefillForStaff } from './pdp-prefill'
 import { getAllManagerStaffIds, getTeamMembersForManager, filterStaffByAudience, type PDPAudience } from './pdp-team'
-import { buildPDPStaffEmail, buildPDPManagerValidationEmail, buildPDPManagerTeamEmail } from './pdp-email'
+import { firstNameOf, formatDeadline, renderPDPEmail } from './pdp-email'
+import { resolvePDPEmailTemplate } from './pdp-email-templates'
+import { resolveRespondentSections } from './pdp-form'
+import type { PDPFormAnswers } from './pdp-validate'
 
 export interface PDPLaunchResult {
   created: number
@@ -26,7 +29,10 @@ function deadlineFromNow(expiryDays: number): Date {
 // the shared index, not a query per person — see pdp-prefill.ts) and emailed. Idempotent: skips
 // anyone who already has a row for this cycle, same "createMany only for new rows" convention
 // launchCustomSurvey uses, so retrying after a partial failure never re-creates/re-emails someone.
-export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience = { type: 'all' }): Promise<PDPLaunchResult> {
+// `requireManagerValidation` is captured onto each new row as a snapshot of what the Launch panel
+// had set at the moment of THIS launch — not re-read from the cycle later, so earlier and later
+// launches of the same cycle can legitimately carry different settings.
+export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience = { type: 'all' }, requireManagerValidation = true): Promise<PDPLaunchResult> {
   const directory = await loadRosterDirectory()
   const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
   const active = await filterStaffByAudience(activeAll, audience)
@@ -47,6 +53,7 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
         department: null,
         role: s.role,
         prefillSnapshot: JSON.stringify(getPDPPrefillForStaff(prefillIndex, s.staffId)),
+        requireManagerValidation,
       })),
     })
   }
@@ -58,13 +65,16 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
   }
 
   const baseUrl = getAppBaseUrl()
+  const template = await resolvePDPEmailTemplate(cycle.id, 'staffSurvey')
   const unsent = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id, sentAt: null } })
   for (const survey of unsent) {
     if (!survey.email) {
       result.skipped.push({ name: survey.staffName, reason: 'No email address on file.' })
       continue
     }
-    const { subject, html } = buildPDPStaffEmail({ cycleTitle: cycle.title, recipientName: survey.staffName, formUrl: `${baseUrl}/survey/pdp/${survey.surveyToken}`, deadline: deadlineFromNow(cycle.expiryDays) })
+    const { subject, html } = renderPDPEmail('staffSurvey', template, {
+      firstName: firstNameOf(survey.staffName), cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html })
       await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
@@ -76,13 +86,18 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
   return result
 }
 
-// Triggered once a PDPStaffSurvey is submitted (see the submit route) — one PDPManagerValidation
-// row+email per line manager found for this staff member (their own lineManagerStaffId, plus any
-// PDPManagerOverride second manager for this cycle), so a dual-reporting staff member's plan gets
-// two independent validation links, neither overwriting the other.
-export async function sendPDPManagerValidation(staffSurveyId: string): Promise<void> {
+// Triggered once a PDPStaffSurvey is submitted (see the submit route), and also callable directly
+// by the admin panel's "Send/Resend Manager Validation Emails" bulk action for anyone who missed
+// their auto-trigger. One PDPManagerValidation row+email per line manager found for this staff
+// member (their own lineManagerStaffId, plus any PDPManagerOverride second manager for this
+// cycle), so a dual-reporting staff member's plan gets two independent validation links, neither
+// overwriting the other. A validation row that already exists but never actually sent (a prior
+// send attempt failed) is retried here rather than skipped, so this is safe — and useful — to call
+// again for the same staffSurveyId.
+export async function sendPDPManagerValidation(staffSurveyId: string): Promise<{ sent: number; skipped: { name: string; reason: string }[] }> {
+  const result = { sent: 0, skipped: [] as { name: string; reason: string }[] }
   const survey = await prisma.pDPStaffSurvey.findUnique({ where: { id: staffSurveyId } })
-  if (!survey) return
+  if (!survey) return result
 
   const directory = await loadRosterDirectory()
   const staff = directory.get(normalizeStaffIdKey(survey.staffId))
@@ -90,20 +105,27 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<v
   if (staff?.lineManagerStaffId) managerIds.add(normalizeStaffIdKey(staff.lineManagerStaffId))
   const overrides = await prisma.pDPManagerOverride.findMany({ where: { cycleId: survey.cycleId, staffId: survey.staffId } })
   for (const o of overrides) managerIds.add(normalizeStaffIdKey(o.secondManagerStaffId))
-  if (managerIds.size === 0) return
+  if (managerIds.size === 0) return result
 
-  const existing = await prisma.pDPManagerValidation.findMany({ where: { staffSurveyId }, select: { managerStaffId: true } })
-  const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.managerStaffId)))
+  const existing = await prisma.pDPManagerValidation.findMany({ where: { staffSurveyId } })
+  const existingByKey = new Map(existing.map((r) => [normalizeStaffIdKey(r.managerStaffId), r]))
 
   const cycle = await prisma.pDPCycle.findUnique({ where: { id: survey.cycleId } })
-  if (!cycle) return
+  if (!cycle) return result
   const canSend = await hasSmtpCredentials()
+  if (!canSend) {
+    result.skipped.push({ name: survey.staffName, reason: 'SMTP is not configured yet.' })
+    return result
+  }
   const baseUrl = getAppBaseUrl()
+  const template = await resolvePDPEmailTemplate(cycle.id, 'managerValidation')
 
   for (const managerKey of managerIds) {
-    if (existingKeys.has(managerKey)) continue
+    const alreadySent = existingByKey.get(managerKey)
+    if (alreadySent?.sentAt) continue // a real send already went out for this manager — never re-send silently here
+
     const manager = directory.get(managerKey)
-    const validation = await prisma.pDPManagerValidation.create({
+    const validation = alreadySent ?? await prisma.pDPManagerValidation.create({
       data: {
         staffSurveyId,
         managerStaffId: manager?.staffId ?? managerKey,
@@ -111,23 +133,22 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<v
         email: manager?.email ?? null,
       },
     })
-    if (!canSend || !manager?.email) continue
-    const { subject, html } = buildPDPManagerValidationEmail({
-      cycleTitle: cycle.title,
-      staffName: survey.staffName,
-      managerName: manager.name,
-      formUrl: `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`,
-      deadline: deadlineFromNow(cycle.expiryDays),
-    })
+    if (!manager?.email) {
+      result.skipped.push({ name: manager?.name || survey.staffName, reason: 'No email address on file for this manager.' })
+      continue
+    }
+    const { subject, html } = renderPDPEmail('managerValidation', template, {
+      firstName: firstNameOf(manager.name), staffName: survey.staffName, cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`)
     try {
       await sendMail({ to: manager.email, subject, html })
       await prisma.pDPManagerValidation.update({ where: { id: validation.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
-    } catch {
-      // Left unsent — the admin panel surfaces rows with no sentAt as "not sent", and a later
-      // manual resend / the daily cron can pick it up; a validation row with no email on file
-      // behaves the same way (visible, never silently dropped).
+      result.sent++
+    } catch (err) {
+      result.skipped.push({ name: manager.name, reason: err instanceof Error ? err.message : 'Send failed.' })
     }
   }
+  return result
 }
 
 // Track B — one PDPManagerSurvey per distinct manager, with one PDPManagerTeamMemberEntry per
@@ -181,13 +202,16 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
   }
 
   const baseUrl = getAppBaseUrl()
+  const template = await resolvePDPEmailTemplate(cycle.id, 'managerTeam')
   const unsent = await prisma.pDPManagerSurvey.findMany({ where: { cycleId: cycle.id, sentAt: null } })
   for (const survey of unsent) {
     if (!survey.email) {
       result.skipped.push({ name: survey.managerName, reason: 'No email address on file.' })
       continue
     }
-    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: cycle.title, managerName: survey.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`, deadline: deadlineFromNow(cycle.expiryDays) })
+    const { subject, html } = renderPDPEmail('managerTeam', template, {
+      firstName: firstNameOf(survey.managerName), cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html })
       await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
@@ -212,6 +236,12 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
   let sent = 0
   const baseUrl = getAppBaseUrl()
   const isExpired = (sentAt: Date, expiryDays: number) => now - sentAt.getTime() >= expiryDays * DAY_MS
+  const templateCache = new Map<string, Awaited<ReturnType<typeof resolvePDPEmailTemplate>>>()
+  const getTemplate = async (cycleId: string, kind: Parameters<typeof resolvePDPEmailTemplate>[1]) => {
+    const key = `${cycleId}:${kind}`
+    if (!templateCache.has(key)) templateCache.set(key, await resolvePDPEmailTemplate(cycleId, kind))
+    return templateCache.get(key)!
+  }
 
   const staffDue = await prisma.pDPStaffSurvey.findMany({
     where: { sentAt: { not: null }, respondedAt: null, email: { not: null } },
@@ -221,7 +251,10 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (isExpired(s.sentAt!, s.cycle.expiryDays)) continue
     const last = s.reminderAt || s.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
-    const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, deadline: deadlineFromNow(s.cycle.expiryDays), isReminder: true })
+    const template = await getTemplate(s.cycleId, 'staffSurvey')
+    const { subject, html } = renderPDPEmail('staffSurvey', template, {
+      firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(deadlineFromNow(s.cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp/${s.surveyToken}`, true)
     try {
       await sendMail({ to: s.email!, subject, html })
       await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date() } })
@@ -237,10 +270,11 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (isExpired(v.sentAt!, v.staffSurvey.cycle.expiryDays)) continue
     const last = v.reminderAt || v.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
-    const { subject, html } = buildPDPManagerValidationEmail({
-      cycleTitle: v.staffSurvey.cycle.title, staffName: v.staffSurvey.staffName, managerName: v.managerName || 'there',
-      formUrl: `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, deadline: deadlineFromNow(v.staffSurvey.cycle.expiryDays), isReminder: true,
-    })
+    const template = await getTemplate(v.staffSurvey.cycleId, 'managerValidation')
+    const { subject, html } = renderPDPEmail('managerValidation', template, {
+      firstName: firstNameOf(v.managerName || 'there'), staffName: v.staffSurvey.staffName, cycleTitle: v.staffSurvey.cycle.title,
+      deadline: formatDeadline(deadlineFromNow(v.staffSurvey.cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, true)
     try {
       await sendMail({ to: v.email!, subject, html })
       await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { reminderAt: new Date() } })
@@ -256,7 +290,10 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (isExpired(m.sentAt!, m.cycle.expiryDays)) continue
     const last = m.reminderAt || m.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
-    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: m.cycle.title, managerName: m.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, deadline: deadlineFromNow(m.cycle.expiryDays), isReminder: true })
+    const template = await getTemplate(m.cycleId, 'managerTeam')
+    const { subject, html } = renderPDPEmail('managerTeam', template, {
+      firstName: firstNameOf(m.managerName), cycleTitle: m.cycle.title, deadline: formatDeadline(deadlineFromNow(m.cycle.expiryDays)),
+    }, `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, true)
     try {
       await sendMail({ to: m.email!, subject, html })
       await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date() } })
@@ -265,4 +302,67 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
   }
 
   return { sent }
+}
+
+function recapValue(v: string | string[] | undefined): string {
+  if (v == null) return '—'
+  return Array.isArray(v) ? (v.join(', ') || '—') : v
+}
+
+// Flattens a finalized PDPFormAnswers into a simple HTML Q&A table for the completion email —
+// the recipient's actual inbox copy of what was agreed, not a link to click through to (neither
+// the staff member nor, after responding, the manager has a page left to view it on).
+function renderPDPAnswersRecap(sections: Awaited<ReturnType<typeof resolveRespondentSections>>, answers: PDPFormAnswers): string {
+  const rows: string[] = []
+  for (const section of sections) {
+    if (section.key === 'development_needs') {
+      answers.developmentNeeds.forEach((need, i) => {
+        rows.push(`<tr><td colspan="2" style="padding:10px 0 2px 0;font-weight:700;">Development Need ${i + 1}</td></tr>`)
+        for (const q of section.questions) {
+          rows.push(`<tr><td style="padding:2px 12px 2px 0;color:#6B7280;vertical-align:top;">${q.label}</td><td style="padding:2px 0;">${recapValue(need[q.id])}</td></tr>`)
+        }
+      })
+    } else {
+      rows.push(`<tr><td colspan="2" style="padding:10px 0 2px 0;font-weight:700;">${section.title}</td></tr>`)
+      for (const q of section.questions) {
+        rows.push(`<tr><td style="padding:2px 12px 2px 0;color:#6B7280;vertical-align:top;">${q.label}</td><td style="padding:2px 0;">${recapValue(answers.answers[q.id])}</td></tr>`)
+      }
+    }
+  }
+  return `<table style="width:100%;font-size:12px;border-collapse:collapse;">${rows.join('')}</table>`
+}
+
+// Sent once a line manager finalizes their review — a copy of the agreed plan to BOTH the staff
+// member and the manager, so neither needs a live link to see what was actually submitted.
+export async function sendPDPValidationCompleteEmails(validationId: string): Promise<void> {
+  if (!(await hasSmtpCredentials())) return
+  const validation = await prisma.pDPManagerValidation.findUnique({
+    where: { id: validationId },
+    include: { staffSurvey: { include: { cycle: true } } },
+  })
+  if (!validation || !validation.editedAnswers) return
+
+  const editedAnswers = JSON.parse(validation.editedAnswers) as PDPFormAnswers
+  const sections = await resolveRespondentSections(validation.staffSurvey.cycleId)
+  const recap = renderPDPAnswersRecap(sections, editedAnswers)
+  const subject = `${validation.staffSurvey.cycle.title} — Finalized for ${validation.staffSurvey.staffName}`
+  const html = `
+    <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 620px;">
+      <p style="margin:0 0 14px 0;">
+        ${validation.managerName || 'The line manager'} has reviewed and finalized this Personal Development Plan. A copy of the agreed plan is below for your records.
+      </p>
+      ${recap}
+      <p style="margin:14px 0 0 0;color:#6B7280;">Regards,<br/>Learning &amp; Development</p>
+    </div>
+  `
+  // One email, both addressed on it (staff as primary "to", manager cc'd) — so each sees the
+  // other was actually copied, rather than two separate unaware sends.
+  const to = validation.staffSurvey.email
+  const cc = validation.email ? [validation.email] : undefined
+  if (!to && !cc) return
+  try {
+    await sendMail({ to: to || validation.email!, cc: to ? cc : undefined, subject, html })
+  } catch (err) {
+    console.error('[sendPDPValidationCompleteEmails]', err)
+  }
 }

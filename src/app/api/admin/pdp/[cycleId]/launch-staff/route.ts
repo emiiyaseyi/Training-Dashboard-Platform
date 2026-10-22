@@ -16,9 +16,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cyc
   const audience: PDPAudience = body?.audience && ['all', 'businessUnit', 'department', 'selected'].includes(body.audience.type)
     ? body.audience
     : { type: 'all' }
+  // Snapshot captured per launch, not read from the cycle — see PDPStaffSurvey.requireManagerValidation.
+  const requireManagerValidation = body?.requireManagerValidation !== false
 
   try {
-    const result = await sendPDPStaffSurvey(cycle, audience)
+    const result = await sendPDPStaffSurvey(cycle, audience, requireManagerValidation)
     if (cycle.status === 'draft') {
       await prisma.pDPCycle.update({ where: { id: cycleId }, data: { status: 'launched', launchedAt: cycle.launchedAt || new Date() } })
     }

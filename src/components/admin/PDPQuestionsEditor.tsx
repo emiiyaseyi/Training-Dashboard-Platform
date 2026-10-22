@@ -29,7 +29,6 @@ interface Section {
 
 interface Cycle {
   id: string
-  requireManagerValidation: boolean
 }
 
 const TYPE_OPTIONS = [
@@ -50,8 +49,6 @@ const emptyQuestionDraft = { label: '', description: '', type: 'text', options: 
 // now that the form is fully section/question driven. Editable before AND after a cycle has been
 // sent — nothing here is locked once launched, per the admin's explicit requirement.
 export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle; sections: Section[]; onReload: () => Promise<void> }) {
-  const [savingValidationToggle, setSavingValidationToggle] = useState(false)
-  const [requireValidation, setRequireValidation] = useState(cycle.requireManagerValidation)
   const [expandedId, setExpandedId] = useState<string | null>(sections[0]?.id ?? null)
 
   const [showAddSection, setShowAddSection] = useState(false)
@@ -65,21 +62,6 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
   const [editingQId, setEditingQId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState(emptyQuestionDraft)
   const [savingQId, setSavingQId] = useState<string | null>(null)
-
-  const toggleRequireValidation = async (checked: boolean) => {
-    setRequireValidation(checked)
-    setSavingValidationToggle(true)
-    try {
-      await fetch(`/api/admin/pdp/${cycle.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requireManagerValidation: checked }),
-      })
-      await onReload()
-    } finally {
-      setSavingValidationToggle(false)
-    }
-  }
 
   const addSection = async () => {
     if (!newSection.title.trim()) return
@@ -202,11 +184,9 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
 
   return (
     <div className="space-y-4">
-      <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-        <input type="checkbox" checked={requireValidation} onChange={(e) => toggleRequireValidation(e.target.checked)} disabled={savingValidationToggle} />
-        Require line manager review (Section 7) after a staff member submits their own plan — only applies to Track A (Self-Fill); Track B managers skip this since they are the line manager already.
-        {savingValidationToggle && <Loader2 className="w-3 h-3 animate-spin" />}
-      </label>
+      <p className="text-[11px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        Whether line manager review (Section 7) is required is set per Track A launch now, on the Launch panel above — not here — so different launches of this cycle can require it or not independently.
+      </p>
 
       {sections.length === 0 && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">

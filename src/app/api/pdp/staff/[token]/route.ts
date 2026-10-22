@@ -80,7 +80,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     // Fire-and-forget — the manager validation email going out shouldn't make the staff member's
     // own submit hang, and a failure there is still visible/recoverable from the admin panel.
-    if (survey.cycle.requireManagerValidation) {
+    // Reads the snapshot captured when THIS survey was launched, not the cycle's current setting
+    // (which may have changed since) — see PDPStaffSurvey.requireManagerValidation.
+    if (survey.requireManagerValidation) {
       sendPDPManagerValidation(survey.id).catch((err) => console.error('[pdp/staff submit] manager validation send failed', err))
     }
 

@@ -119,6 +119,12 @@ export default function PDPStaffSurveyPage() {
 
   const current = pages[page]
   const needsSection = ctx.sections.find((s) => s.key === 'development_needs')
+  // The confirmation section's yesno question only accepts "Yes" to actually submit — selecting
+  // "No" means the respondent is telling us their plan isn't ready, so Submit gets disabled rather
+  // than silently accepting a "No" as if it meant the same as leaving it blank.
+  const confirmationSection = ctx.sections.find((s) => s.key === 'confirmation')
+  const confirmationQuestion = confirmationSection?.questions.find((q) => q.type === 'yesno')
+  const confirmationBlocked = !!confirmationQuestion && form.answers[confirmationQuestion.id] === 'No'
 
   const setAnswer = (questionId: string, value: string | string[]) => {
     setForm((prev) => prev && { ...prev, answers: { ...prev.answers, [questionId]: value } })
@@ -149,6 +155,7 @@ export default function PDPStaffSurveyPage() {
   }
 
   const submit = async () => {
+    if (confirmationBlocked) { setPageError('You selected "No" on the confirmation question — please review and update your plan, or select "Yes" once it reflects your actual development needs, before submitting.'); return }
     if (!checkCurrentPage()) return
     setSubmitting(true)
     setSubmitError('')
@@ -245,7 +252,8 @@ export default function PDPStaffSurveyPage() {
           ) : (
             <button
               onClick={submit}
-              disabled={submitting}
+              disabled={submitting || confirmationBlocked}
+              title={confirmationBlocked ? 'Select "Yes" on the confirmation question to submit' : undefined}
               className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

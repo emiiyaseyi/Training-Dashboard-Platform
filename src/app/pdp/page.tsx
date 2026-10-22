@@ -7,6 +7,7 @@ import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
 import { exportPDPCycleExcel } from '@/lib/pdp-export'
 import { PDPQuestionsEditor } from '@/components/admin/PDPQuestionsEditor'
+import { PDPEmailTemplatesEditor } from '@/components/admin/PDPEmailTemplatesEditor'
 
 interface Cycle {
   id: string
@@ -153,6 +154,7 @@ export default function PDPPage() {
   const [staffAudienceType, setStaffAudienceType] = useState<AudienceType>('all')
   const [staffAudienceValue, setStaffAudienceValue] = useState('')
   const [staffAudienceSelected, setStaffAudienceSelected] = useState<RosterStaff[]>([])
+  const [staffRequireValidation, setStaffRequireValidation] = useState(true)
   const [managerAudienceType, setManagerAudienceType] = useState<AudienceType>('all')
   const [managerAudienceValue, setManagerAudienceValue] = useState('')
   const [managerAudienceSelected, setManagerAudienceSelected] = useState<RosterStaff[]>([])
@@ -168,6 +170,7 @@ export default function PDPPage() {
 
   const [exporting, setExporting] = useState(false)
   const [showQuestions, setShowQuestions] = useState(false)
+  const [showEmailTemplates, setShowEmailTemplates] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
@@ -207,6 +210,10 @@ export default function PDPPage() {
 
   useEffect(() => { loadCycles() }, [loadCycles])
   useEffect(() => { if (selectedId) loadDetail(selectedId) }, [selectedId, loadDetail])
+  // Seeds the Launch-time checkbox from the cycle's stored default the first time its detail
+  // loads — purely a convenience starting point; the admin can still flip it per launch, and
+  // what's actually sent is whatever the checkbox shows when Launch Track A is clicked.
+  useEffect(() => { if (detail) setStaffRequireValidation(detail.cycle.requireManagerValidation) }, [detail?.cycle.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
@@ -248,7 +255,7 @@ export default function PDPPage() {
       const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected) }),
+        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected), requireManagerValidation: staffRequireValidation }),
       })
       const data = await res.json()
       if (res.ok) setLaunchResult({ track: 'Staff Self-Fill', ...data })
@@ -394,6 +401,26 @@ export default function PDPPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ids: [...selectedStaffSurveyIds] }),
+      })
+      const data = await res.json()
+      if (res.ok) { setBulkResult(data); setSelectedStaffSurveyIds(new Set()) }
+      else alert(data.error || 'Failed.')
+      await loadDetail(selectedId)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const sendValidationEmails = async (ids: string[]) => {
+    if (!selectedId || ids.length === 0) return
+    if (!confirm(`Send/resend the manager validation email for ${ids.length} selected submitted plan(s)? Safe to use even if some already have it sent — those are skipped.`)) return
+    setBulkBusy(true)
+    setBulkResult(null)
+    try {
+      const res = await fetch('/api/admin/pdp/staff-survey/send-validations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
       })
       const data = await res.json()
       if (res.ok) { setBulkResult(data); setSelectedStaffSurveyIds(new Set()) }
@@ -599,22 +626,6 @@ export default function PDPPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
                 <p className="text-sm font-semibold text-slate-800">Launch</p>
 
-                <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={detail.cycle.requireManagerValidation}
-                    onChange={async (e) => {
-                      await fetch(`/api/admin/pdp/${selectedId}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ requireManagerValidation: e.target.checked }),
-                      })
-                      await loadDetail(selectedId!)
-                    }}
-                  />
-                  Require line manager review after a staff member submits their own plan (Track A only — on by default). Track B managers skip this since they are the line manager already.
-                </label>
-
                 <AudiencePicker
                   label="Track A audience — who gets their own self-fill link"
                   businessUnits={businessUnits} roster={roster}
@@ -622,6 +633,10 @@ export default function PDPPage() {
                   value={staffAudienceValue} setValue={setStaffAudienceValue}
                   selected={staffAudienceSelected} setSelected={setStaffAudienceSelected}
                 />
+                <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <input type="checkbox" checked={staffRequireValidation} onChange={(e) => setStaffRequireValidation(e.target.checked)} />
+                  Require line manager review after this batch submits (on by default). Applies only to the people launched below — Track B managers skip this since they are the line manager already, and launching Track A again later can use a different setting.
+                </label>
                 <button onClick={launchStaff} disabled={launchingStaff} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                   {launchingStaff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Launch Track A (Staff Self-Fill)
@@ -705,6 +720,20 @@ export default function PDPPage() {
               </div>
             )}
 
+            {canAdmin && (
+              <div className="bg-white border border-slate-200 rounded-xl p-5">
+                <button onClick={() => setShowEmailTemplates((v) => !v)} className="w-full flex items-center justify-between text-left">
+                  <p className="text-sm font-semibold text-slate-800">Email Templates — edit the wording of every PDP email</p>
+                  {showEmailTemplates ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </button>
+                {showEmailTemplates && (
+                  <div className="mt-4">
+                    <PDPEmailTemplatesEditor cycleId={selectedId!} />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <button onClick={() => setShowReport((v) => !v)} className="w-full flex items-center justify-between text-left">
                 <p className="text-sm font-semibold text-slate-800">Response Report — who&apos;s filled, who hasn&apos;t</p>
@@ -732,15 +761,28 @@ export default function PDPPage() {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                       <p className="text-xs font-semibold text-slate-600">Track A — Staff Self-Fill ({filteredStaffSurveys.length})</p>
-                      {canAdmin && selectedStaffSurveyIds.size > 0 && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-500">{selectedStaffSurveyIds.size} selected</span>
-                          <button onClick={() => bulkStaffAction('resend')} disabled={bulkBusy} className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50">Resend</button>
-                          <button onClick={() => bulkStaffAction('delete')} disabled={bulkBusy} className="text-[11px] font-medium text-red-600 hover:underline disabled:opacity-50">Delete</button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {canAdmin && selectedStaffSurveyIds.size > 0 && (
+                          <>
+                            <span className="text-[11px] text-slate-500">{selectedStaffSurveyIds.size} selected</span>
+                            <button onClick={() => bulkStaffAction('resend')} disabled={bulkBusy} className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50">Resend</button>
+                            <button onClick={() => bulkStaffAction('delete')} disabled={bulkBusy} className="text-[11px] font-medium text-red-600 hover:underline disabled:opacity-50">Delete</button>
+                            <button onClick={() => sendValidationEmails([...selectedStaffSurveyIds])} disabled={bulkBusy} className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50">Send Manager Validation Email</button>
+                          </>
+                        )}
+                        {canAdmin && (
+                          <button
+                            onClick={() => sendValidationEmails(filteredStaffSurveys.filter((s) => s.respondedAt).map((s) => s.id))}
+                            disabled={bulkBusy || filteredStaffSurveys.every((s) => !s.respondedAt)}
+                            className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50"
+                            title="Sends/resends the manager validation email for everyone here who has already submitted — safe to click any time, already-sent ones are skipped."
+                          >
+                            Send Validation Emails (All Submitted)
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">

@@ -286,6 +286,9 @@ export default function PDPManagerTeamPage() {
 
   const current = pages[page]
   const needsSection = ctx.sections.find((s) => s.key === 'development_needs')
+  const confirmationSection = ctx.sections.find((s) => s.key === 'confirmation')
+  const confirmationQuestion = confirmationSection?.questions.find((q) => q.type === 'yesno')
+  const confirmationBlocked = !!confirmationQuestion && form.answers[confirmationQuestion.id] === 'No'
 
   const setAnswer = (questionId: string, value: string | string[]) => {
     setForm((prev) => prev && { ...prev, answers: { ...prev.answers, [questionId]: value } })
@@ -313,6 +316,7 @@ export default function PDPManagerTeamPage() {
   }
 
   const saveAndNext = async () => {
+    if (confirmationBlocked) { setPageError('The confirmation question is set to "No" — update the plan, or set it to "Yes" once it\'s ready, before submitting this person.'); return }
     if (!checkCurrentPage()) return
     setSaving(true)
     setSaveError('')
@@ -410,7 +414,8 @@ export default function PDPManagerTeamPage() {
           ) : (
             <button
               onClick={saveAndNext}
-              disabled={saving}
+              disabled={saving || confirmationBlocked}
+              title={confirmationBlocked ? 'Select "Yes" on the confirmation question to continue' : undefined}
               className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
