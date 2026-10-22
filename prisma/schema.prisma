@@ -1009,20 +1009,14 @@ model PDPCycle {
   year        Int                        // e.g. 2027
   title       String                     // e.g. "2027 Personal Development Plan"
   status      String   @default("draft") // "draft" | "launched" | "closed"
-  // Admin-set cap on how many capabilities a respondent (staff member, or a manager filling per
-  // team member) can select/prioritize in one plan — null means no cap.
-  maxCapabilitiesPerPerson Int?
   // Daily reminders (same cadence as Post-1/Post-2 training surveys) stop once this many days
   // have passed since the original send, same expiry concept as Pre-Training surveys — default 30.
   expiryDays  Int      @default(30)
-  // Admin-editable wording for the two fixed fields every capability page already has — null
-  // falls back to the built-in default copy, so existing cycles behave unchanged until an admin
-  // actually edits them.
-  priorityQuestionLabel String?
-  actionQuestionLabel    String?
-  // Whether the Development Action text box is mandatory whenever a capability's priority isn't
-  // "Not needed" — false (optional) by default, matching current behavior before this existed.
-  actionRequired         Boolean @default(false)
+  // Whether a submitted Track A plan automatically triggers a line-manager validation step
+  // (Section 7 in the form) — admin can turn this off for a cycle where line managers will
+  // review the form with staff directly instead. Track B never has this step (the manager IS
+  // the line manager, already filling it) regardless of this setting.
+  requireManagerValidation Boolean @default(true)
   launchedAt  DateTime?
   closedAt    DateTime?
   createdAt   DateTime @default(now())
@@ -1030,27 +1024,84 @@ model PDPCycle {
   staffSurveys     PDPStaffSurvey[]
   managerSurveys   PDPManagerSurvey[]
   managerOverrides PDPManagerOverride[]
+  sections         PDPSection[]
   questions        PDPQuestion[]
+  reviews          PDPReview[]
 }
 
-// Extra, admin-authored questions shown on every PDP plan (both tracks) after the per-capability
-// pages — same type vocabulary as CustomSurveyQuestion, without that model's section-branching
-// (not needed for PDP's simpler fixed flow: capability pages, then these, then submit).
-model PDPQuestion {
+// Admin-configurable, ordered sections of the PDP form — seeded with Meristem's standard 2027 PDP
+// structure when a cycle is created (see pdp-seed.ts), fully editable afterward (title/
+// description/order/enabled, and every question within). 'development_needs' is the one section
+// whose questions repeat per need (Section 4-6 in the source draft, combined into one repeating
+// block since they're all per-need fields) — maxRepeats caps how many needs a respondent can add.
+// 'manager_validation' only ever renders on the Track A manager-validation page, never on either
+// track's self/team-fill flow.
+model PDPSection {
   id          String   @id @default(cuid())
   cycleId     String
   order       Int      @default(0)
-  label       String
+  key         String   // 'role_alignment' | 'capabilities' | 'development_needs' | 'manager_validation' | admin-added custom key
+  title       String
   description String?
-  type        String   // "text" | "textarea" | "select" | "multiselect" | "rating" | "yesno"
-  options     String?  // JSON array of strings — for select/multiselect
-  ratingMax   Int      @default(5)
-  required    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  enabled     Boolean  @default(true)
+  maxRepeats  Int      @default(1)
+
+  cycle     PDPCycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  questions PDPQuestion[]
+
+  @@index([cycleId])
+}
+
+// One question within a PDPSection — same type vocabulary as CustomSurveyQuestion, without that
+// model's section-branching (not needed here; PDPSection.enabled covers "skip this whole
+// section"). `optionsSource: "capabilities"` means options are NOT the stored `options` JSON but
+// resolved live from DifferentiatingCapability at request time, so the capability picker always
+// matches whatever's currently configured in Admin -> Taxonomies without the admin having to keep
+// two lists in sync.
+model PDPQuestion {
+  id            String   @id @default(cuid())
+  cycleId       String
+  sectionId     String
+  order         Int      @default(0)
+  label         String
+  description   String?
+  type          String   // "text" | "textarea" | "select" | "multiselect" | "rating" | "yesno"
+  options       String?  // JSON array of strings — for select/multiselect
+  optionsSource String?  // null = use `options`; "capabilities" = live DifferentiatingCapability names
+  ratingMax     Int      @default(5)
+  required      Boolean  @default(false)
+  searchable    Boolean  @default(false) // renders as a searchable combobox instead of a plain dropdown — for long option lists
+  maxSelect     Int?     // multiselect only — "choose up to N"
+  createdAt     DateTime @default(now())
+
+  cycle   PDPCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  section PDPSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
+  @@index([sectionId])
+}
+
+// "L&D USE ONLY" — Section 8 of the source draft. Deliberately NOT a PDPSection/PDPQuestion: it's
+// never part of either track's respondent-facing flow, only filled later by L&D in the admin
+// panel, per person, after a plan has been submitted. Keyed by (cycle, staffId) rather than a
+// specific survey row so it applies the same way regardless of which track that person came
+// through.
+model PDPReview {
+  id                      String    @id @default(cuid())
+  cycleId                 String
+  staffId                 String
+  strategicAlignment      String?   // "Aligned" | "Partly aligned" | "Not aligned"
+  businessPriority        String?   // "High" | "Medium" | "Low"
+  recommendedIntervention String?   // "Internal" | "External" | "Digital" | "Practical" | "Other"
+  potentialGroupTraining  Boolean?
+  budgetAssessment        String?   // "Within budget" | "Requires review" | "Not assessed"
+  trainingPlanDecision    String?   // "Include" | "Defer" | "Do not include" | "Further review"
+  comments                String?
+  reviewedAt              DateTime?
 
   cycle PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
 
-  @@index([cycleId])
+  @@unique([cycleId, staffId])
 }
 
 // PDP-specific "this person also has a second line manager" exception list — kept separate from

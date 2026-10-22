@@ -4,7 +4,8 @@ import { rateLimit } from '@/lib/rate-limit'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { buildPDPPrefillIndex, getPDPPrefillForStaff } from '@/lib/pdp-prefill'
-import { validatePDPAnswers, type PDPAnswers } from '@/lib/pdp-validate'
+import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
+import { resolveRespondentSections } from '@/lib/pdp-form'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-manager-get', 60, 60_000)
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       })
     }
 
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId }, orderBy: { order: 'asc' } })
+    const sections = await resolveRespondentSections(survey.cycleId)
 
     return NextResponse.json({
       valid: true,
@@ -35,11 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       managerName: survey.managerName,
       rosterConfirmed: !!survey.rosterConfirmedAt,
       alreadyResponded: !!survey.respondedAt,
-      maxCapabilitiesPerPerson: survey.cycle.maxCapabilitiesPerPerson,
-      actionRequired: survey.cycle.actionRequired,
-      priorityQuestionLabel: survey.cycle.priorityQuestionLabel,
-      actionQuestionLabel: survey.cycle.actionQuestionLabel,
-      questions: questions.map((q) => ({ ...q, options: q.options ? JSON.parse(q.options) : null })),
+      sections,
       teamMembers: survey.teamMembers.map((m) => ({
         id: m.id,
         staffId: m.staffId,
@@ -142,11 +139,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     const entry = survey.teamMembers.find((m) => m.id === entryId)
     if (!entry) return NextResponse.json({ error: 'Team member not found on this survey.' }, { status: 404 })
 
-    const cycle = await prisma.pDPCycle.findUnique({ where: { id: survey.cycleId } })
-    if (!cycle) return NextResponse.json({ error: 'Cycle not found.' }, { status: 404 })
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: cycle.id } })
-    const answers = body.answers as PDPAnswers
-    const validationError = validatePDPAnswers(answers, { maxCapabilities: cycle.maxCapabilitiesPerPerson, actionRequired: cycle.actionRequired, questions })
+    const sections = await resolveRespondentSections(survey.cycleId)
+    const answers = body.answers as PDPFormAnswers
+    const validationError = validatePDPFormAnswers(answers, sections)
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPManagerTeamMemberEntry.update({

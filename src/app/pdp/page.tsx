@@ -13,11 +13,8 @@ interface Cycle {
   year: number
   title: string
   status: string
-  maxCapabilitiesPerPerson: number | null
   expiryDays: number
-  priorityQuestionLabel: string | null
-  actionQuestionLabel: string | null
-  actionRequired: boolean
+  requireManagerValidation: boolean
   launchedAt: string | null
   _count: { staffSurveys: number; managerSurveys: number; managerOverrides: number }
 }
@@ -26,8 +23,9 @@ interface Validation { id: string; managerName: string | null; respondedAt: stri
 interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[] }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
-interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; ratingMax: number; required: boolean }
-interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; questions: Question[] }
+interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
+interface Section { id: string; key: string; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
+interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[] }
 
 interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }
 interface BusinessUnitOption { id: string; name: string }
@@ -129,7 +127,6 @@ export default function PDPPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [newYear, setNewYear] = useState(new Date().getFullYear() + 1)
   const [newTitle, setNewTitle] = useState('')
-  const [newMax, setNewMax] = useState('')
   const [newExpiry, setNewExpiry] = useState('30')
   const [creating, setCreating] = useState(false)
 
@@ -195,13 +192,12 @@ export default function PDPPage() {
       const res = await fetch('/api/admin/pdp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year: newYear, title: newTitle, maxCapabilitiesPerPerson: newMax ? Number(newMax) : null, expiryDays: newExpiry ? Number(newExpiry) : 30 }),
+        body: JSON.stringify({ year: newYear, title: newTitle, expiryDays: newExpiry ? Number(newExpiry) : 30 }),
       })
       const cycle = await res.json()
       if (res.ok) {
         setShowCreate(false)
         setNewTitle('')
-        setNewMax('')
         setNewExpiry('30')
         await loadCycles()
         setSelectedId(cycle.id)
@@ -288,7 +284,7 @@ export default function PDPPage() {
     if (!detail) return
     setExporting(true)
     try {
-      await exportPDPCycleExcel(detail.cycle.title, detail.staffSurveys, detail.managerSurveys)
+      await exportPDPCycleExcel(detail.cycle.title, detail.sections, detail.staffSurveys, detail.managerSurveys)
     } finally {
       setExporting(false)
     }
@@ -346,6 +342,7 @@ export default function PDPPage() {
   const validationsTotal = detail?.staffSurveys.reduce((s, x) => s + x.validations.length, 0) ?? 0
   const teamMembersSubmitted = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.submittedAt).length, 0) ?? 0
   const teamMembersTotal = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added').length, 0) ?? 0
+  const teamMembersPendingRoster = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'pending').length, 0) ?? 0
 
   const q = reportQuery.trim().toLowerCase()
   const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) => !q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) : []
@@ -386,14 +383,11 @@ export default function PDPPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
               <label className="text-xs text-slate-500">
-                Max capabilities/needs per person (optional)
-                <input type="number" min={1} value={newMax} onChange={(e) => setNewMax(e.target.value)} placeholder="No limit" className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-              </label>
-              <label className="text-xs text-slate-500">
                 Reminders stop after (days unfilled)
                 <input type="number" min={1} value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
               </label>
             </div>
+            <p className="text-[11px] text-slate-400">A default set of sections and questions (matching the 2027 PDP template) is added automatically — edit them below once the cycle is created.</p>
             <div className="flex items-center gap-2">
               <button onClick={createCycle} disabled={creating} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                 {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Create
@@ -434,11 +428,14 @@ export default function PDPPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Track B — Manager Team-Fill</p>
                 <p className="text-2xl font-bold text-slate-800">{teamMembersSubmitted} / {teamMembersTotal}</p>
-                <p className="text-xs text-slate-400 mt-1">{detail.managerSurveys.length} manager link(s) sent</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {detail.managerSurveys.length} manager link(s) sent
+                  {teamMembersPendingRoster > 0 && <> · {teamMembersPendingRoster} team member(s) awaiting their manager&apos;s roster confirmation (not counted above yet)</>}
+                </p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Cap / Reminders</p>
-                <p className="text-sm font-bold text-slate-800">{detail.cycle.maxCapabilitiesPerPerson ?? 'No cap'} · stop after {detail.cycle.expiryDays}d unfilled</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Reminders</p>
+                <p className="text-sm font-bold text-slate-800">Stop after {detail.cycle.expiryDays}d unfilled</p>
               </div>
             </div>
 
@@ -559,7 +556,7 @@ export default function PDPPage() {
                 </button>
                 {showQuestions && (
                   <div className="mt-4">
-                    <PDPQuestionsEditor cycle={detail.cycle} questions={detail.questions} onReload={() => loadDetail(selectedId!)} />
+                    <PDPQuestionsEditor cycle={detail.cycle} sections={detail.sections} onReload={() => loadDetail(selectedId!)} />
                   </div>
                 )}
               </div>

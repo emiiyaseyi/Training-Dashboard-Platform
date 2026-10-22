@@ -29,6 +29,12 @@ export interface PDPCapabilityPrefill {
   covered: boolean
 }
 
+export interface PDPTrainingHistoryItem {
+  trainingName: string
+  capability: string | null
+  month: string
+}
+
 export interface PDPPrefillSnapshot {
   businessUnit: string
   department: string | null
@@ -37,6 +43,10 @@ export interface PDPPrefillSnapshot {
   // Untagged prior free-text feedback (Post-1/Post-2/manager-review comments) for this person —
   // informational context only, not matched against a specific capability.
   recentFeedback: string[]
+  // Every 2026 Learning Intervention (TrainingRecord) this person attended — shown as reference
+  // context on page 1 of both tracks' forms, and cross-referenced against Section 3/4 so a
+  // respondent can see what's already been addressed before picking new capabilities/needs.
+  trainingHistory2026: PDPTrainingHistoryItem[]
 }
 
 export interface PDPPrefillIndex {
@@ -44,15 +54,18 @@ export interface PDPPrefillIndex {
   rosterByStaffId: Map<string, StaffRosterRecord>
   trainedCapabilitiesByStaffId: Map<string, Set<string>> // normalized staffId -> lowercased capability names
   feedbackByStaffId: Map<string, string[]>
+  trainingHistory2026ByStaffId: Map<string, PDPTrainingHistoryItem[]>
 }
 
 const MAX_FEEDBACK_HINTS = 3
+const TRAINING_HISTORY_YEAR = 2026
 
 export async function buildPDPPrefillIndex(): Promise<PDPPrefillIndex> {
-  const [capabilities, roster, trainingRecords, feedbackRecords, managerReviews] = await Promise.all([
+  const [capabilities, roster, trainingRecords, trainingHistoryRecords, feedbackRecords, managerReviews] = await Promise.all([
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
     prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } }),
     prisma.trainingRecord.findMany({ select: { staffId: true, capability: true } }),
+    prisma.trainingRecord.findMany({ where: { year: TRAINING_HISTORY_YEAR }, select: { staffId: true, training: true, capability: true, month: true } }),
     prisma.feedbackRecord.findMany({ select: { staffId: true, qualitativeResponse: true, applicationResponse: true, impactAlignment: true } }),
     prisma.managerReviewRecord.findMany({ select: { staffId: true, comments: true } }),
   ])
@@ -66,6 +79,14 @@ export async function buildPDPPrefillIndex(): Promise<PDPPrefillIndex> {
     const key = normalizeStaffIdKey(r.staffId)
     if (!trainedCapabilitiesByStaffId.has(key)) trainedCapabilitiesByStaffId.set(key, new Set())
     trainedCapabilitiesByStaffId.get(key)!.add(r.capability.toLowerCase())
+  }
+
+  const trainingHistory2026ByStaffId = new Map<string, PDPTrainingHistoryItem[]>()
+  for (const r of trainingHistoryRecords) {
+    const key = normalizeStaffIdKey(r.staffId)
+    const arr = trainingHistory2026ByStaffId.get(key) ?? []
+    arr.push({ trainingName: r.training || 'Unnamed training', capability: r.capability, month: r.month })
+    trainingHistory2026ByStaffId.set(key, arr)
   }
 
   const feedbackByStaffId = new Map<string, string[]>()
@@ -84,7 +105,7 @@ export async function buildPDPPrefillIndex(): Promise<PDPPrefillIndex> {
   }
   for (const m of managerReviews) pushFeedback(m.staffId, m.comments)
 
-  return { capabilityNames: capabilities.map((c) => c.name), rosterByStaffId, trainedCapabilitiesByStaffId, feedbackByStaffId }
+  return { capabilityNames: capabilities.map((c) => c.name), rosterByStaffId, trainedCapabilitiesByStaffId, feedbackByStaffId, trainingHistory2026ByStaffId }
 }
 
 export function getPDPPrefillForStaff(index: PDPPrefillIndex, staffId: string): PDPPrefillSnapshot {
@@ -98,5 +119,6 @@ export function getPDPPrefillForStaff(index: PDPPrefillIndex, staffId: string): 
     role: roster?.role ?? null,
     capabilities: index.capabilityNames.map((name) => ({ name, covered: trained.has(name.toLowerCase()) })),
     recentFeedback: index.feedbackByStaffId.get(key) ?? [],
+    trainingHistory2026: index.trainingHistory2026ByStaffId.get(key) ?? [],
   }
 }

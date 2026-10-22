@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
-import { validatePDPAnswers, type PDPAnswers } from '@/lib/pdp-validate'
+import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
+import { resolvePDPSections, resolveRespondentSections } from '@/lib/pdp-form'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-validate-get', 60, 60_000)
@@ -18,9 +19,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     const alreadyResponded = !!validation.respondedAt
     const prefill = JSON.parse(validation.staffSurvey.prefillSnapshot) as PDPPrefillSnapshot
-    const staffAnswers = validation.staffSurvey.answers ? (JSON.parse(validation.staffSurvey.answers) as PDPAnswers) : null
+    const staffAnswers = validation.staffSurvey.answers ? (JSON.parse(validation.staffSurvey.answers) as PDPFormAnswers) : null
     const cycle = validation.staffSurvey.cycle
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: cycle.id }, orderBy: { order: 'asc' } })
+    const respondentSections = await resolveRespondentSections(cycle.id)
+    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation'] })
 
     return NextResponse.json({
       valid: true,
@@ -29,14 +31,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       managerName: validation.managerName,
       alreadyResponded,
       staffNotYetSubmitted: !staffAnswers,
-      maxCapabilitiesPerPerson: cycle.maxCapabilitiesPerPerson,
-      actionRequired: cycle.actionRequired,
-      priorityQuestionLabel: cycle.priorityQuestionLabel,
-      actionQuestionLabel: cycle.actionQuestionLabel,
-      questions: questions.map((q) => ({ ...q, options: q.options ? JSON.parse(q.options) : null })),
+      respondentSections,
+      validationSections,
       prefill,
       staffAnswers,
-      answers: validation.answers ? (JSON.parse(validation.answers) as PDPAnswers) : staffAnswers,
+      answers: validation.answers ? (JSON.parse(validation.answers) as PDPFormAnswers) : null,
     })
   } catch (err) {
     console.error('[pdp/validate GET]', err)
@@ -54,10 +53,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (!validation) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
     if (validation.respondedAt) return NextResponse.json({ error: 'This review has already been submitted.' }, { status: 400 })
 
-    const body = (await req.json()) as PDPAnswers
+    const body = (await req.json()) as PDPFormAnswers
     const cycle = validation.staffSurvey.cycle
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: cycle.id } })
-    const validationError = validatePDPAnswers(body, { maxCapabilities: cycle.maxCapabilitiesPerPerson, actionRequired: cycle.actionRequired, questions })
+    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation'] })
+    const validationError = validatePDPFormAnswers(body, validationSections)
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPManagerValidation.update({

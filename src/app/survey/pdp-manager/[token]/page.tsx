@@ -3,14 +3,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2, Search, X } from 'lucide-react'
-import { PDPQuestionFields, type PDPQuestion, type PDPQuestionAnswers } from '@/components/pdp/PDPQuestionFields'
+import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
+import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 
-interface PDPCapabilityPrefill { name: string; covered: boolean }
-interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null; capabilities: PDPCapabilityPrefill[]; recentFeedback: string[] }
-type Priority = 'high' | 'medium' | 'low' | 'not-needed'
-interface CapabilityAnswer { priority: Priority; action: string }
-interface CustomEntry { label: string; priority: Priority; action: string }
-interface Answers { capabilities: Record<string, CapabilityAnswer>; customEntries: CustomEntry[]; questionAnswers: PDPQuestionAnswers }
+interface PrefillSnapshot {
+  businessUnit: string
+  department: string | null
+  role: string | null
+  capabilities: { name: string; covered: boolean }[]
+  recentFeedback: string[]
+  trainingHistory2026: { trainingName: string; capability: string | null; month: string }[]
+}
+interface Section { id: string; key: string; title: string; description: string | null; maxRepeats: number; questions: PDPQuestion[] }
+interface Answers { answers: Record<string, string | string[]>; developmentNeeds: Record<string, string | string[]>[] }
 
 interface TeamMember {
   id: string
@@ -32,28 +37,13 @@ interface Context {
   managerName: string
   rosterConfirmed: boolean
   alreadyResponded: boolean
-  maxCapabilitiesPerPerson: number | null
-  actionRequired: boolean
-  priorityQuestionLabel: string | null
-  actionQuestionLabel: string | null
-  questions: PDPQuestion[]
+  sections: Section[]
   teamMembers: TeamMember[]
 }
 
 interface SearchHit { staffId: string; name: string; businessUnit: string | null; role: string | null }
 
-const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
-  { value: 'high', label: 'High priority' },
-  { value: 'medium', label: 'Medium priority' },
-  { value: 'low', label: 'Low priority' },
-  { value: 'not-needed', label: 'Not needed right now' },
-]
-
-function emptyAnswers(prefill: PrefillSnapshot | null): Answers {
-  const capabilities: Record<string, CapabilityAnswer> = {}
-  for (const c of prefill?.capabilities || []) capabilities[c.name] = { priority: c.covered ? 'not-needed' : 'medium', action: '' }
-  return { capabilities, customEntries: [], questionAnswers: {} }
-}
+type PageDescriptor = { type: 'intro' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
 
 export default function PDPManagerTeamPage() {
   const { token } = useParams<{ token: string }>()
@@ -70,8 +60,8 @@ export default function PDPManagerTeamPage() {
 
   // Per-member fill step state
   const [memberIndex, setMemberIndex] = useState(0)
-  const [capPage, setCapPage] = useState(0)
-  const [draft, setDraft] = useState<Answers | null>(null)
+  const [page, setPage] = useState(0)
+  const [form, setForm] = useState<Answers | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [allDone, setAllDone] = useState(false)
@@ -101,9 +91,23 @@ export default function PDPManagerTeamPage() {
   const currentMember = activeMembers[memberIndex]
 
   useEffect(() => {
-    if (currentMember) setDraft(currentMember.answers ?? emptyAnswers(currentMember.prefill))
-    setCapPage(0)
+    if (currentMember) setForm(currentMember.answers ?? { answers: {}, developmentNeeds: [{}] })
+    setPage(0)
   }, [currentMember?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pages: PageDescriptor[] = useMemo(() => {
+    if (!ctx || !form) return []
+    const out: PageDescriptor[] = [{ type: 'intro' }]
+    for (const section of ctx.sections) {
+      if (section.key === 'development_needs') {
+        const count = Math.max(1, form.developmentNeeds.length)
+        for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
+      } else {
+        out.push({ type: 'section', section })
+      }
+    }
+    return out
+  }, [ctx, form])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 
@@ -260,30 +264,22 @@ export default function PDPManagerTeamPage() {
     </div>
   )
 
-  if (!currentMember || !draft) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+  if (!currentMember || !form) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 
-  const capabilities = currentMember.prefill?.capabilities ?? []
-  const hasQuestionsPage = ctx.questions.length > 0
-  const totalPages = capabilities.length + 1 + (hasQuestionsPage ? 1 : 0)
-  const isCustomPage = capPage === capabilities.length
-  const isQuestionsPage = hasQuestionsPage && capPage === capabilities.length + 1
-  const currentCap = isCustomPage || isQuestionsPage ? null : capabilities[capPage]
-  const max = ctx.maxCapabilitiesPerPerson
-  const selectedCount = Object.values(draft.capabilities).filter((c) => c.priority !== 'not-needed').length + draft.customEntries.length
-  const overLimit = max != null && selectedCount > max
-  const priorityLabel = ctx.priorityQuestionLabel || 'Priority for 2027'
-  const actionLabel = ctx.actionQuestionLabel || 'Development action'
-  const currentCapAnswer = currentCap ? draft.capabilities[currentCap.name] : undefined
-  const actionMissing = !!currentCap && ctx.actionRequired && currentCapAnswer?.priority !== 'not-needed' && !currentCapAnswer?.action?.trim()
+  const current = pages[page]
+  const needsSection = ctx.sections.find((s) => s.key === 'development_needs')
 
-  const setCapabilityAnswer = (name: string, patch: Partial<CapabilityAnswer>) => {
-    setDraft((prev) => prev && { ...prev, capabilities: { ...prev.capabilities, [name]: { ...prev.capabilities[name], ...patch } } })
+  const setAnswer = (questionId: string, value: string | string[]) => {
+    setForm((prev) => prev && { ...prev, answers: { ...prev.answers, [questionId]: value } })
   }
-  const addCustomEntry = () => setDraft((prev) => prev && { ...prev, customEntries: [...prev.customEntries, { label: '', priority: 'medium', action: '' }] })
-  const updateCustomEntry = (i: number, patch: Partial<CustomEntry>) => {
-    setDraft((prev) => prev && { ...prev, customEntries: prev.customEntries.map((e, idx) => (idx === i ? { ...e, ...patch } : e)) })
+  const setNeedAnswer = (index: number, questionId: string, value: string | string[]) => {
+    setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.map((n, i) => (i === index ? { ...n, [questionId]: value } : n)) })
   }
-  const removeCustomEntry = (i: number) => setDraft((prev) => prev && { ...prev, customEntries: prev.customEntries.filter((_, idx) => idx !== i) })
+  const addNeed = () => setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
+  const removeNeed = (index: number) => {
+    setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.filter((_, i) => i !== index) })
+    setPage((p) => Math.max(0, p - 1))
+  }
 
   const saveAndNext = async () => {
     setSaving(true)
@@ -292,7 +288,7 @@ export default function PDPManagerTeamPage() {
       const res = await fetch(`/api/pdp/manager/${token}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entryId: currentMember.id, answers: draft }),
+        body: JSON.stringify({ entryId: currentMember.id, answers: form }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setSaveError(data.error || 'Failed to save.'); return }
@@ -310,120 +306,78 @@ export default function PDPManagerTeamPage() {
       <div className="max-w-xl mx-auto">
         <p className="text-xs text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
         <h1 className="text-lg font-bold text-slate-900">{currentMember.staffName}</h1>
-        <p className="text-sm text-slate-500 mb-4">{currentMember.role || 'Role not on file'} · {currentMember.businessUnit}</p>
 
-        <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1">
-          <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((capPage + 1) / totalPages) * 100}%` }} />
+        <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-3">
+          <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((page + 1) / pages.length) * 100}%` }} />
         </div>
-        {max != null && (
-          <p className={`text-xs mb-3 ${overLimit ? 'text-red-600 font-medium' : 'text-slate-500'}`}>
-            {selectedCount} / {max} capabilities/needs selected{overLimit ? ' — remove some before continuing' : ''}
-          </p>
-        )}
+        <p className="text-[11px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5">
-          {currentCap && (
+          {current?.type === 'intro' && (
+            <PDPIntroPage
+              staffName={currentMember.staffName}
+              staffId={currentMember.staffId}
+              businessUnit={currentMember.prefill?.businessUnit || currentMember.businessUnit || ''}
+              department={currentMember.prefill?.department ?? null}
+              role={currentMember.prefill?.role ?? currentMember.role}
+              trainingHistory2026={currentMember.prefill?.trainingHistory2026 || []}
+            />
+          )}
+
+          {current?.type === 'section' && (
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-slate-800">{currentCap.name}</h2>
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${currentCap.covered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {currentCap.covered ? 'Training on file' : 'No training on file'}
-                </span>
+              <h2 className="text-sm font-semibold text-slate-800 mb-1">{current.section.title}</h2>
+              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              <PDPSectionRenderer questions={current.section.questions} values={form.answers} onChange={setAnswer} />
+            </div>
+          )}
+
+          {current?.type === 'need' && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-sm font-semibold text-slate-800">Development Need {current.index + 1}</h2>
+                {form.developmentNeeds.length > 1 && (
+                  <button onClick={() => removeNeed(current.index)} className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1">
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                )}
               </div>
-              <label className="block text-[11px] text-slate-500 mb-1">{priorityLabel}</label>
-              <select
-                value={draft.capabilities[currentCap.name]?.priority ?? 'not-needed'}
-                onChange={(e) => setCapabilityAnswer(currentCap.name, { priority: e.target.value as Priority })}
-                className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm mb-4"
-              >
-                {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              {draft.capabilities[currentCap.name]?.priority !== 'not-needed' && (
-                <>
-                  <label className="block text-[11px] text-slate-500 mb-1">{actionLabel}{ctx.actionRequired && <span className="text-red-500"> *</span>}</label>
-                  <textarea
-                    value={draft.capabilities[currentCap.name]?.action ?? ''}
-                    onChange={(e) => setCapabilityAnswer(currentCap.name, { action: e.target.value })}
-                    rows={3}
-                    placeholder="Development action"
-                    className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
-                  />
-                </>
+              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              <PDPSectionRenderer
+                questions={current.section.questions}
+                values={form.developmentNeeds[current.index] || {}}
+                onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
+              />
+              {current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
+                <button onClick={addNeed} className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline mt-4">
+                  <Plus className="w-3.5 h-3.5" /> Add another Development Need
+                </button>
               )}
             </div>
           )}
-
-          {isQuestionsPage && (
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800 mb-4">A few more questions</h2>
-              <PDPQuestionFields
-                questions={ctx.questions}
-                answers={draft.questionAnswers}
-                onChange={(id, value) => setDraft((prev) => prev && { ...prev, questionAnswers: { ...prev.questionAnswers, [id]: value } })}
-              />
-            </div>
-          )}
-
-          {isCustomPage && (
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800 mb-3">Anything not listed?</h2>
-              {draft.customEntries.map((entry, i) => (
-                <div key={i} className="border border-slate-200 rounded-lg p-3 mb-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <input
-                      value={entry.label}
-                      onChange={(e) => updateCustomEntry(i, { label: e.target.value })}
-                      placeholder="Capability or need"
-                      className="flex-1 border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-                    />
-                    <button onClick={() => removeCustomEntry(i)} className="text-slate-400 hover:text-red-600 shrink-0"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                  <select
-                    value={entry.priority}
-                    onChange={(e) => updateCustomEntry(i, { priority: e.target.value as Priority })}
-                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mb-2"
-                  >
-                    {PRIORITY_OPTIONS.filter((o) => o.value !== 'not-needed').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <textarea
-                    value={entry.action}
-                    onChange={(e) => updateCustomEntry(i, { action: e.target.value })}
-                    rows={2}
-                    placeholder="Development action"
-                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-                  />
-                </div>
-              ))}
-              <button onClick={addCustomEntry} className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline">
-                <Plus className="w-3.5 h-3.5" /> Add another
-              </button>
-            </div>
-          )}
         </div>
 
-        {actionMissing && <p className="text-xs text-red-600 mt-3">A development action is required before continuing.</p>}
         {saveError && <p className="text-xs text-red-600 mt-3">{saveError}</p>}
 
         <div className="flex items-center justify-between mt-4">
           <button
-            onClick={() => setCapPage((p) => Math.max(0, p - 1))}
-            disabled={capPage === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
             className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 disabled:opacity-30"
           >
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
-          {capPage < totalPages - 1 ? (
+          {page < pages.length - 1 ? (
             <button
-              onClick={() => setCapPage((p) => p + 1)}
-              disabled={overLimit || actionMissing}
-              className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700 disabled:opacity-50"
+              onClick={() => setPage((p) => p + 1)}
+              className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button
               onClick={saveAndNext}
-              disabled={saving || overLimit}
+              disabled={saving}
               className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}

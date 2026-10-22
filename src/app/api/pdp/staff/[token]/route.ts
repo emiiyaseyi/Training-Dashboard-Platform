@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import { sendPDPManagerValidation } from '@/lib/pdp-send'
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
-import { validatePDPAnswers, type PDPAnswers } from '@/lib/pdp-validate'
+import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
+import { resolveRespondentSections } from '@/lib/pdp-form'
 
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control, same
 // convention as /api/custom-survey/[token] and /api/survey/[token]/[stage].
@@ -18,18 +19,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     const alreadyResponded = !!survey.respondedAt
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId }, orderBy: { order: 'asc' } })
+    const sections = await resolveRespondentSections(survey.cycleId)
 
     return NextResponse.json({
       valid: true,
       cycleTitle: survey.cycle.title,
       staffName: survey.staffName,
       alreadyResponded,
-      maxCapabilitiesPerPerson: survey.cycle.maxCapabilitiesPerPerson,
-      actionRequired: survey.cycle.actionRequired,
-      priorityQuestionLabel: survey.cycle.priorityQuestionLabel,
-      actionQuestionLabel: survey.cycle.actionQuestionLabel,
-      questions: questions.map((q) => ({ ...q, options: q.options ? JSON.parse(q.options) : null })),
+      sections,
       prefill,
       answers: survey.answers ? JSON.parse(survey.answers) : null,
     })
@@ -49,9 +46,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
     if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
 
-    const body = (await req.json()) as PDPAnswers
-    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId } })
-    const validationError = validatePDPAnswers(body, { maxCapabilities: survey.cycle.maxCapabilitiesPerPerson, actionRequired: survey.cycle.actionRequired, questions })
+    const body = (await req.json()) as PDPFormAnswers
+    const sections = await resolveRespondentSections(survey.cycleId)
+    const validationError = validatePDPFormAnswers(body, sections)
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPStaffSurvey.update({
@@ -61,7 +58,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     // Fire-and-forget — the manager validation email going out shouldn't make the staff member's
     // own submit hang, and a failure there is still visible/recoverable from the admin panel.
-    sendPDPManagerValidation(survey.id).catch((err) => console.error('[pdp/staff submit] manager validation send failed', err))
+    if (survey.cycle.requireManagerValidation) {
+      sendPDPManagerValidation(survey.id).catch((err) => console.error('[pdp/staff submit] manager validation send failed', err))
+    }
 
     return NextResponse.json({ success: true })
   } catch (err) {

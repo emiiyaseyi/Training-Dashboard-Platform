@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
-import { PDPQuestionFields, type PDPQuestion, type PDPQuestionAnswers } from '@/components/pdp/PDPQuestionFields'
+import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 
-interface PDPCapabilityPrefill { name: string; covered: boolean }
-interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null; capabilities: PDPCapabilityPrefill[]; recentFeedback: string[] }
-type Priority = 'high' | 'medium' | 'low' | 'not-needed'
-interface CapabilityAnswer { priority: Priority; action: string }
-interface CustomEntry { label: string; priority: Priority; action: string }
-interface Answers { capabilities: Record<string, CapabilityAnswer>; customEntries: CustomEntry[]; questionAnswers: PDPQuestionAnswers }
+interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null }
+interface Section { id: string; key: string; title: string; description: string | null; maxRepeats: number; questions: PDPQuestion[] }
+interface Answers { answers: Record<string, string | string[]>; developmentNeeds: Record<string, string | string[]>[] }
 
 interface Context {
   valid: boolean
@@ -19,27 +16,53 @@ interface Context {
   managerName: string | null
   alreadyResponded: boolean
   staffNotYetSubmitted: boolean
-  actionRequired: boolean
-  priorityQuestionLabel: string | null
-  actionQuestionLabel: string | null
-  questions: PDPQuestion[]
+  respondentSections: Section[]
+  validationSections: Section[]
   prefill: PrefillSnapshot
+  staffAnswers: Answers | null
   answers: Answers | null
 }
 
-const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
-  { value: 'high', label: 'High priority' },
-  { value: 'medium', label: 'Medium priority' },
-  { value: 'low', label: 'Low priority' },
-  { value: 'not-needed', label: 'Not needed right now' },
-]
+// Read-only recap of what the staff member submitted — labels resolved from respondentSections
+// (same sections/questions the staff member's own form used), rendered as plain text rather than
+// the full interactive form since the manager isn't editing these answers, only reviewing them.
+function StaffAnswersRecap({ sections, answers }: { sections: Section[]; answers: Answers }) {
+  const needsSection = sections.find((s) => s.key === 'development_needs')
+  const otherSections = sections.filter((s) => s.key !== 'development_needs')
+  const renderValue = (v: string | string[] | undefined) => (v == null ? '—' : Array.isArray(v) ? v.join(', ') || '—' : v)
+
+  return (
+    <div className="space-y-4">
+      {otherSections.map((s) => (
+        <div key={s.id}>
+          <p className="text-xs font-semibold text-slate-600 mb-1">{s.title}</p>
+          <div className="space-y-1">
+            {s.questions.map((q) => (
+              <p key={q.id} className="text-xs text-slate-600"><span className="text-slate-400">{q.label}:</span> {renderValue(answers.answers[q.id])}</p>
+            ))}
+          </div>
+        </div>
+      ))}
+      {needsSection && answers.developmentNeeds.map((need, i) => (
+        <div key={i}>
+          <p className="text-xs font-semibold text-slate-600 mb-1">Development Need {i + 1}</p>
+          <div className="space-y-1">
+            {needsSection.questions.map((q) => (
+              <p key={q.id} className="text-xs text-slate-600"><span className="text-slate-400">{q.label}:</span> {renderValue(need[q.id])}</p>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function PDPManagerValidatePage() {
   const { token } = useParams<{ token: string }>()
   const [ctx, setCtx] = useState<Context | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [answers, setAnswers] = useState<Answers | null>(null)
+  const [form, setForm] = useState<Answers | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -50,7 +73,7 @@ export default function PDPManagerValidatePage() {
       .then((data: Context & { error?: string }) => {
         if (data.error) { setError(data.error); return }
         setCtx(data)
-        setAnswers(data.answers ?? { capabilities: {}, customEntries: [], questionAnswers: {} })
+        setForm(data.answers ?? { answers: {}, developmentNeeds: [] })
       })
       .catch(() => setError('Could not load this review.'))
       .finally(() => setLoading(false))
@@ -58,7 +81,7 @@ export default function PDPManagerValidatePage() {
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 
-  if (error || !ctx || !answers) return (
+  if (error || !ctx || !form) return (
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
@@ -76,7 +99,7 @@ export default function PDPManagerValidatePage() {
     </div>
   )
 
-  if (ctx.staffNotYetSubmitted) return (
+  if (ctx.staffNotYetSubmitted || !ctx.staffAnswers) return (
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
@@ -85,23 +108,7 @@ export default function PDPManagerValidatePage() {
     </div>
   )
 
-  const setCapabilityAnswer = (name: string, patch: Partial<CapabilityAnswer>) => {
-    setAnswers((prev) => prev && { ...prev, capabilities: { ...prev.capabilities, [name]: { ...prev.capabilities[name], ...patch } } })
-  }
-  const addCustomEntry = () => setAnswers((prev) => prev && { ...prev, customEntries: [...prev.customEntries, { label: '', priority: 'medium', action: '' }] })
-  const updateCustomEntry = (i: number, patch: Partial<CustomEntry>) => {
-    setAnswers((prev) => prev && { ...prev, customEntries: prev.customEntries.map((e, idx) => (idx === i ? { ...e, ...patch } : e)) })
-  }
-  const removeCustomEntry = (i: number) => setAnswers((prev) => prev && { ...prev, customEntries: prev.customEntries.filter((_, idx) => idx !== i) })
-
-  const priorityLabel = ctx.priorityQuestionLabel || 'Priority'
-  const actionLabel = ctx.actionQuestionLabel || 'Development action'
-  const missingRequiredAction = ctx.actionRequired && Object.values(answers.capabilities).some((c) => c.priority !== 'not-needed' && !c.action?.trim())
-  const missingRequiredQuestion = ctx.questions.some((q) => {
-    if (!q.required) return false
-    const v = answers.questionAnswers[q.id]
-    return v == null || (Array.isArray(v) ? v.length === 0 : !String(v).trim())
-  })
+  const validationSection = ctx.validationSections[0]
 
   const submit = async () => {
     setSubmitting(true)
@@ -110,7 +117,7 @@ export default function PDPManagerValidatePage() {
       const res = await fetch(`/api/pdp/validate/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(answers),
+        body: JSON.stringify(form),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setSubmitError(data.error || 'Failed to submit.'); return }
@@ -130,97 +137,31 @@ export default function PDPManagerValidatePage() {
           <p className="text-sm text-slate-500 mt-0.5">
             {ctx.staffName} · {ctx.prefill.role || 'Role not on file'} · {ctx.prefill.businessUnit}
           </p>
-          <p className="text-xs text-slate-400 mt-1">Edit anything below before confirming — this is your own copy, separate from what {ctx.staffName.split(' ')[0]} submitted.</p>
         </div>
 
-        <div className="space-y-3">
-          {ctx.prefill.capabilities.map((c) => (
-            <div key={c.name} className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h2 className="text-sm font-semibold text-slate-800">{c.name}</h2>
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${c.covered ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {c.covered ? 'Training on file' : 'No training on file'}
-                </span>
-              </div>
-              <label className="block text-[11px] text-slate-500 mb-1">{priorityLabel}</label>
-              <select
-                value={answers.capabilities[c.name]?.priority ?? 'not-needed'}
-                onChange={(e) => setCapabilityAnswer(c.name, { priority: e.target.value as Priority })}
-                className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm mb-2"
-              >
-                {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              {answers.capabilities[c.name]?.priority !== 'not-needed' && (
-                <>
-                  <label className="block text-[11px] text-slate-500 mb-1">{actionLabel}{ctx.actionRequired && <span className="text-red-500"> *</span>}</label>
-                  <textarea
-                    value={answers.capabilities[c.name]?.action ?? ''}
-                    onChange={(e) => setCapabilityAnswer(c.name, { action: e.target.value })}
-                    rows={2}
-                    placeholder="Development action"
-                    className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
-                  />
-                </>
-              )}
-            </div>
-          ))}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
+          <p className="text-sm font-semibold text-slate-800 mb-3">Submitted Plan</p>
+          <StaffAnswersRecap sections={ctx.respondentSections} answers={ctx.staffAnswers} />
+        </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <h2 className="text-sm font-semibold text-slate-800 mb-2">Anything not listed?</h2>
-            {answers.customEntries.map((entry, i) => (
-              <div key={i} className="border border-slate-200 rounded-lg p-3 mb-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    value={entry.label}
-                    onChange={(e) => updateCustomEntry(i, { label: e.target.value })}
-                    placeholder="Capability or need"
-                    className="flex-1 border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-                  />
-                  <button onClick={() => removeCustomEntry(i)} className="text-slate-400 hover:text-red-600 shrink-0">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <select
-                  value={entry.priority}
-                  onChange={(e) => updateCustomEntry(i, { priority: e.target.value as Priority })}
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mb-2"
-                >
-                  {PRIORITY_OPTIONS.filter((o) => o.value !== 'not-needed').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <textarea
-                  value={entry.action}
-                  onChange={(e) => updateCustomEntry(i, { action: e.target.value })}
-                  rows={2}
-                  placeholder="Development action"
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
-                />
-              </div>
-            ))}
-            <button onClick={addCustomEntry} className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline">
-              <Plus className="w-3.5 h-3.5" /> Add another
-            </button>
+        {validationSection && (
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-slate-800 mb-1">{validationSection.title}</p>
+            {validationSection.description && <p className="text-xs text-slate-500 mb-4">{validationSection.description}</p>}
+            <PDPSectionRenderer
+              questions={validationSection.questions}
+              values={form.answers}
+              onChange={(qId, v) => setForm((prev) => prev && { ...prev, answers: { ...prev.answers, [qId]: v } })}
+            />
           </div>
-
-          {ctx.questions.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <PDPQuestionFields
-                questions={ctx.questions}
-                answers={answers.questionAnswers}
-                onChange={(id, value) => setAnswers((prev) => prev && { ...prev, questionAnswers: { ...prev.questionAnswers, [id]: value } })}
-              />
-            </div>
-          )}
-        </div>
-
-        {(missingRequiredAction || missingRequiredQuestion) && (
-          <p className="text-xs text-red-600 mt-3">Some required fields are still missing above.</p>
         )}
+
         {submitError && <p className="text-xs text-red-600 mt-3">{submitError}</p>}
 
         <div className="flex justify-end mt-4">
           <button
             onClick={submit}
-            disabled={submitting || missingRequiredAction || missingRequiredQuestion}
+            disabled={submitting}
             className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
