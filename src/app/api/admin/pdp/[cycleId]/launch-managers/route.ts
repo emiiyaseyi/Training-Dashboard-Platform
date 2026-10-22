@@ -4,7 +4,7 @@ import { requirePermission } from '@/lib/session-guard'
 import { sendPDPManagerSurvey } from '@/lib/pdp-send'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
-  const gate = await requirePermission('admin-settings', 'admin')
+  const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
   const { cycleId } = await params

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
 export async function GET() {
-  const gate = await requirePermission('admin-settings', 'view')
+  const gate = await requirePermission('pdp', 'view')
   if (gate instanceof NextResponse) return gate
 
   const cycles = await prisma.pDPCycle.findMany({
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await requirePermission('admin-settings', 'admin')
+  const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
   const body = await req.json().catch(() => ({}))

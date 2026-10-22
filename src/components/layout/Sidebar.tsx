@@ -26,10 +26,11 @@ import {
   ArrowLeftRight,
   Target,
   Brain,
+  ClipboardCheck,
 } from 'lucide-react'
 import { hasAccess, HR_UNIT_KEYS, type PageKey } from '@/lib/permissions'
 
-const ANALYTICS_PAGE_COUNT = 9
+const ANALYTICS_PAGE_COUNT = 10
 
 const navItems: { href: string; label: string; icon: typeof LayoutDashboard; page: PageKey }[] = [
   { href: '/',               label: 'Executive Overview',      icon: LayoutDashboard, page: 'executive-overview' },
@@ -41,6 +42,7 @@ const navItems: { href: string; label: string; icon: typeof LayoutDashboard; pag
   { href: '/yet-to-attend',  label: 'Yet to Attend Training',  icon: UserX,           page: 'yet-to-attend' },
   { href: '/talent-members', label: 'Talent Members',          icon: Award,           page: 'talent-members' },
   { href: '/insights',       label: 'Insights',                icon: Brain,           page: 'insights' },
+  { href: '/pdp',            label: 'Personal Development Plan', icon: ClipboardCheck, page: 'pdp' },
   { href: '/reports',        label: 'Report Generation',       icon: FileBarChart,    page: 'report-generation' },
   { href: '/upload',         label: 'Upload & Data',           icon: Upload,          page: 'upload-data' },
   { href: '/admin/employees', label: 'Employees',              icon: Users,           page: 'admin-settings' },

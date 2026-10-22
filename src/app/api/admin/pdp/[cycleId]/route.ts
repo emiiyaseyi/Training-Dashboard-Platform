@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
-  const gate = await requirePermission('admin-settings', 'view')
+  const gate = await requirePermission('pdp', 'view')
   if (gate instanceof NextResponse) return gate
 
   const { cycleId } = await params
@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
-  const gate = await requirePermission('admin-settings', 'admin')
+  const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
   const { cycleId } = await params

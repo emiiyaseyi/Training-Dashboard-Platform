@@ -13,6 +13,9 @@ export const PAGE_KEYS = [
   // — one page key covers all three stages (/insights/diagnostic, /insights/predictive,
   // /insights/prescriptive), same as how one key already covers several TA sub-pages.
   'insights',
+  // Personal Development Plan campaigns — its own key (not folded into admin-settings) since this
+  // is a distinct, user-visible menu item of its own, same reasoning as 'insights' above.
+  'pdp',
   'admin-settings',
   // HR Dashboard — a separate section (own layout/sidebar, see src/app/hr) sitting alongside the
   // Learning Intelligence pages above, not replacing them. 'hr-summary' gates the cross-unit
@@ -44,6 +47,7 @@ export const PAGE_LABELS: Record<PageKey, string> = {
   'report-generation': 'Report Generation',
   'upload-data': 'Upload & Data',
   insights: 'Insights',
+  pdp: 'Personal Development Plan',
   'admin-settings': 'Admin Settings',
   'hr-summary': 'HR Summary',
   'hr-employee-services': 'HR — Employee Services',
@@ -66,6 +70,7 @@ export const PAGE_ROUTES: Record<PageKey, string> = {
   'report-generation': '/reports',
   'upload-data': '/upload',
   insights: '/insights',
+  pdp: '/pdp',
   'admin-settings': '/admin',
   'hr-summary': '/hr',
   'hr-employee-services': '/hr/employee-services',

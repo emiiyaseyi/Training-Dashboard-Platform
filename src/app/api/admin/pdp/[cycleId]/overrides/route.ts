@@ -6,7 +6,7 @@ import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
 // Manages the PDP-specific "this person also has a second line manager" exception list — kept
 // off StaffRosterRecord on purpose (see prisma/schema.prisma's PDPManagerOverride comment).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
-  const gate = await requirePermission('admin-settings', 'admin')
+  const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
   const { cycleId } = await params
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cyc
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
-  const gate = await requirePermission('admin-settings', 'admin')
+  const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
   const { cycleId } = await params
