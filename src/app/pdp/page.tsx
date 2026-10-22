@@ -32,6 +32,26 @@ interface BusinessUnitOption { id: string; name: string }
 
 type AudienceType = 'all' | 'businessUnit' | 'department' | 'selected'
 
+// Same tick-state scheme as Survey Automation's response report (SurveyAutomationPanel.tsx):
+// blue = sent and awaiting a response, emerald = filled, red = sent but past the reminder
+// expiry and still unfilled, slate dash = never sent. Clicking a sent/expired tick re-sends
+// (matches Survey Automation's "click the tick to send/resend" convention); a filled tick is
+// informational only.
+type TickState = 'unsent' | 'sent' | 'filled' | 'expired'
+function tickState(sentAt: string | null, respondedAt: string | null, expiryDays: number): TickState {
+  if (!sentAt) return 'unsent'
+  if (respondedAt) return 'filled'
+  if (Date.now() - new Date(sentAt).getTime() >= expiryDays * 86400000) return 'expired'
+  return 'sent'
+}
+const TICK_STYLE: Record<TickState, string> = {
+  unsent: 'text-slate-300 font-bold text-base',
+  sent: 'text-blue-600 font-bold text-base',
+  filled: 'text-emerald-600 font-bold text-base',
+  expired: 'text-red-600 font-bold text-base',
+}
+const TICK_SYMBOL: Record<TickState, string> = { unsent: '—', sent: '✓', filled: '✓', expired: '✕' }
+
 function AudiencePicker({
   label, businessUnits, roster, type, setType, value, setValue, selected, setSelected,
 }: {
@@ -152,6 +172,7 @@ export default function PDPPage() {
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sendingId, setSendingId] = useState<string | null>(null)
   const [selectedStaffSurveyIds, setSelectedStaffSurveyIds] = useState<Set<string>>(new Set())
   const [selectedManagerSurveyIds, setSelectedManagerSurveyIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -303,6 +324,36 @@ export default function PDPPage() {
       await loadDetail(selectedId)
     } finally {
       setStoppingId(null)
+    }
+  }
+
+  const sendOrResendStaffSurvey = async (id: string) => {
+    if (!selectedId) return
+    setSendingId(id)
+    try {
+      await fetch('/api/admin/pdp/staff-survey/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend', ids: [id] }),
+      })
+      await loadDetail(selectedId)
+    } finally {
+      setSendingId(null)
+    }
+  }
+
+  const sendOrResendManagerSurvey = async (id: string) => {
+    if (!selectedId) return
+    setSendingId(id)
+    try {
+      await fetch('/api/admin/pdp/manager-survey/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend', ids: [id] }),
+      })
+      await loadDetail(selectedId)
+    } finally {
+      setSendingId(null)
     }
   }
 
@@ -706,14 +757,15 @@ export default function PDPPage() {
                             )}
                             <th className="py-1.5 pr-3">Staff</th>
                             <th className="py-1.5 pr-3">BU</th>
-                            <th className="py-1.5 pr-3">Sent</th>
-                            <th className="py-1.5 pr-3">Filled</th>
+                            <th className="py-1.5 pr-3 text-center">Sent / Filled</th>
                             <th className="py-1.5 pr-3">Manager Validation(s)</th>
                             <th className="py-1.5"></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredStaffSurveys.map((s) => (
+                          {filteredStaffSurveys.map((s) => {
+                            const state = tickState(s.sentAt, s.respondedAt, detail.cycle.expiryDays)
+                            return (
                             <tr key={s.id} className="border-b border-slate-50 last:border-0">
                               {canAdmin && (
                                 <td className="py-1.5 pr-2">
@@ -726,10 +778,29 @@ export default function PDPPage() {
                               )}
                               <td className="py-1.5 pr-3 text-slate-700">{s.staffName} <span className="text-slate-400">({s.staffId})</span></td>
                               <td className="py-1.5 pr-3 text-slate-500">{s.businessUnit}</td>
-                              <td className="py-1.5 pr-3">{s.sentAt ? '✓' : '—'}</td>
-                              <td className="py-1.5 pr-3">{s.respondedAt ? <span className="text-emerald-600 font-medium">✓</span> : <span className="text-slate-300">—</span>}</td>
+                              <td className="py-1.5 pr-3 text-center">
+                                {canAdmin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => sendOrResendStaffSurvey(s.id)}
+                                    disabled={sendingId === s.id || state === 'filled'}
+                                    title={`${state === 'unsent' ? 'Send' : state === 'filled' ? 'Already filled' : 'Resend'} to ${s.staffName} (${state}${state !== 'unsent' && state !== 'filled' ? ' — resending resets the expiry clock' : ''})`}
+                                    className="hover:opacity-70 disabled:cursor-default"
+                                  >
+                                    {sendingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400 mx-auto" /> : <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>}
+                                  </button>
+                                ) : (
+                                  <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
+                                )}
+                              </td>
                               <td className="py-1.5 pr-3 text-slate-500">
-                                {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: ${v.respondedAt ? '✓' : 'pending'}`).join(', ')}
+                                {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: `).map((label, i) => (
+                                  <span key={i}>
+                                    {label}
+                                    <span className={s.validations[i].respondedAt ? 'text-emerald-600 font-medium' : 'text-amber-600'}>{s.validations[i].respondedAt ? '✓' : 'pending'}</span>
+                                    {i < s.validations.length - 1 ? ', ' : ''}
+                                  </span>
+                                ))}
                               </td>
                               <td className="py-1.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
@@ -746,9 +817,10 @@ export default function PDPPage() {
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                           {filteredStaffSurveys.length === 0 && (
-                            <tr><td colSpan={7} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
+                            <tr><td colSpan={6} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -780,6 +852,7 @@ export default function PDPPage() {
                       {filteredManagerSurveys.map((m) => {
                         const active = m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added')
                         const done = active.filter((t) => t.submittedAt).length
+                        const state = tickState(m.sentAt, m.respondedAt, detail.cycle.expiryDays)
                         return (
                           <div key={m.id} className="border border-slate-100 rounded-lg p-3">
                             <div className="flex items-center justify-between">
@@ -790,6 +863,19 @@ export default function PDPPage() {
                                     checked={selectedManagerSurveyIds.has(m.id)}
                                     onChange={(e) => setSelectedManagerSurveyIds((prev) => { const next = new Set(prev); if (e.target.checked) next.add(m.id); else next.delete(m.id); return next })}
                                   />
+                                )}
+                                {canAdmin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => sendOrResendManagerSurvey(m.id)}
+                                    disabled={sendingId === m.id || state === 'filled'}
+                                    title={`${state === 'unsent' ? 'Send' : state === 'filled' ? 'Already complete' : 'Resend'} to ${m.managerName} (${state}${state !== 'unsent' && state !== 'filled' ? ' — resending resets the expiry clock' : ''})`}
+                                    className="hover:opacity-70 disabled:cursor-default"
+                                  >
+                                    {sendingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" /> : <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>}
+                                  </button>
+                                ) : (
+                                  <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
                                 )}
                                 <p className="text-xs font-medium text-slate-700">{m.managerName} <span className="text-slate-400">({m.managerStaffId})</span></p>
                               </div>
@@ -813,7 +899,7 @@ export default function PDPPage() {
                             {active.length > 0 && (
                               <ul className="mt-1.5 text-[11px] text-slate-500 space-y-0.5">
                                 {active.map((t) => (
-                                  <li key={t.id}>{t.staffName} — {t.submittedAt ? <span className="text-emerald-600">done</span> : 'pending'}</li>
+                                  <li key={t.id}>{t.staffName} — {t.submittedAt ? <span className="text-emerald-600 font-medium">done</span> : <span className="text-amber-600">pending</span>}</li>
                                 ))}
                               </ul>
                             )}
