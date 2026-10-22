@@ -151,6 +151,11 @@ export default function PDPPage() {
   const [showReport, setShowReport] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [selectedStaffSurveyIds, setSelectedStaffSurveyIds] = useState<Set<string>>(new Set())
+  const [selectedManagerSurveyIds, setSelectedManagerSurveyIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ sent?: number; deleted?: number; skipped?: { name: string; reason: string }[] } | null>(null)
 
   const [disablingAll, setDisablingAll] = useState(false)
   const [disableResult, setDisableResult] = useState<number | null>(null)
@@ -298,6 +303,74 @@ export default function PDPPage() {
       await loadDetail(selectedId)
     } finally {
       setStoppingId(null)
+    }
+  }
+
+  const deleteStaffSurvey = async (id: string, name: string) => {
+    if (!selectedId) return
+    if (!confirm(`Delete ${name}'s Track A link? If they already submitted, their answers (and any manager validation) are removed too. This cannot be undone.`)) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/admin/pdp/staff-survey/${id}`, { method: 'DELETE' })
+      setSelectedStaffSurveyIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+      await loadDetail(selectedId)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const deleteManagerSurvey = async (id: string, name: string) => {
+    if (!selectedId) return
+    if (!confirm(`Delete ${name}'s Track B link? Any team member answers already filled under it are removed too. This cannot be undone.`)) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/admin/pdp/manager-survey/${id}`, { method: 'DELETE' })
+      setSelectedManagerSurveyIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+      await loadDetail(selectedId)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const bulkStaffAction = async (action: 'delete' | 'resend') => {
+    if (!selectedId || selectedStaffSurveyIds.size === 0) return
+    if (action === 'delete' && !confirm(`Delete ${selectedStaffSurveyIds.size} selected Track A link(s)? This cannot be undone.`)) return
+    if (action === 'resend' && !confirm(`Resend the Track A email to ${selectedStaffSurveyIds.size} selected person/people now?`)) return
+    setBulkBusy(true)
+    setBulkResult(null)
+    try {
+      const res = await fetch('/api/admin/pdp/staff-survey/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids: [...selectedStaffSurveyIds] }),
+      })
+      const data = await res.json()
+      if (res.ok) { setBulkResult(data); setSelectedStaffSurveyIds(new Set()) }
+      else alert(data.error || 'Failed.')
+      await loadDetail(selectedId)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkManagerAction = async (action: 'delete' | 'resend') => {
+    if (!selectedId || selectedManagerSurveyIds.size === 0) return
+    if (action === 'delete' && !confirm(`Delete ${selectedManagerSurveyIds.size} selected Track B link(s)? This cannot be undone.`)) return
+    if (action === 'resend' && !confirm(`Resend the Track B email to ${selectedManagerSurveyIds.size} selected manager(s) now?`)) return
+    setBulkBusy(true)
+    setBulkResult(null)
+    try {
+      const res = await fetch('/api/admin/pdp/manager-survey/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids: [...selectedManagerSurveyIds] }),
+      })
+      const data = await res.json()
+      if (res.ok) { setBulkResult(data); setSelectedManagerSurveyIds(new Set()) }
+      else alert(data.error || 'Failed.')
+      await loadDetail(selectedId)
+    } finally {
+      setBulkBusy(false)
     }
   }
 
@@ -567,7 +640,10 @@ export default function PDPPage() {
             {canAdmin && (
               <div className="bg-white border border-slate-200 rounded-xl p-5">
                 <button onClick={() => setShowQuestions((v) => !v)} className="w-full flex items-center justify-between text-left">
-                  <p className="text-sm font-semibold text-slate-800">Questions — see and edit what respondents are asked</p>
+                  <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                    Questions — see and edit what respondents are asked
+                    {detail.sections.length === 0 && <span className="text-[11px] font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">No sections — form is empty</span>}
+                  </p>
                   {showQuestions ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                 </button>
                 {showQuestions && (
@@ -585,6 +661,15 @@ export default function PDPPage() {
               </button>
               {showReport && (
                 <div className="mt-4 space-y-5">
+                  {bulkResult && (
+                    <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                      {bulkResult.deleted !== undefined && <p className="text-emerald-700">Deleted {bulkResult.deleted}.</p>}
+                      {bulkResult.sent !== undefined && <p className="text-emerald-700">Resent to {bulkResult.sent}.</p>}
+                      {bulkResult.skipped && bulkResult.skipped.length > 0 && (
+                        <p className="text-amber-700 mt-1">{bulkResult.skipped.length} failed/skipped — {bulkResult.skipped.slice(0, 5).map((s) => `${s.name} (${s.reason})`).join('; ')}{bulkResult.skipped.length > 5 ? '…' : ''}</p>
+                      )}
+                    </div>
+                  )}
                   <div className="relative max-w-xs">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -596,11 +681,29 @@ export default function PDPPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold text-slate-600 mb-2">Track A — Staff Self-Fill ({filteredStaffSurveys.length})</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-slate-600">Track A — Staff Self-Fill ({filteredStaffSurveys.length})</p>
+                      {canAdmin && selectedStaffSurveyIds.size > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-500">{selectedStaffSurveyIds.size} selected</span>
+                          <button onClick={() => bulkStaffAction('resend')} disabled={bulkBusy} className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50">Resend</button>
+                          <button onClick={() => bulkStaffAction('delete')} disabled={bulkBusy} className="text-[11px] font-medium text-red-600 hover:underline disabled:opacity-50">Delete</button>
+                        </div>
+                      )}
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="text-left text-slate-400 uppercase tracking-wide border-b border-slate-100">
+                            {canAdmin && (
+                              <th className="py-1.5 pr-2 w-4">
+                                <input
+                                  type="checkbox"
+                                  checked={filteredStaffSurveys.length > 0 && filteredStaffSurveys.every((s) => selectedStaffSurveyIds.has(s.id))}
+                                  onChange={(e) => setSelectedStaffSurveyIds(e.target.checked ? new Set(filteredStaffSurveys.map((s) => s.id)) : new Set())}
+                                />
+                              </th>
+                            )}
                             <th className="py-1.5 pr-3">Staff</th>
                             <th className="py-1.5 pr-3">BU</th>
                             <th className="py-1.5 pr-3">Sent</th>
@@ -612,6 +715,15 @@ export default function PDPPage() {
                         <tbody>
                           {filteredStaffSurveys.map((s) => (
                             <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                              {canAdmin && (
+                                <td className="py-1.5 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStaffSurveyIds.has(s.id)}
+                                    onChange={(e) => setSelectedStaffSurveyIds((prev) => { const next = new Set(prev); if (e.target.checked) next.add(s.id); else next.delete(s.id); return next })}
+                                  />
+                                </td>
+                              )}
                               <td className="py-1.5 pr-3 text-slate-700">{s.staffName} <span className="text-slate-400">({s.staffId})</span></td>
                               <td className="py-1.5 pr-3 text-slate-500">{s.businessUnit}</td>
                               <td className="py-1.5 pr-3">{s.sentAt ? '✓' : '—'}</td>
@@ -620,16 +732,23 @@ export default function PDPPage() {
                                 {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: ${v.respondedAt ? '✓' : 'pending'}`).join(', ')}
                               </td>
                               <td className="py-1.5 text-right">
-                                {!s.respondedAt && s.sentAt && canAdmin && (
-                                  <button onClick={() => stopReminders('staff-survey', s.id)} disabled={stoppingId === s.id} className="text-slate-400 hover:text-red-600" title="Stop reminders for this person">
-                                    {stoppingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellOff className="w-3.5 h-3.5" />}
-                                  </button>
-                                )}
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {!s.respondedAt && s.sentAt && canAdmin && (
+                                    <button onClick={() => stopReminders('staff-survey', s.id)} disabled={stoppingId === s.id} className="text-slate-400 hover:text-red-600" title="Stop reminders for this person">
+                                      {stoppingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellOff className="w-3.5 h-3.5" />}
+                                    </button>
+                                  )}
+                                  {canAdmin && (
+                                    <button onClick={() => deleteStaffSurvey(s.id, s.staffName)} disabled={deletingId === s.id} className="text-slate-400 hover:text-red-600" title="Delete this Track A link">
+                                      {deletingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
                           {filteredStaffSurveys.length === 0 && (
-                            <tr><td colSpan={6} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
+                            <tr><td colSpan={7} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -637,7 +756,26 @@ export default function PDPPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold text-slate-600 mb-2">Track B — Manager Team-Fill ({filteredManagerSurveys.length})</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-slate-600">Track B — Manager Team-Fill ({filteredManagerSurveys.length})</p>
+                      {canAdmin && selectedManagerSurveyIds.size > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-500">{selectedManagerSurveyIds.size} selected</span>
+                          <button onClick={() => bulkManagerAction('resend')} disabled={bulkBusy} className="text-[11px] font-medium text-navy-700 hover:underline disabled:opacity-50">Resend</button>
+                          <button onClick={() => bulkManagerAction('delete')} disabled={bulkBusy} className="text-[11px] font-medium text-red-600 hover:underline disabled:opacity-50">Delete</button>
+                        </div>
+                      )}
+                    </div>
+                    {canAdmin && filteredManagerSurveys.length > 0 && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
+                        <input
+                          type="checkbox"
+                          checked={filteredManagerSurveys.every((m) => selectedManagerSurveyIds.has(m.id))}
+                          onChange={(e) => setSelectedManagerSurveyIds(e.target.checked ? new Set(filteredManagerSurveys.map((m) => m.id)) : new Set())}
+                        />
+                        Select all
+                      </label>
+                    )}
                     <div className="space-y-2">
                       {filteredManagerSurveys.map((m) => {
                         const active = m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added')
@@ -645,7 +783,16 @@ export default function PDPPage() {
                         return (
                           <div key={m.id} className="border border-slate-100 rounded-lg p-3">
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-medium text-slate-700">{m.managerName} <span className="text-slate-400">({m.managerStaffId})</span></p>
+                              <div className="flex items-center gap-2">
+                                {canAdmin && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedManagerSurveyIds.has(m.id)}
+                                    onChange={(e) => setSelectedManagerSurveyIds((prev) => { const next = new Set(prev); if (e.target.checked) next.add(m.id); else next.delete(m.id); return next })}
+                                  />
+                                )}
+                                <p className="text-xs font-medium text-slate-700">{m.managerName} <span className="text-slate-400">({m.managerStaffId})</span></p>
+                              </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] text-slate-500">
                                   {m.rosterConfirmedAt ? `${done}/${active.length} team members done` : 'Roster not yet confirmed'}
@@ -654,6 +801,11 @@ export default function PDPPage() {
                                 {!m.respondedAt && m.sentAt && canAdmin && (
                                   <button onClick={() => stopReminders('manager-survey', m.id)} disabled={stoppingId === m.id} className="text-slate-400 hover:text-red-600" title="Stop reminders for this manager">
                                     {stoppingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellOff className="w-3.5 h-3.5" />}
+                                  </button>
+                                )}
+                                {canAdmin && (
+                                  <button onClick={() => deleteManagerSurvey(m.id, m.managerName)} disabled={deletingId === m.id} className="text-slate-400 hover:text-red-600" title="Delete this Track B link">
+                                    {deletingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                                   </button>
                                 )}
                               </div>
