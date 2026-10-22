@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { PDPQuestionFields, type PDPQuestion, type PDPQuestionAnswers } from '@/components/pdp/PDPQuestionFields'
 
 interface PDPCapabilityPrefill {
   name: string
@@ -21,6 +22,7 @@ interface CustomEntry { label: string; priority: Priority; action: string }
 interface Answers {
   capabilities: Record<string, CapabilityAnswer>
   customEntries: CustomEntry[]
+  questionAnswers: PDPQuestionAnswers
 }
 
 interface Context {
@@ -29,6 +31,10 @@ interface Context {
   staffName: string
   alreadyResponded: boolean
   maxCapabilitiesPerPerson: number | null
+  actionRequired: boolean
+  priorityQuestionLabel: string | null
+  actionQuestionLabel: string | null
+  questions: PDPQuestion[]
   prefill: PrefillSnapshot
   answers: Answers | null
 }
@@ -43,7 +49,7 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
 function emptyAnswers(prefill: PrefillSnapshot): Answers {
   const capabilities: Record<string, CapabilityAnswer> = {}
   for (const c of prefill.capabilities) capabilities[c.name] = { priority: c.covered ? 'not-needed' : 'medium', action: '' }
-  return { capabilities, customEntries: [] }
+  return { capabilities, customEntries: [], questionAnswers: {} }
 }
 
 export default function PDPStaffSurveyPage() {
@@ -104,9 +110,15 @@ export default function PDPStaffSurveyPage() {
   )
 
   const capabilities = ctx.prefill.capabilities
-  const totalPages = capabilities.length + 1
+  const hasQuestionsPage = ctx.questions.length > 0
+  const totalPages = capabilities.length + 1 + (hasQuestionsPage ? 1 : 0)
   const isCustomPage = page === capabilities.length
-  const current = isCustomPage ? null : capabilities[page]
+  const isQuestionsPage = hasQuestionsPage && page === capabilities.length + 1
+  const current = isCustomPage || isQuestionsPage ? null : capabilities[page]
+  const priorityLabel = ctx.priorityQuestionLabel || 'How much of a priority is this for 2027?'
+  const actionLabel = ctx.actionQuestionLabel || 'What development action would help here?'
+  const currentAnswer = current ? answers.capabilities[current.name] : undefined
+  const actionMissing = !!current && ctx.actionRequired && currentAnswer?.priority !== 'not-needed' && !currentAnswer?.action?.trim()
 
   const setCapabilityAnswer = (name: string, patch: Partial<CapabilityAnswer>) => {
     setAnswers((prev) => prev && { ...prev, capabilities: { ...prev.capabilities, [name]: { ...prev.capabilities[name], ...patch } } })
@@ -173,7 +185,7 @@ export default function PDPStaffSurveyPage() {
               </div>
               <p className="text-xs text-slate-500 mb-4">Based on your training history so far — edit if it doesn&apos;t reflect where you actually are.</p>
 
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">How much of a priority is this for 2027?</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">{priorityLabel}</label>
               <select
                 value={answers.capabilities[current.name]?.priority ?? 'not-needed'}
                 onChange={(e) => setCapabilityAnswer(current.name, { priority: e.target.value as Priority })}
@@ -184,7 +196,7 @@ export default function PDPStaffSurveyPage() {
 
               {answers.capabilities[current.name]?.priority !== 'not-needed' && (
                 <>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">What development action would help here?</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">{actionLabel}{ctx.actionRequired && <span className="text-red-500"> *</span>}</label>
                   <textarea
                     value={answers.capabilities[current.name]?.action ?? ''}
                     onChange={(e) => setCapabilityAnswer(current.name, { action: e.target.value })}
@@ -194,6 +206,17 @@ export default function PDPStaffSurveyPage() {
                   />
                 </>
               )}
+            </div>
+          )}
+
+          {isQuestionsPage && (
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800 mb-4">A few more questions</h2>
+              <PDPQuestionFields
+                questions={ctx.questions}
+                answers={answers.questionAnswers}
+                onChange={(id, value) => setAnswers((prev) => prev && { ...prev, questionAnswers: { ...prev.questionAnswers, [id]: value } })}
+              />
             </div>
           )}
 
@@ -247,6 +270,7 @@ export default function PDPStaffSurveyPage() {
           )}
         </div>
 
+        {actionMissing && <p className="text-xs text-red-600 mt-3">A development action is required before continuing.</p>}
         {submitError && <p className="text-xs text-red-600 mt-3">{submitError}</p>}
 
         <div className="flex items-center justify-between mt-4">
@@ -260,7 +284,7 @@ export default function PDPStaffSurveyPage() {
           {page < totalPages - 1 ? (
             <button
               onClick={() => setPage((p) => p + 1)}
-              disabled={overLimit}
+              disabled={overLimit || actionMissing}
               className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700 disabled:opacity-50"
             >
               Next <ChevronRight className="w-4 h-4" />

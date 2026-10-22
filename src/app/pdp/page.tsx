@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
@@ -149,6 +149,11 @@ export default function PDPPage() {
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
 
+  const [disablingAll, setDisablingAll] = useState(false)
+  const [disableResult, setDisableResult] = useState<number | null>(null)
+  const [sendingIgnoreEmail, setSendingIgnoreEmail] = useState(false)
+  const [ignoreEmailResult, setIgnoreEmailResult] = useState<{ sent: number; skipped: { name: string; reason: string }[] } | null>(null)
+
   const loadCycles = useCallback(async () => {
     setLoading(true)
     try {
@@ -294,6 +299,41 @@ export default function PDPPage() {
     }
   }
 
+  const disableAllManagerLinks = async () => {
+    if (!selectedId) return
+    if (!confirm('Disable every not-yet-completed Track B manager link for this cycle? Anyone who already finished is left untouched. This cannot be undone from here.')) return
+    setDisablingAll(true)
+    setDisableResult(null)
+    try {
+      const res = await fetch(`/api/admin/pdp/${selectedId}/manager-survey/disable-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: "This link has been disabled. The email \"2027 PDP: Your Team's Development Plans\" was sent in error during internal testing. Please disregard it, no action is needed on your part. Full details on the 2027 Personal Development Plan process, including when you'll be asked to complete it for your team, will be shared with you separately. We apologise for the confusion." }),
+      })
+      const data = await res.json()
+      if (res.ok) setDisableResult(data.disabled)
+      else alert(data.error || 'Failed to disable links.')
+      await loadDetail(selectedId)
+    } finally {
+      setDisablingAll(false)
+    }
+  }
+
+  const sendIgnoreEmail = async () => {
+    if (!selectedId) return
+    if (!confirm("Send the 'please disregard' email to every manager who received the Track B launch email for this cycle (skipping anyone no longer active on the roster)? This sends real email right now.")) return
+    setSendingIgnoreEmail(true)
+    setIgnoreEmailResult(null)
+    try {
+      const res = await fetch(`/api/admin/pdp/${selectedId}/manager-survey/send-ignore-email`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) setIgnoreEmailResult(data)
+      else alert(data.error || 'Failed to send.')
+    } finally {
+      setSendingIgnoreEmail(false)
+    }
+  }
+
   const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
   const selfTotal = detail?.staffSurveys.length ?? 0
   const validationsSubmitted = detail?.staffSurveys.reduce((s, x) => s + x.validations.filter((v) => v.respondedAt).length, 0) ?? 0
@@ -395,6 +435,38 @@ export default function PDPPage() {
                 <p className="text-sm font-bold text-slate-800">{detail.cycle.maxCapabilitiesPerPerson ?? 'No cap'} · stop after {detail.cycle.expiryDays}d unfilled</p>
               </div>
             </div>
+
+            {canAdmin && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">
+                <p className="text-sm font-semibold text-red-800 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4" /> Emergency: Track B links sent in error
+                </p>
+                <p className="text-xs text-red-700">
+                  Use this if Track B went out to the wrong audience by mistake. Disabling leaves the link clickable but shows a
+                  &quot;please disregard&quot; message instead of the real form (anyone who already finished is untouched). Sending the follow-up
+                  email reaches everyone who was actually sent the launch email, skipping anyone no longer active on the roster.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={disableAllManagerLinks} disabled={disablingAll} className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50">
+                    {disablingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                    Disable All Unfinished Track B Links
+                  </button>
+                  <button onClick={sendIgnoreEmail} disabled={sendingIgnoreEmail} className="flex items-center gap-1.5 text-xs font-medium text-red-700 border border-red-300 rounded-lg px-3 py-1.5 hover:bg-red-100 disabled:opacity-50">
+                    {sendingIgnoreEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                    Send &quot;Please Disregard&quot; Email to Managers
+                  </button>
+                </div>
+                {disableResult !== null && <p className="text-xs text-emerald-700">Disabled {disableResult} link(s).</p>}
+                {ignoreEmailResult && (
+                  <div className="text-xs bg-white border border-red-100 rounded-lg px-3 py-2">
+                    <p className="text-emerald-700">Sent successfully to {ignoreEmailResult.sent}.</p>
+                    {ignoreEmailResult.skipped.length > 0 && (
+                      <p className="text-amber-700 mt-1">Failed/skipped for {ignoreEmailResult.skipped.length}: {ignoreEmailResult.skipped.slice(0, 10).map((s) => `${s.name} (${s.reason})`).join('; ')}{ignoreEmailResult.skipped.length > 10 ? '…' : ''}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {canAdmin && (
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">

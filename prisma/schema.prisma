@@ -1015,6 +1015,14 @@ model PDPCycle {
   // Daily reminders (same cadence as Post-1/Post-2 training surveys) stop once this many days
   // have passed since the original send, same expiry concept as Pre-Training surveys — default 30.
   expiryDays  Int      @default(30)
+  // Admin-editable wording for the two fixed fields every capability page already has — null
+  // falls back to the built-in default copy, so existing cycles behave unchanged until an admin
+  // actually edits them.
+  priorityQuestionLabel String?
+  actionQuestionLabel    String?
+  // Whether the Development Action text box is mandatory whenever a capability's priority isn't
+  // "Not needed" — false (optional) by default, matching current behavior before this existed.
+  actionRequired         Boolean @default(false)
   launchedAt  DateTime?
   closedAt    DateTime?
   createdAt   DateTime @default(now())
@@ -1022,6 +1030,27 @@ model PDPCycle {
   staffSurveys     PDPStaffSurvey[]
   managerSurveys   PDPManagerSurvey[]
   managerOverrides PDPManagerOverride[]
+  questions        PDPQuestion[]
+}
+
+// Extra, admin-authored questions shown on every PDP plan (both tracks) after the per-capability
+// pages — same type vocabulary as CustomSurveyQuestion, without that model's section-branching
+// (not needed for PDP's simpler fixed flow: capability pages, then these, then submit).
+model PDPQuestion {
+  id          String   @id @default(cuid())
+  cycleId     String
+  order       Int      @default(0)
+  label       String
+  description String?
+  type        String   // "text" | "textarea" | "select" | "multiselect" | "rating" | "yesno"
+  options     String?  // JSON array of strings — for select/multiselect
+  ratingMax   Int      @default(5)
+  required    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  cycle PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
 }
 
 // PDP-specific "this person also has a second line manager" exception list — kept separate from
@@ -1094,6 +1123,11 @@ model PDPManagerSurvey {
   sentAt            DateTime?
   respondedAt       DateTime? // set once every accepted member's page is submitted
   reminderAt        DateTime?
+  // Admin kill-switch for an accidental/erroneous launch (e.g. "All" audience triggered by
+  // mistake) — the link still opens but shows disabledMessage instead of the real form, and the
+  // daily reminder sweep skips it, without deleting the row or losing any already-submitted data.
+  disabled          Boolean   @default(false)
+  disabledMessage   String?
 
   cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   teamMembers PDPManagerTeamMemberEntry[]

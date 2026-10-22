@@ -240,7 +240,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
   }
 
   const managerSurveysDue = await prisma.pDPManagerSurvey.findMany({
-    where: { sentAt: { not: null }, respondedAt: null, email: { not: null } },
+    where: { sentAt: { not: null }, respondedAt: null, email: { not: null }, disabled: false },
     include: { cycle: true },
   })
   for (const m of managerSurveysDue) {

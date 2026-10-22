@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { PDPQuestionFields, type PDPQuestion, type PDPQuestionAnswers } from '@/components/pdp/PDPQuestionFields'
 
 interface PDPCapabilityPrefill { name: string; covered: boolean }
 interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null; capabilities: PDPCapabilityPrefill[]; recentFeedback: string[] }
 type Priority = 'high' | 'medium' | 'low' | 'not-needed'
 interface CapabilityAnswer { priority: Priority; action: string }
 interface CustomEntry { label: string; priority: Priority; action: string }
-interface Answers { capabilities: Record<string, CapabilityAnswer>; customEntries: CustomEntry[] }
+interface Answers { capabilities: Record<string, CapabilityAnswer>; customEntries: CustomEntry[]; questionAnswers: PDPQuestionAnswers }
 
 interface Context {
   valid: boolean
@@ -18,6 +19,10 @@ interface Context {
   managerName: string | null
   alreadyResponded: boolean
   staffNotYetSubmitted: boolean
+  actionRequired: boolean
+  priorityQuestionLabel: string | null
+  actionQuestionLabel: string | null
+  questions: PDPQuestion[]
   prefill: PrefillSnapshot
   answers: Answers | null
 }
@@ -45,7 +50,7 @@ export default function PDPManagerValidatePage() {
       .then((data: Context & { error?: string }) => {
         if (data.error) { setError(data.error); return }
         setCtx(data)
-        setAnswers(data.answers ?? { capabilities: {}, customEntries: [] })
+        setAnswers(data.answers ?? { capabilities: {}, customEntries: [], questionAnswers: {} })
       })
       .catch(() => setError('Could not load this review.'))
       .finally(() => setLoading(false))
@@ -89,6 +94,15 @@ export default function PDPManagerValidatePage() {
   }
   const removeCustomEntry = (i: number) => setAnswers((prev) => prev && { ...prev, customEntries: prev.customEntries.filter((_, idx) => idx !== i) })
 
+  const priorityLabel = ctx.priorityQuestionLabel || 'Priority'
+  const actionLabel = ctx.actionQuestionLabel || 'Development action'
+  const missingRequiredAction = ctx.actionRequired && Object.values(answers.capabilities).some((c) => c.priority !== 'not-needed' && !c.action?.trim())
+  const missingRequiredQuestion = ctx.questions.some((q) => {
+    if (!q.required) return false
+    const v = answers.questionAnswers[q.id]
+    return v == null || (Array.isArray(v) ? v.length === 0 : !String(v).trim())
+  })
+
   const submit = async () => {
     setSubmitting(true)
     setSubmitError('')
@@ -128,6 +142,7 @@ export default function PDPManagerValidatePage() {
                   {c.covered ? 'Training on file' : 'No training on file'}
                 </span>
               </div>
+              <label className="block text-[11px] text-slate-500 mb-1">{priorityLabel}</label>
               <select
                 value={answers.capabilities[c.name]?.priority ?? 'not-needed'}
                 onChange={(e) => setCapabilityAnswer(c.name, { priority: e.target.value as Priority })}
@@ -136,13 +151,16 @@ export default function PDPManagerValidatePage() {
                 {PRIORITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               {answers.capabilities[c.name]?.priority !== 'not-needed' && (
-                <textarea
-                  value={answers.capabilities[c.name]?.action ?? ''}
-                  onChange={(e) => setCapabilityAnswer(c.name, { action: e.target.value })}
-                  rows={2}
-                  placeholder="Development action"
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
-                />
+                <>
+                  <label className="block text-[11px] text-slate-500 mb-1">{actionLabel}{ctx.actionRequired && <span className="text-red-500"> *</span>}</label>
+                  <textarea
+                    value={answers.capabilities[c.name]?.action ?? ''}
+                    onChange={(e) => setCapabilityAnswer(c.name, { action: e.target.value })}
+                    rows={2}
+                    placeholder="Development action"
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
+                  />
+                </>
               )}
             </div>
           ))}
@@ -182,14 +200,27 @@ export default function PDPManagerValidatePage() {
               <Plus className="w-3.5 h-3.5" /> Add another
             </button>
           </div>
+
+          {ctx.questions.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <PDPQuestionFields
+                questions={ctx.questions}
+                answers={answers.questionAnswers}
+                onChange={(id, value) => setAnswers((prev) => prev && { ...prev, questionAnswers: { ...prev.questionAnswers, [id]: value } })}
+              />
+            </div>
+          )}
         </div>
 
+        {(missingRequiredAction || missingRequiredQuestion) && (
+          <p className="text-xs text-red-600 mt-3">Some required fields are still missing above.</p>
+        )}
         {submitError && <p className="text-xs text-red-600 mt-3">{submitError}</p>}
 
         <div className="flex justify-end mt-4">
           <button
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || missingRequiredAction || missingRequiredQuestion}
             className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}

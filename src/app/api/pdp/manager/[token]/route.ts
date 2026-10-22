@@ -4,6 +4,7 @@ import { rateLimit } from '@/lib/rate-limit'
 import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { buildPDPPrefillIndex, getPDPPrefillForStaff } from '@/lib/pdp-prefill'
+import { validatePDPAnswers, type PDPAnswers } from '@/lib/pdp-validate'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-manager-get', 60, 60_000)
@@ -17,13 +18,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     })
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
 
+    if (survey.disabled) {
+      return NextResponse.json({
+        valid: true,
+        disabled: true,
+        disabledMessage: survey.disabledMessage || 'This link has been disabled.',
+      })
+    }
+
+    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId }, orderBy: { order: 'asc' } })
+
     return NextResponse.json({
       valid: true,
+      disabled: false,
       cycleTitle: survey.cycle.title,
       managerName: survey.managerName,
       rosterConfirmed: !!survey.rosterConfirmedAt,
       alreadyResponded: !!survey.respondedAt,
       maxCapabilitiesPerPerson: survey.cycle.maxCapabilitiesPerPerson,
+      actionRequired: survey.cycle.actionRequired,
+      priorityQuestionLabel: survey.cycle.priorityQuestionLabel,
+      actionQuestionLabel: survey.cycle.actionQuestionLabel,
+      questions: questions.map((q) => ({ ...q, options: q.options ? JSON.parse(q.options) : null })),
       teamMembers: survey.teamMembers.map((m) => ({
         id: m.id,
         staffId: m.staffId,
@@ -53,6 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const { token } = await params
     const survey = await prisma.pDPManagerSurvey.findUnique({ where: { surveyToken: token } })
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
+    if (survey.disabled) return NextResponse.json({ error: survey.disabledMessage || 'This link has been disabled.' }, { status: 403 })
 
     const body = await req.json().catch(() => ({}))
     const acceptIds: string[] = Array.isArray(body.accept) ? body.accept : []
@@ -117,6 +134,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     const { token } = await params
     const survey = await prisma.pDPManagerSurvey.findUnique({ where: { surveyToken: token }, include: { teamMembers: true } })
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
+    if (survey.disabled) return NextResponse.json({ error: survey.disabledMessage || 'This link has been disabled.' }, { status: 403 })
     if (survey.respondedAt) return NextResponse.json({ error: 'This has already been fully submitted.' }, { status: 400 })
 
     const body = await req.json().catch(() => ({}))
@@ -125,12 +143,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     if (!entry) return NextResponse.json({ error: 'Team member not found on this survey.' }, { status: 404 })
 
     const cycle = await prisma.pDPCycle.findUnique({ where: { id: survey.cycleId } })
-    const max = cycle?.maxCapabilitiesPerPerson ?? null
-    const answers = body.answers as { capabilities?: Record<string, { priority: string }>; customEntries?: unknown[] } | undefined
-    const selectedCount = Object.values(answers?.capabilities || {}).filter((c) => c.priority !== 'not-needed').length + (answers?.customEntries?.length || 0)
-    if (max != null && selectedCount > max) {
-      return NextResponse.json({ error: `At most ${max} capabilities/needs can be selected — ${selectedCount} were selected.` }, { status: 400 })
-    }
+    if (!cycle) return NextResponse.json({ error: 'Cycle not found.' }, { status: 404 })
+    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: cycle.id } })
+    const answers = body.answers as PDPAnswers
+    const validationError = validatePDPAnswers(answers, { maxCapabilities: cycle.maxCapabilitiesPerPerson, actionRequired: cycle.actionRequired, questions })
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPManagerTeamMemberEntry.update({
       where: { id: entryId },

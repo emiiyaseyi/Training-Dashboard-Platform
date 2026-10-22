@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import { sendPDPManagerValidation } from '@/lib/pdp-send'
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
+import { validatePDPAnswers, type PDPAnswers } from '@/lib/pdp-validate'
 
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control, same
 // convention as /api/custom-survey/[token] and /api/survey/[token]/[stage].
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
 
     const alreadyResponded = !!survey.respondedAt
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
+    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId }, orderBy: { order: 'asc' } })
 
     return NextResponse.json({
       valid: true,
@@ -24,6 +26,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       staffName: survey.staffName,
       alreadyResponded,
       maxCapabilitiesPerPerson: survey.cycle.maxCapabilitiesPerPerson,
+      actionRequired: survey.cycle.actionRequired,
+      priorityQuestionLabel: survey.cycle.priorityQuestionLabel,
+      actionQuestionLabel: survey.cycle.actionQuestionLabel,
+      questions: questions.map((q) => ({ ...q, options: q.options ? JSON.parse(q.options) : null })),
       prefill,
       answers: survey.answers ? JSON.parse(survey.answers) : null,
     })
@@ -31,11 +37,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     console.error('[pdp/staff GET]', err)
     return NextResponse.json({ error: 'Something went wrong loading this plan.' }, { status: 500 })
   }
-}
-
-export interface PDPAnswers {
-  capabilities: Record<string, { priority: 'high' | 'medium' | 'low' | 'not-needed'; action: string }>
-  customEntries: { label: string; priority: 'high' | 'medium' | 'low' | 'not-needed'; action: string }[]
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -49,11 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
 
     const body = (await req.json()) as PDPAnswers
-    const max = survey.cycle.maxCapabilitiesPerPerson
-    const selectedCount = Object.values(body.capabilities || {}).filter((c) => c.priority !== 'not-needed').length + (body.customEntries?.length || 0)
-    if (max != null && selectedCount > max) {
-      return NextResponse.json({ error: `You can select at most ${max} capabilities/needs — you selected ${selectedCount}.` }, { status: 400 })
-    }
+    const questions = await prisma.pDPQuestion.findMany({ where: { cycleId: survey.cycleId } })
+    const validationError = validatePDPAnswers(body, { maxCapabilities: survey.cycle.maxCapabilitiesPerPerson, actionRequired: survey.cycle.actionRequired, questions })
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPStaffSurvey.update({
       where: { id: survey.id },
