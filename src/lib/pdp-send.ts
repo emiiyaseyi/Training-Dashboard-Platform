@@ -14,6 +14,14 @@ export interface PDPLaunchResult {
   skipped: { name: string; reason: string }[]
 }
 
+const DAY_MS_LOCAL = 86400000
+// The deadline shown in the email body — expiryDays from whenever this particular send/resend
+// goes out, matching the "resending resets the expiry clock" behaviour already shown in the admin
+// panel's tick tooltips.
+function deadlineFromNow(expiryDays: number): Date {
+  return new Date(Date.now() + expiryDays * DAY_MS_LOCAL)
+}
+
 // Track A — one PDPStaffSurvey per active staff member with a usable name, prefilled once (via
 // the shared index, not a query per person — see pdp-prefill.ts) and emailed. Idempotent: skips
 // anyone who already has a row for this cycle, same "createMany only for new rows" convention
@@ -56,7 +64,7 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
       result.skipped.push({ name: survey.staffName, reason: 'No email address on file.' })
       continue
     }
-    const { subject, html } = buildPDPStaffEmail({ cycleTitle: cycle.title, recipientName: survey.staffName, formUrl: `${baseUrl}/survey/pdp/${survey.surveyToken}` })
+    const { subject, html } = buildPDPStaffEmail({ cycleTitle: cycle.title, recipientName: survey.staffName, formUrl: `${baseUrl}/survey/pdp/${survey.surveyToken}`, deadline: deadlineFromNow(cycle.expiryDays) })
     try {
       await sendMail({ to: survey.email, subject, html })
       await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
@@ -109,6 +117,7 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<v
       staffName: survey.staffName,
       managerName: manager.name,
       formUrl: `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`,
+      deadline: deadlineFromNow(cycle.expiryDays),
     })
     try {
       await sendMail({ to: manager.email, subject, html })
@@ -178,7 +187,7 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
       result.skipped.push({ name: survey.managerName, reason: 'No email address on file.' })
       continue
     }
-    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: cycle.title, managerName: survey.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${survey.surveyToken}` })
+    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: cycle.title, managerName: survey.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`, deadline: deadlineFromNow(cycle.expiryDays) })
     try {
       await sendMail({ to: survey.email, subject, html })
       await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
@@ -212,7 +221,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (isExpired(s.sentAt!, s.cycle.expiryDays)) continue
     const last = s.reminderAt || s.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
-    const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, isReminder: true })
+    const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, deadline: deadlineFromNow(s.cycle.expiryDays), isReminder: true })
     try {
       await sendMail({ to: s.email!, subject, html })
       await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date() } })
@@ -230,7 +239,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const { subject, html } = buildPDPManagerValidationEmail({
       cycleTitle: v.staffSurvey.cycle.title, staffName: v.staffSurvey.staffName, managerName: v.managerName || 'there',
-      formUrl: `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, isReminder: true,
+      formUrl: `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, deadline: deadlineFromNow(v.staffSurvey.cycle.expiryDays), isReminder: true,
     })
     try {
       await sendMail({ to: v.email!, subject, html })
@@ -247,7 +256,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (isExpired(m.sentAt!, m.cycle.expiryDays)) continue
     const last = m.reminderAt || m.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
-    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: m.cycle.title, managerName: m.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, isReminder: true })
+    const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: m.cycle.title, managerName: m.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, deadline: deadlineFromNow(m.cycle.expiryDays), isReminder: true })
     try {
       await sendMail({ to: m.email!, subject, html })
       await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date() } })

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const skipped: { name: string; reason: string }[] = []
     for (const s of surveys) {
       if (!s.email) { skipped.push({ name: s.staffName, reason: 'No email address on file.' }); continue }
-      const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}` })
+      const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, deadline: new Date(Date.now() + s.cycle.expiryDays * 86400000) })
       try {
         await sendMail({ to: s.email, subject, html })
         await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
