@@ -85,7 +85,52 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    return NextResponse.json({ ...record, sheetSync })
+    // If Active/Inactive was toggled, write the same status back into whichever status-like
+    // column the comprehensive staff list sheet actually has — same candidate names
+    // excel-parser.ts's roster reader already looks for, so this stays consistent with however
+    // the NEXT scheduled sync re-reads this column (an "Exited"/"Active" value here round-trips
+    // correctly through parseActiveFromStatus). Independent of the line-manager sync above; both
+    // can fire on the same request if both fields changed together.
+    let statusSheetSync: { attempted: boolean; success: boolean; reason?: string } = { attempted: false, success: false }
+    if (active !== undefined) {
+      statusSheetSync = { attempted: true, success: false }
+      try {
+        const config = await prisma.googleSheetsConfig.findFirst()
+        if (!config?.spreadsheetUrl) {
+          statusSheetSync.reason = 'No spreadsheet configured under Admin -> Live Data Source.'
+        } else if (!config.comprehensiveStaffListSheetName) {
+          statusSheetSync.reason = 'No Comprehensive Staff List tab name configured under Admin -> Live Data Source.'
+        } else {
+          const connection = await connectToSpreadsheet(config.spreadsheetUrl)
+          const statusValue = active ? 'Active' : 'Exited'
+          const result = await updateRowByKey(
+            connection.spreadsheetId,
+            config.comprehensiveStaffListSheetName,
+            connection.accessToken,
+            ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'],
+            record.staffId,
+            [
+              { columnCandidates: ['employmentstatus', 'exitstatus', 'staffactivestatus', 'activestatus'], value: statusValue },
+              { columnCandidates: ['confirmationstatus', 'confirmed', 'isconfirmed', 'staffstatus', 'status'], value: statusValue },
+            ]
+          )
+          if (!result.rowFound) {
+            statusSheetSync.reason = `Staff ID "${record.staffId}" not found as a row in the "${config.comprehensiveStaffListSheetName}" tab.`
+          } else if (result.missingColumns.length >= 2) {
+            // Both candidate groups missing — the sheet has no status-like column at all.
+            statusSheetSync.reason = `Row found, but no status/employment-status column exists in the "${config.comprehensiveStaffListSheetName}" tab.`
+          } else {
+            statusSheetSync.success = true
+            invalidateComprehensiveStaffListCache()
+          }
+        }
+      } catch (syncErr) {
+        statusSheetSync.reason = syncErr instanceof Error ? syncErr.message : 'Unknown error.'
+        console.error('[admin/staff-quality/[id]] status sheet sync failed', syncErr)
+      }
+    }
+
+    return NextResponse.json({ ...record, sheetSync, statusSheetSync })
   } catch (err) {
     console.error('[admin/staff-quality/[id] PUT]', err)
     return NextResponse.json({ error: 'Failed to update staff record.' }, { status: 500 })

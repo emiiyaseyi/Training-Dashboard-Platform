@@ -170,6 +170,7 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<{ level: 'success' | 'warning'; text: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -298,13 +299,25 @@ export default function EmployeesPage() {
   }
 
   const toggleActive = async (e: Employee) => {
+    const nextActive = !e.active
+    if (!nextActive && !confirm(`Mark ${e.name || e.staffId} as Exited/Inactive? They'll stop showing up for new trainings/surveys. Their existing history is unaffected, and this can be undone.`)) return
     setBusyId(e.id)
+    setStatusMessage(null)
     try {
-      await fetch(`/api/admin/staff-quality/${e.id}`, {
+      const res = await fetch(`/api/admin/staff-quality/${e.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !e.active }),
+        body: JSON.stringify({ active: nextActive }),
       })
+      const data = await res.json().catch(() => ({}))
+      const sync = data.statusSheetSync as { attempted: boolean; success: boolean; reason?: string } | undefined
+      setStatusMessage(
+        !sync?.attempted
+          ? null
+          : sync.success
+            ? { level: 'success', text: `${e.name || e.staffId} marked ${nextActive ? 'Active' : 'Exited'} — also updated in the Comprehensive Staff List sheet.` }
+            : { level: 'warning', text: `${e.name || e.staffId} marked ${nextActive ? 'Active' : 'Exited'} here, but the sheet was NOT updated: ${sync.reason || 'unknown reason'}` }
+      )
       await load()
     } finally {
       setBusyId(null)
@@ -424,6 +437,15 @@ export default function EmployeesPage() {
           </select>
         </div>
 
+        {statusMessage && (
+          <div className={`flex items-start justify-between gap-3 text-xs rounded-lg px-3 py-2 border ${statusMessage.level === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+            <span>{statusMessage.text}</span>
+            <button onClick={() => setStatusMessage(null)} className="shrink-0 opacity-60 hover:opacity-100">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -460,9 +482,14 @@ export default function EmployeesPage() {
                         <td className="px-4 py-3 text-slate-600">{lineManagerName(e.lineManagerStaffId) || '—'}</td>
                         <td className="px-4 py-3 text-slate-600">{e.employmentType || '—'}</td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${e.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <button
+                            onClick={() => toggleActive(e)}
+                            disabled={busyId === e.id}
+                            title={e.active ? 'Click to mark as Exited/Inactive' : 'Click to reactivate'}
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full disabled:opacity-50 ${e.active ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
                             {e.active ? 'Active' : 'Inactive'}
-                          </span>
+                          </button>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col items-start gap-1.5">
