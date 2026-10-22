@@ -95,7 +95,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         className={`nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
           active
             ? 'bg-gold-400 text-navy-800'
-            : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
+            : 'text-white hover:bg-navy-600 hover:text-white'
         }`}
       >
         <Icon className="w-4 h-4 shrink-0" />
@@ -189,7 +189,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           href="/help"
           onClick={onClose}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
-            pathname === '/help' ? 'bg-gold-400 text-navy-800' : 'text-slate-400 hover:bg-navy-600 hover:text-slate-100'
+            pathname === '/help' ? 'bg-gold-400 text-navy-800' : 'text-white hover:bg-navy-600 hover:text-white'
           }`}
         >
           <HelpCircle className="w-3.5 h-3.5" />
@@ -197,7 +197,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-slate-400 hover:bg-navy-600 hover:text-slate-100 text-xs"
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-white hover:bg-navy-600 hover:text-white text-xs"
         >
           <LogOut className="w-3.5 h-3.5" />
           Sign out
