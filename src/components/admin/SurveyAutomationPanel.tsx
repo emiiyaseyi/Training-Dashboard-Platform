@@ -638,6 +638,11 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     }
   }
 
+  // Multi-session mode submits blank Start/End date (disabled fields — derived server-side from
+  // the session list instead), so the "ready to save" check needs its own date condition rather
+  // than just checking newSchedule.startDate/endDate directly.
+  const hasValidDates = useMultipleSessions ? sessionDates.some((s) => s.date) : !!(newSchedule.startDate && newSchedule.endDate)
+
   const newScheduleSearchResults = useMemo(() => {
     const q = newScheduleSearchQuery.trim().toLowerCase()
     if (!q) return []
@@ -1730,21 +1735,20 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
             <div className="flex items-center gap-2">
               <button
                 onClick={saveSchedule}
-                disabled={creatingSchedule || !newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate}
+                disabled={creatingSchedule || !newSchedule.trainingName || !newSchedule.businessUnit || !hasValidDates}
                 className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50"
               >
                 {creatingSchedule && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {editingScheduleId ? 'Save Changes' : 'Create Schedule'}
               </button>
-              {!creatingSchedule && (!newSchedule.trainingName || !newSchedule.businessUnit || !newSchedule.startDate || !newSchedule.endDate) && (
+              {!creatingSchedule && (!newSchedule.trainingName || !newSchedule.businessUnit || !hasValidDates) && (
                 <p className="text-[11px] text-amber-600">
                   Still needed: {[
                     !newSchedule.trainingName && 'Training name',
                     // Business Unit has no independent field to fill — the dropdown above only
                     // auto-fills once an attendee is added below, or can be picked manually from it.
                     !newSchedule.businessUnit && 'Business Unit (add an attendee below, or pick one from the dropdown above)',
-                    !newSchedule.startDate && 'Start date',
-                    !newSchedule.endDate && 'End date',
+                    !hasValidDates && (useMultipleSessions ? 'At least one session date' : 'Start and end dates'),
                   ].filter(Boolean).join(', ')}
                 </p>
               )}

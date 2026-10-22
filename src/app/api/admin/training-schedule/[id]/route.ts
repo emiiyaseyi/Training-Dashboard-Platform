@@ -27,10 +27,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
-    if (!startDate || !endDate) return NextResponse.json({ error: 'Start and end dates are required.' }, { status: 400 })
 
     const sessions = parseSessionDates(sessionDates ? JSON.stringify(sessionDates) : null)
     const derivedRange = deriveDateRangeFromSessions(sessions)
+    // Same reordering as the create route — a multi-session edit submits blank Start/End date
+    // (disabled in that mode), so this must run after derivedRange is computed.
+    if (!derivedRange && (!startDate || !endDate)) {
+      return NextResponse.json({ error: 'Start and end dates are required.' }, { status: 400 })
+    }
 
     const schedule = await prisma.trainingSchedule.update({
       where: { id },

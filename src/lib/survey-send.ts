@@ -312,7 +312,11 @@ export async function sendSurveyReminders(
       const intervalDays = settings.preReminderIntervalDays ?? 7
       const daysSinceLastNudge = (now - lastNudge.getTime()) / DAY_MS
       const daysUntilStart = (schedule.startDate.getTime() - now) / DAY_MS
-      if (daysUntilStart < 0) continue // training has already started — nothing left to remind about
+      // Only the new detail-only (responded) reminder stops once the training has started — "your
+      // training is coming up" has nothing to say once it's already underway. An UNRESPONDED
+      // attendee keeps the pre-existing behavior (no start-date cutoff, gated only by expiry
+      // above) — this must not change what already happens for the normal survey-nudge case.
+      if (responded && daysUntilStart < 0) continue
       const isDayBeforeTraining = daysUntilStart <= 1 && daysUntilStart >= 0
       if (daysSinceLastNudge >= intervalDays || isDayBeforeTraining) due.push({ ...a, _reopen: false, _detailOnly: responded })
     } else {

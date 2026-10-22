@@ -81,10 +81,16 @@ export async function POST(req: NextRequest) {
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
-    if (!startDate || !endDate) return NextResponse.json({ error: 'Start and end dates are required.' }, { status: 400 })
 
     const sessions = parseSessionDates(sessionDates ? JSON.stringify(sessionDates) : null)
     const derivedRange = deriveDateRangeFromSessions(sessions)
+    // A multi-session training derives its range from the session list — Start/End date are
+    // disabled in that mode (SurveyAutomationPanel.tsx) and submitted blank, so this check must
+    // run AFTER computing derivedRange, not before, or a valid multi-session submission is
+    // rejected as if the dates were genuinely missing.
+    if (!derivedRange && (!startDate || !endDate)) {
+      return NextResponse.json({ error: 'Start and end dates are required.' }, { status: 400 })
+    }
 
     const schedule = await prisma.trainingSchedule.create({
       data: {
