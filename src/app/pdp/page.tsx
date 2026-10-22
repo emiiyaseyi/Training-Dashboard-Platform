@@ -8,6 +8,7 @@ import { usePagePermission } from '@/lib/use-page-permission'
 import { exportPDPCycleExcel } from '@/lib/pdp-export'
 import { PDPQuestionsEditor } from '@/components/admin/PDPQuestionsEditor'
 import { PDPEmailTemplatesEditor } from '@/components/admin/PDPEmailTemplatesEditor'
+import { PDPAnalysisPanel } from '@/components/admin/PDPAnalysisPanel'
 
 interface Cycle {
   id: string
@@ -171,6 +172,7 @@ export default function PDPPage() {
   const [exporting, setExporting] = useState(false)
   const [showQuestions, setShowQuestions] = useState(false)
   const [showEmailTemplates, setShowEmailTemplates] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
@@ -733,6 +735,18 @@ export default function PDPPage() {
                 )}
               </div>
             )}
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <button onClick={() => setShowAnalysis((v) => !v)} className="w-full flex items-center justify-between text-left">
+                <p className="text-sm font-semibold text-slate-800">Analysis — org-wide training plan from filled responses</p>
+                {showAnalysis ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </button>
+              {showAnalysis && (
+                <div className="mt-4">
+                  <PDPAnalysisPanel cycleId={selectedId!} />
+                </div>
+              )}
+            </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <button onClick={() => setShowReport((v) => !v)} className="w-full flex items-center justify-between text-left">
