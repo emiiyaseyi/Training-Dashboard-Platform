@@ -988,3 +988,127 @@ model AuditLogEntry {
   @@index([action])
   @@index([createdAt])
 }
+
+// ─── Personal Development Plan (PDP) ───────────────────────────────────────────
+// Two independent delivery tracks per cycle: Track A (PDPStaffSurvey) is the staff member's own
+// self-fill link, optionally followed by a line manager validating it (PDPManagerValidation) —
+// one row per manager, so a dual-reporting staff member gets two independent validations, never
+// merged. Track B (PDPManagerSurvey + PDPManagerTeamMemberEntry) is a manager filling directly
+// for their whole team in one link, with no staff self-fill prerequisite. Both tracks can produce
+// an answer for the same person; the export flags disagreement rather than resolving it.
+
+model PDPCycle {
+  id          String   @id @default(cuid())
+  year        Int                        // e.g. 2027
+  title       String                     // e.g. "2027 Personal Development Plan"
+  status      String   @default("draft") // "draft" | "launched" | "closed"
+  // Admin-set cap on how many capabilities a respondent (staff member, or a manager filling per
+  // team member) can select/prioritize in one plan — null means no cap.
+  maxCapabilitiesPerPerson Int?
+  launchedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  staffSurveys     PDPStaffSurvey[]
+  managerSurveys   PDPManagerSurvey[]
+  managerOverrides PDPManagerOverride[]
+}
+
+// PDP-specific "this person also has a second line manager" exception list — kept separate from
+// StaffRosterRecord.lineManagerStaffId on purpose, so this campaign-specific need doesn't touch
+// the core roster model every other feature (uploads, sheet sync, Line Manager write-back)
+// depends on. Scoped per cycle in case the second-manager mapping changes year to year.
+model PDPManagerOverride {
+  id                    String @id @default(cuid())
+  cycleId               String
+  staffId               String
+  secondManagerStaffId  String
+  cycle PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, staffId])
+}
+
+// Track A — one per staff member per cycle.
+model PDPStaffSurvey {
+  id              String    @id @default(cuid())
+  cycleId         String
+  staffId         String
+  staffName       String
+  email           String?
+  businessUnit    String
+  department      String?
+  role            String?
+  surveyToken     String    @unique @default(cuid())
+  prefillSnapshot String    // JSON: computed capability gaps + role/BU context + recent feedback hints, frozen at send time
+  answers         String?   // JSON: staff's submitted plan, null until submitted
+  sentAt          DateTime?
+  respondedAt     DateTime?
+  reminderAt      DateTime?
+
+  cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  validations PDPManagerValidation[]
+
+  @@unique([cycleId, staffId])
+  @@index([cycleId])
+}
+
+// Track A's optional manager step — one row per (staff survey, manager), so a staff member with
+// two line managers gets two independent rows/tokens, each validated separately. No auto-merge:
+// each manager's answers are kept as their own copy, separate from the staff member's own.
+model PDPManagerValidation {
+  id             String    @id @default(cuid())
+  staffSurveyId  String
+  managerStaffId String
+  managerName    String?
+  email          String?
+  surveyToken    String    @unique @default(cuid())
+  answers        String?   // JSON
+  sentAt         DateTime?
+  respondedAt    DateTime?
+  reminderAt     DateTime?
+
+  staffSurvey PDPStaffSurvey @relation(fields: [staffSurveyId], references: [id], onDelete: Cascade)
+
+  @@unique([staffSurveyId, managerStaffId])
+}
+
+// Track B — one per manager per cycle, covering their whole team in one link.
+model PDPManagerSurvey {
+  id                String    @id @default(cuid())
+  cycleId           String
+  managerStaffId    String
+  managerName       String
+  email             String?
+  surveyToken       String    @unique @default(cuid())
+  rosterConfirmedAt DateTime? // set once the manager finishes the Accept/Decline/Add roster step
+  sentAt            DateTime?
+  respondedAt       DateTime? // set once every accepted member's page is submitted
+  reminderAt        DateTime?
+
+  cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  teamMembers PDPManagerTeamMemberEntry[]
+
+  @@unique([cycleId, managerStaffId])
+  @@index([cycleId])
+}
+
+// One row per team member within a manager's survey — created from the roster at send time
+// ("pending"), updated to "accepted"/"declined" on the roster-review page, or "added" for someone
+// the manager typed in who wasn't on the pre-built list.
+model PDPManagerTeamMemberEntry {
+  id              String    @id @default(cuid())
+  managerSurveyId String
+  staffId         String
+  staffName       String
+  businessUnit    String?
+  department      String?
+  role            String?
+  status          String    @default("pending") // "pending" | "accepted" | "declined" | "added"
+  prefillSnapshot String?   // JSON
+  answers         String?   // JSON
+  submittedAt     DateTime?
+
+  managerSurvey PDPManagerSurvey @relation(fields: [managerSurveyId], references: [id], onDelete: Cascade)
+
+  @@unique([managerSurveyId, staffId])
+}
