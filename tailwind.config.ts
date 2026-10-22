@@ -21,18 +21,23 @@ const config: Config = {
           800: '#1e40af',
           900: '#1e3a8a',
         },
-        // Report design system — extracted from the Meristem L&D Investment Report deck theme
+        // Was the navy/blue "Report design system" palette (L&D Investment Report deck theme) —
+        // repointed to Meristem's actual brand green (matches meristudy.meristem.com.ng, same
+        // values as the `meristem` palette below) so every existing bg-navy-*/text-navy-*/
+        // border-navy-* usage across the whole app (buttons, headers, active nav states, etc.)
+        // becomes green without touching every file that references it. Key name kept as `navy`
+        // on purpose — renaming would mean updating every call site for no visual benefit.
         navy: {
-          50:  '#F5F7FC',
-          100: '#E2E6F0',
-          200: '#CADCFC',
-          300: '#9AA5C7',
-          400: '#5C6690',
-          500: '#3D4670',
-          600: '#1E2761',
-          700: '#1B1F3B',
-          800: '#151833',
-          900: '#0F1224',
+          50:  '#F4F9F3',
+          100: '#E7F3E4',
+          200: '#CFE7C9',
+          300: '#A9D3A0',
+          400: '#7BB86E',
+          500: '#4F9A43',
+          600: '#2F6B2B',
+          700: '#245420',
+          800: '#1B3F19',
+          900: '#132C12',
         },
         gold: {
           50:  '#FBF6EA',
