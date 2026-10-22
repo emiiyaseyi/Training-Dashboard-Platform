@@ -475,6 +475,22 @@ export default function PDPPage() {
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
                 <p className="text-sm font-semibold text-slate-800">Launch</p>
 
+                <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={detail.cycle.requireManagerValidation}
+                    onChange={async (e) => {
+                      await fetch(`/api/admin/pdp/${selectedId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ requireManagerValidation: e.target.checked }),
+                      })
+                      await loadDetail(selectedId!)
+                    }}
+                  />
+                  Require line manager review after a staff member submits their own plan (Track A only — on by default). Track B managers skip this since they are the line manager already.
+                </label>
+
                 <AudiencePicker
                   label="Track A audience — who gets their own self-fill link"
                   businessUnits={businessUnits} roster={roster}
