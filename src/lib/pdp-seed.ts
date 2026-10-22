@@ -59,6 +59,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'What is the main reason for your proposed development?',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'Improve performance in my current role',
           'Close an identified skills or knowledge gap',
@@ -75,6 +76,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'Which outcome would your development primarily support?',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'Revenue growth and business development',
           'Customer experience and client satisfaction',
@@ -108,6 +110,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: 'Skill or capability area',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'Technical/job-specific skills',
           'Financial, investment or analytical skills',
@@ -129,6 +132,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: 'Nature of the development need',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'New skill required',
           'Existing skill needs improvement',
@@ -141,6 +145,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: 'Evidence supporting the need',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'Performance appraisal feedback',
           'Skills assessment or competency test',
@@ -157,6 +162,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: 'Priority',
         type: 'select',
         required: true,
+        searchable: true,
         options: [
           'High: Critical to role performance or business delivery',
           'Medium: Important for improved performance',
@@ -165,29 +171,11 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       },
       { label: 'Brief description of the specific gap', type: 'textarea', required: true },
       {
-        label: 'Preferred Development Method',
-        type: 'select',
-        required: true,
-        options: [
-          'Instructor-led training',
-          'Online learning',
-          'Practical simulation',
-          'On-the-job learning',
-          'Coaching or mentoring',
-          'Job shadowing or cross-functional exposure',
-          'Professional certification',
-          'Internal knowledge sharing',
-          'Other',
-        ],
-      },
-      { label: 'Preferred Delivery', type: 'select', required: true, options: ['Internal', 'External', 'Online', 'Blended', 'No preference'] },
-      { label: 'Proposed Timing', type: 'select', required: true, options: ['Q1', 'Q2', 'Q3', 'Q4'] },
-      { label: 'Estimated Cost', type: 'select', required: false, options: ['Not known', 'No direct cost', 'Amount in ₦ (specify in the note below)'] },
-      { label: 'External Provider Required?', type: 'select', required: false, options: ['Yes', 'No', 'Not sure'] },
-      { label: 'Specific course, certification or resource, if known', type: 'text', required: false },
-      {
         label: 'Expected improvement after the learning intervention',
-        type: 'select',
+        description: 'Select up to three.',
+        type: 'multiselect',
+        maxSelect: 3,
+        searchable: true,
         required: true,
         options: [
           'Improved technical competence',
@@ -207,7 +195,10 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       },
       {
         label: 'How will the improvement be demonstrated?',
-        type: 'select',
+        description: 'Select up to three.',
+        type: 'multiselect',
+        maxSelect: 3,
+        searchable: true,
         required: true,
         options: [
           'Practical assessment or simulation',
@@ -236,15 +227,16 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     title: 'Line Manager Validation',
     description: "To be completed by the line manager. Confirms the relevance of the development need — it does not constitute final approval of training expenditure.",
     questions: [
-      { label: "Are the identified needs relevant to the employee's role?", type: 'select', required: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Do they support team and business priorities?', type: 'select', required: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Is the need supported by sufficient evidence?', type: 'select', required: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Is the proposed development method appropriate?', type: 'select', required: true, options: ['Yes', 'Partly', 'No', 'Alternative recommended'] },
-      { label: 'Is the expected workplace improvement clear?', type: 'select', required: true, options: ['Yes', 'Partly', 'No'] },
+      { label: "Are the identified needs relevant to the employee's role?", type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
+      { label: 'Do they support team and business priorities?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
+      { label: 'Is the need supported by sufficient evidence?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
+      { label: 'Is the proposed development method appropriate?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No', 'Alternative recommended'] },
+      { label: 'Is the expected workplace improvement clear?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
       {
         label: "Manager's Priority Assessment",
         type: 'select',
         required: true,
+        searchable: true,
         options: ['High priority for 2027', 'Medium priority for 2027', 'Low priority for 2027', 'Defer to a future period', 'Not recommended'],
       },
       { label: "Manager's Comments", type: 'textarea', required: false },
@@ -252,6 +244,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: "Manager's Overall Recommendation",
         type: 'select',
         required: true,
+        searchable: true,
         options: ['Approved for submission to L&D', 'Approved with amendments', 'Further discussion required'],
       },
       { label: "I have reviewed the employee's PDP against role and business requirements.", type: 'yesno', required: true },

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
+import { firstPageIssue } from '@/lib/pdp-validate'
 
 interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null }
 interface Section { id: string; key: string; title: string; description: string | null; maxRepeats: number; questions: PDPQuestion[] }
@@ -111,6 +112,10 @@ export default function PDPManagerValidatePage() {
   const validationSection = ctx.validationSections[0]
 
   const submit = async () => {
+    if (validationSection) {
+      const issue = firstPageIssue(validationSection.questions, form.answers)
+      if (issue) { setSubmitError(issue); return }
+    }
     setSubmitting(true)
     setSubmitError('')
     try {

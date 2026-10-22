@@ -36,6 +36,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   }
 }
 
+// Draft autosave — called as the respondent moves between pages, so closing the tab and coming
+// back later resumes from where they left off (GET above already returns survey.answers as the
+// prefilled form state). Deliberately unvalidated: a draft can be partial by definition.
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const limited = rateLimit(req, 'pdp-staff-save', 120, 60_000)
+  if (limited) return limited
+
+  try {
+    const { token } = await params
+    const survey = await prisma.pDPStaffSurvey.findUnique({ where: { surveyToken: token } })
+    if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
+    if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
+
+    const body = (await req.json()) as PDPFormAnswers
+    await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { answers: JSON.stringify(body) } })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('[pdp/staff PUT]', err)
+    return NextResponse.json({ error: 'Something went wrong saving your progress.' }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-staff-submit', 20, 60_000)
   if (limited) return limited

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2, Search, X } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
+import { firstPageIssue } from '@/lib/pdp-validate'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -65,6 +66,7 @@ export default function PDPManagerTeamPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [allDone, setAllDone] = useState(false)
+  const [pageError, setPageError] = useState('')
 
   const load = () => {
     fetch(`/api/pdp/manager/${token}`)
@@ -93,7 +95,23 @@ export default function PDPManagerTeamPage() {
   useEffect(() => {
     if (currentMember) setForm(currentMember.answers ?? { answers: {}, developmentNeeds: [{}] })
     setPage(0)
+    setPageError('')
   }, [currentMember?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Draft autosave for the team member currently open, debounced — so a manager working through a
+  // large team can close the tab mid-person and resume exactly where they left off (the effect
+  // above already seeds `form` from the saved draft when a member's page loads).
+  useEffect(() => {
+    if (!currentMember || !form || currentMember.submitted) return
+    const timeout = setTimeout(() => {
+      fetch(`/api/pdp/manager/${token}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryId: currentMember.id, answers: form, draft: true }),
+      }).catch(() => {})
+    }, 1200)
+    return () => clearTimeout(timeout)
+  }, [form, currentMember, token])
 
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx || !form) return []
@@ -281,7 +299,21 @@ export default function PDPManagerTeamPage() {
     setPage((p) => Math.max(0, p - 1))
   }
 
+  const checkCurrentPage = (): boolean => {
+    if (!current || current.type === 'intro') { setPageError(''); return true }
+    const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
+    const issue = firstPageIssue(current.section.questions, values)
+    setPageError(issue || '')
+    return !issue
+  }
+
+  const goNext = () => {
+    if (!checkCurrentPage()) return
+    setPage((p) => p + 1)
+  }
+
   const saveAndNext = async () => {
+    if (!checkCurrentPage()) return
     setSaving(true)
     setSaveError('')
     try {
@@ -357,11 +389,12 @@ export default function PDPManagerTeamPage() {
           )}
         </div>
 
+        {pageError && <p className="text-xs text-red-600 mt-3">{pageError}</p>}
         {saveError && <p className="text-xs text-red-600 mt-3">{saveError}</p>}
 
         <div className="flex items-center justify-between mt-4">
           <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            onClick={() => { setPageError(''); setPage((p) => Math.max(0, p - 1)) }}
             disabled={page === 0}
             className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 disabled:opacity-30"
           >
@@ -369,7 +402,7 @@ export default function PDPManagerTeamPage() {
           </button>
           {page < pages.length - 1 ? (
             <button
-              onClick={() => setPage((p) => p + 1)}
+              onClick={goNext}
               className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
             >
               Next <ChevronRight className="w-4 h-4" />

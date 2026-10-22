@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
+import { firstPageIssue } from '@/lib/pdp-validate'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -51,6 +52,7 @@ export default function PDPStaffSurveyPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [pageError, setPageError] = useState('')
 
   useEffect(() => {
     fetch(`/api/pdp/staff/${token}`)
@@ -63,6 +65,22 @@ export default function PDPStaffSurveyPage() {
       .catch(() => setError('Could not load this plan.'))
       .finally(() => setLoading(false))
   }, [token])
+
+  // Draft autosave — debounced so a run of keystrokes/clicks sends one request, not one per
+  // change. Lets a respondent close the tab mid-fill and resume exactly where they left off (the
+  // GET above already returns the saved draft as the initial form state). Never fires before the
+  // initial load completes, and never once submitted.
+  useEffect(() => {
+    if (loading || !form || !ctx || ctx.alreadyResponded || submitted) return
+    const timeout = setTimeout(() => {
+      fetch(`/api/pdp/staff/${token}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      }).catch(() => {})
+    }, 1200)
+    return () => clearTimeout(timeout)
+  }, [form, loading, ctx, submitted, token])
 
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx || !form) return []
@@ -114,7 +132,24 @@ export default function PDPStaffSurveyPage() {
     setPage((p) => Math.max(0, p - 1))
   }
 
+  // Checks the page currently showing against its own required/maxSelect rules before advancing
+  // or submitting — the intro page has nothing to check. Returns true when the page is clear to
+  // leave.
+  const checkCurrentPage = (): boolean => {
+    if (!current || current.type === 'intro') { setPageError(''); return true }
+    const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
+    const issue = firstPageIssue(current.section.questions, values)
+    setPageError(issue || '')
+    return !issue
+  }
+
+  const goNext = () => {
+    if (!checkCurrentPage()) return
+    setPage((p) => p + 1)
+  }
+
   const submit = async () => {
+    if (!checkCurrentPage()) return
     setSubmitting(true)
     setSubmitError('')
     try {
@@ -189,11 +224,12 @@ export default function PDPStaffSurveyPage() {
           )}
         </div>
 
+        {pageError && <p className="text-xs text-red-600 mt-3">{pageError}</p>}
         {submitError && <p className="text-xs text-red-600 mt-3">{submitError}</p>}
 
         <div className="flex items-center justify-between mt-4">
           <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            onClick={() => { setPageError(''); setPage((p) => Math.max(0, p - 1)) }}
             disabled={page === 0}
             className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 disabled:opacity-30"
           >
@@ -201,7 +237,7 @@ export default function PDPStaffSurveyPage() {
           </button>
           {page < pages.length - 1 ? (
             <button
-              onClick={() => setPage((p) => p + 1)}
+              onClick={goNext}
               className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
             >
               Next <ChevronRight className="w-4 h-4" />

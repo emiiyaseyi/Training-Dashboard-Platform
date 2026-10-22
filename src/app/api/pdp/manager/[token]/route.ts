@@ -139,6 +139,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     const entry = survey.teamMembers.find((m) => m.id === entryId)
     if (!entry) return NextResponse.json({ error: 'Team member not found on this survey.' }, { status: 404 })
 
+    // Draft mode — saved as the manager moves between pages for this team member, unvalidated
+    // (a draft can be partial), so coming back later resumes exactly where they left off; the
+    // overall survey is never marked responded from a draft save.
+    if (body.draft) {
+      await prisma.pDPManagerTeamMemberEntry.update({ where: { id: entryId }, data: { answers: JSON.stringify(body.answers) } })
+      return NextResponse.json({ success: true })
+    }
+
     const sections = await resolveRespondentSections(survey.cycleId)
     const answers = body.answers as PDPFormAnswers
     const validationError = validatePDPFormAnswers(answers, sections)

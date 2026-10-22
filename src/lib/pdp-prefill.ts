@@ -60,6 +60,16 @@ export interface PDPPrefillIndex {
 const MAX_FEEDBACK_HINTS = 3
 const TRAINING_HISTORY_YEAR = 2026
 
+// Same month-name ordering convention as src/lib/analytics.ts's MONTH_ORDER.
+const MONTH_ORDER = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+]
+function monthIndex(m: string): number {
+  const i = MONTH_ORDER.indexOf(m.toLowerCase())
+  return i === -1 ? 99 : i
+}
+
 export async function buildPDPPrefillIndex(): Promise<PDPPrefillIndex> {
   const [capabilities, roster, trainingRecords, trainingHistoryRecords, feedbackRecords, managerReviews] = await Promise.all([
     prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
@@ -81,12 +91,30 @@ export async function buildPDPPrefillIndex(): Promise<PDPPrefillIndex> {
     trainedCapabilitiesByStaffId.get(key)!.add(r.capability.toLowerCase())
   }
 
-  const trainingHistory2026ByStaffId = new Map<string, PDPTrainingHistoryItem[]>()
+  // Raw TrainingRecord rows can carry the same training name more than once for one person (a
+  // reschedule re-entered, a duplicate upload row, etc.) — collapsed here to one entry per
+  // distinct training name (case/whitespace-insensitive), keeping its earliest month, and sorted
+  // January -> December rather than upload order, since this list is shown to the respondent as a
+  // chronological "what you've already done this year" reference.
+  const trainingHistoryRawByStaffId = new Map<string, PDPTrainingHistoryItem[]>()
   for (const r of trainingHistoryRecords) {
     const key = normalizeStaffIdKey(r.staffId)
-    const arr = trainingHistory2026ByStaffId.get(key) ?? []
+    const arr = trainingHistoryRawByStaffId.get(key) ?? []
     arr.push({ trainingName: r.training || 'Unnamed training', capability: r.capability, month: r.month })
-    trainingHistory2026ByStaffId.set(key, arr)
+    trainingHistoryRawByStaffId.set(key, arr)
+  }
+  const trainingHistory2026ByStaffId = new Map<string, PDPTrainingHistoryItem[]>()
+  for (const [key, items] of trainingHistoryRawByStaffId) {
+    const sorted = [...items].sort((a, b) => monthIndex(a.month) - monthIndex(b.month))
+    const seen = new Set<string>()
+    const deduped: PDPTrainingHistoryItem[] = []
+    for (const item of sorted) {
+      const nameKey = item.trainingName.trim().toLowerCase()
+      if (seen.has(nameKey)) continue
+      seen.add(nameKey)
+      deduped.push(item)
+    }
+    trainingHistory2026ByStaffId.set(key, deduped)
   }
 
   const feedbackByStaffId = new Map<string, string[]>()
