@@ -161,6 +161,7 @@ interface NewScheduleDraft {
   excludedQuestionIds: Partial<Record<'pre' | 'post1' | 'post2', string[]>>
   newScheduleIncludeDefaultCc: boolean
   newScheduleIncludeLineManagerCc: boolean
+  newScheduleSendPreNow?: boolean
 }
 
 function loadNewScheduleDraft(): NewScheduleDraft | null {
@@ -345,6 +346,12 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   // below), so this is "when about to send the mail" too, not just the expanded-schedule buttons.
   const [newScheduleIncludeDefaultCc, setNewScheduleIncludeDefaultCc] = useState(() => scheduleDraft?.newScheduleIncludeDefaultCc ?? true)
   const [newScheduleIncludeLineManagerCc, setNewScheduleIncludeLineManagerCc] = useState(() => scheduleDraft?.newScheduleIncludeLineManagerCc ?? true)
+  // Default: Pre-Training follows the usual N-days-before-start timing (settings.preDaysBefore).
+  // Checked: send it immediately on creation regardless of how far out the training is — the
+  // 7-day reminder cadence already counts from each attendee's own actual sentAt (see
+  // sendSurveyReminders in survey-send.ts), so an early send here just means reminders also start
+  // counting from today instead of from whenever the default window would otherwise have opened.
+  const [newScheduleSendPreNow, setNewScheduleSendPreNow] = useState(() => scheduleDraft?.newScheduleSendPreNow ?? false)
 
   // Keep the draft current as the CREATE form is typed into — never while editing an existing
   // schedule, since that state is the real schedule's data, not a draft. See
@@ -353,12 +360,12 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     if (editingScheduleId) return
     try {
       localStorage.setItem(NEW_SCHEDULE_DRAFT_KEY, JSON.stringify({
-        newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc,
+        newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow,
       }))
     } catch {
       // Storage full/blocked — the form still works, it just won't survive a refresh this time.
     }
-  }, [editingScheduleId, newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc])
+  }, [editingScheduleId, newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow])
   // Progress feedback while the immediate send-on-create is running in batches (see saveSchedule)
   // — replaces a single long spinner with a live count, since a large participant list can take
   // a while (the mailer sends one at a time over one pooled SMTP connection).
@@ -510,6 +517,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     setExcludedQuestionIds({})
     setNewScheduleIncludeDefaultCc(true)
     setNewScheduleIncludeLineManagerCc(true)
+    setNewScheduleSendPreNow(false)
     setCreateSendProgress(null)
     try { localStorage.removeItem(NEW_SCHEDULE_DRAFT_KEY) } catch { /* nothing to clean up */ }
   }
@@ -592,7 +600,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           const daysSinceEnd = (Date.now() - new Date(newSchedule.endDate).getTime()) / 86400000
           const sendOptions = { skipDefaultCc: !newScheduleIncludeDefaultCc, skipLineManagerCc: !newScheduleIncludeLineManagerCc }
           const dueStages: ('pre' | 'post1' | 'post2')[] = []
-          if (newSchedule.preEnabled && daysUntilStart <= settings.preDaysBefore && daysUntilStart >= -3) dueStages.push('pre')
+          if (newSchedule.preEnabled && (newScheduleSendPreNow || (daysUntilStart <= settings.preDaysBefore && daysUntilStart >= -3))) dueStages.push('pre')
           if (newSchedule.post1Enabled && daysSinceEnd >= settings.post1DaysAfter) dueStages.push('post1')
           if (newSchedule.post2Enabled && daysSinceEnd >= settings.post2DaysAfter) dueStages.push('post2')
 
@@ -1606,6 +1614,23 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                 Added on top of the automatic line-manager Cc and the platform-wide default Cc — never replaces either.
               </p>
             </div>
+            {!editingScheduleId && newSchedule.preEnabled && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={newScheduleSendPreNow}
+                    onChange={(e) => setNewScheduleSendPreNow(e.target.checked)}
+                  />
+                  Send Pre-Training survey now, instead of waiting for the {settings.preDaysBefore}-day default
+                </label>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Sends to attendees as soon as this schedule is created, regardless of how far away the training is. Reminders still
+                  follow the usual {settings.preReminderIntervalDays}-day cadence (plus one the day before start) — they just start
+                  counting from today&apos;s send instead of from whenever the {settings.preDaysBefore}-day window would have opened.
+                </p>
+              </div>
+            )}
             <div>
               <label className="flex items-center gap-1.5 text-xs text-slate-600">
                 <input
