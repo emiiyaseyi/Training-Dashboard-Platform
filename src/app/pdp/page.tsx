@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
 import { exportPDPCycleExcel } from '@/lib/pdp-export'
+import { PDPQuestionsEditor } from '@/components/admin/PDPQuestionsEditor'
 
 interface Cycle {
   id: string
@@ -14,6 +15,9 @@ interface Cycle {
   status: string
   maxCapabilitiesPerPerson: number | null
   expiryDays: number
+  priorityQuestionLabel: string | null
+  actionQuestionLabel: string | null
+  actionRequired: boolean
   launchedAt: string | null
   _count: { staffSurveys: number; managerSurveys: number; managerOverrides: number }
 }
@@ -22,7 +26,8 @@ interface Validation { id: string; managerName: string | null; respondedAt: stri
 interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[] }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
-interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[] }
+interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; ratingMax: number; required: boolean }
+interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; questions: Question[] }
 
 interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }
 interface BusinessUnitOption { id: string; name: string }
@@ -145,6 +150,7 @@ export default function PDPPage() {
   const [overrideError, setOverrideError] = useState('')
 
   const [exporting, setExporting] = useState(false)
+  const [showQuestions, setShowQuestions] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
@@ -542,6 +548,20 @@ export default function PDPPage() {
                 <p className="text-[11px] text-amber-700 mt-2">
                   Add exceptions BEFORE launching Track A — validation links are created when a staff member submits, using whoever is on this list at that moment.
                 </p>
+              </div>
+            )}
+
+            {canAdmin && (
+              <div className="bg-white border border-slate-200 rounded-xl p-5">
+                <button onClick={() => setShowQuestions((v) => !v)} className="w-full flex items-center justify-between text-left">
+                  <p className="text-sm font-semibold text-slate-800">Questions — see and edit what respondents are asked</p>
+                  {showQuestions ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </button>
+                {showQuestions && (
+                  <div className="mt-4">
+                    <PDPQuestionsEditor cycle={detail.cycle} questions={detail.questions} onReload={() => loadDetail(selectedId!)} />
+                  </div>
+                )}
               </div>
             )}
 
