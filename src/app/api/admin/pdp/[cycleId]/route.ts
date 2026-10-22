@@ -24,11 +24,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ cycl
 
   const { cycleId } = await params
   const body = await req.json().catch(() => ({}))
-  const data: { title?: string; status?: string; maxCapabilitiesPerPerson?: number | null; closedAt?: Date } = {}
+  const data: { title?: string; status?: string; maxCapabilitiesPerPerson?: number | null; expiryDays?: number; closedAt?: Date } = {}
   if (typeof body.title === 'string' && body.title.trim()) data.title = body.title.trim()
   if (body.maxCapabilitiesPerPerson === null || Number.isFinite(Number(body.maxCapabilitiesPerPerson))) {
     data.maxCapabilitiesPerPerson = body.maxCapabilitiesPerPerson === null ? null : Number(body.maxCapabilitiesPerPerson)
   }
+  if (Number.isFinite(Number(body.expiryDays)) && Number(body.expiryDays) > 0) data.expiryDays = Number(body.expiryDays)
   if (body.status === 'closed') {
     data.status = 'closed'
     data.closedAt = new Date()

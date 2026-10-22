@@ -1012,6 +1012,9 @@ model PDPCycle {
   // Admin-set cap on how many capabilities a respondent (staff member, or a manager filling per
   // team member) can select/prioritize in one plan — null means no cap.
   maxCapabilitiesPerPerson Int?
+  // Daily reminders (same cadence as Post-1/Post-2 training surveys) stop once this many days
+  // have passed since the original send, same expiry concept as Pre-Training surveys — default 30.
+  expiryDays  Int      @default(30)
   launchedAt  DateTime?
   closedAt    DateTime?
   createdAt   DateTime @default(now())

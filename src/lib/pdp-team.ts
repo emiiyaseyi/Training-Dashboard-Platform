@@ -1,6 +1,39 @@
 import { prisma } from './prisma'
 import { normalizeStaffIdKey } from './staff-id'
-import { loadRosterDirectory, type ResolvedStaff } from './staff-directory'
+import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from './staff-directory'
+
+export interface PDPAudience {
+  type: 'all' | 'businessUnit' | 'department' | 'selected'
+  value?: string | string[] | null // BU/department name for those two types, Staff ID list for 'selected'
+}
+
+// Shared audience filter for both PDP launch tracks — same audienceType vocabulary as Custom
+// Survey's resolveAudience (custom-survey.ts), reused here for consistency rather than inventing
+// a second convention. `department` isn't on ResolvedStaff (loadRosterDirectory's shape), so this
+// reads StaffRosterRecord directly for that one case, same latest-row-per-staffId pattern used
+// throughout this codebase.
+export async function filterStaffByAudience(staff: ResolvedStaff[], audience: PDPAudience): Promise<ResolvedStaff[]> {
+  if (!audience || audience.type === 'all') return staff
+  if (audience.type === 'businessUnit') {
+    const bu = String(audience.value || '')
+    return staff.filter((s) => s.businessUnit === bu)
+  }
+  if (audience.type === 'selected') {
+    const identifiers = Array.isArray(audience.value) ? audience.value : []
+    const directory = await loadRosterDirectory()
+    const resolved = identifiers.map((id) => resolveStaffLoose(id, directory)).filter((s): s is ResolvedStaff => !!s)
+    const keys = new Set(resolved.map((s) => normalizeStaffIdKey(s.staffId)))
+    return staff.filter((s) => keys.has(normalizeStaffIdKey(s.staffId)))
+  }
+  if (audience.type === 'department') {
+    const dept = String(audience.value || '').trim().toLowerCase()
+    const roster = await prisma.staffRosterRecord.findMany({ select: { staffId: true, department: true }, orderBy: { createdAt: 'asc' } })
+    const deptByStaffId = new Map<string, string>()
+    for (const r of roster) deptByStaffId.set(normalizeStaffIdKey(r.staffId), (r.department || '').trim().toLowerCase())
+    return staff.filter((s) => deptByStaffId.get(normalizeStaffIdKey(s.staffId)) === dept)
+  }
+  return staff
+}
 
 // "Manager -> list of reports" does not exist anywhere else in this codebase (every other place
 // only resolves the other direction, staff -> their own manager — see resolveLineManager in

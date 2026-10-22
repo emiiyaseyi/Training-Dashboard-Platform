@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { sendPDPStaffSurvey } from '@/lib/pdp-send'
+import type { PDPAudience } from '@/lib/pdp-team'
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
   const gate = await requirePermission('pdp', 'admin')
   if (gate instanceof NextResponse) return gate
 
@@ -11,8 +12,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ cy
   const cycle = await prisma.pDPCycle.findUnique({ where: { id: cycleId } })
   if (!cycle) return NextResponse.json({ error: 'Cycle not found.' }, { status: 404 })
 
+  const body = await req.json().catch(() => ({}))
+  const audience: PDPAudience = body?.audience && ['all', 'businessUnit', 'department', 'selected'].includes(body.audience.type)
+    ? body.audience
+    : { type: 'all' }
+
   try {
-    const result = await sendPDPStaffSurvey(cycle)
+    const result = await sendPDPStaffSurvey(cycle, audience)
     if (cycle.status === 'draft') {
       await prisma.pDPCycle.update({ where: { id: cycleId }, data: { status: 'launched', launchedAt: cycle.launchedAt || new Date() } })
     }

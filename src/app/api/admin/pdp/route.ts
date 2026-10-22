@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
   const maxCapabilitiesPerPerson = Number.isFinite(Number(body.maxCapabilitiesPerPerson)) && Number(body.maxCapabilitiesPerPerson) > 0
     ? Number(body.maxCapabilitiesPerPerson)
     : null
+  const expiryDays = Number.isFinite(Number(body.expiryDays)) && Number(body.expiryDays) > 0 ? Number(body.expiryDays) : 30
 
-  const cycle = await prisma.pDPCycle.create({ data: { year, title, maxCapabilitiesPerPerson } })
+  const cycle = await prisma.pDPCycle.create({ data: { year, title, maxCapabilitiesPerPerson, expiryDays } })
   return NextResponse.json(cycle)
 }

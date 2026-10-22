@@ -5,7 +5,7 @@ import { getAppBaseUrl } from './app-url'
 import { loadRosterDirectory } from './staff-directory'
 import { normalizeStaffIdKey } from './staff-id'
 import { buildPDPPrefillIndex, getPDPPrefillForStaff } from './pdp-prefill'
-import { getAllManagerStaffIds, getTeamMembersForManager } from './pdp-team'
+import { getAllManagerStaffIds, getTeamMembersForManager, filterStaffByAudience, type PDPAudience } from './pdp-team'
 import { buildPDPStaffEmail, buildPDPManagerValidationEmail, buildPDPManagerTeamEmail } from './pdp-email'
 
 export interface PDPLaunchResult {
@@ -18,9 +18,10 @@ export interface PDPLaunchResult {
 // the shared index, not a query per person — see pdp-prefill.ts) and emailed. Idempotent: skips
 // anyone who already has a row for this cycle, same "createMany only for new rows" convention
 // launchCustomSurvey uses, so retrying after a partial failure never re-creates/re-emails someone.
-export async function sendPDPStaffSurvey(cycle: PDPCycle): Promise<PDPLaunchResult> {
+export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience = { type: 'all' }): Promise<PDPLaunchResult> {
   const directory = await loadRosterDirectory()
-  const active = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
+  const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
+  const active = await filterStaffByAudience(activeAll, audience)
 
   const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { staffId: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.staffId)))
@@ -123,13 +124,20 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<v
 // Track B — one PDPManagerSurvey per distinct manager, with one PDPManagerTeamMemberEntry per
 // direct report found via getTeamMembersForManager (status "pending" until the manager accepts/
 // declines them on the roster-review page). No staff self-fill prerequisite.
-export async function sendPDPManagerSurvey(cycle: PDPCycle): Promise<PDPLaunchResult> {
+export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudience = { type: 'all' }): Promise<PDPLaunchResult> {
   const directory = await loadRosterDirectory()
   const managerIds = await getAllManagerStaffIds(cycle.id)
+  // Audience filters WHICH MANAGERS get launched to, by the manager's own BU/department (or an
+  // explicit selected list) — same filterStaffByAudience helper Track A uses, applied to the
+  // manager's own roster entry rather than their team members'.
+  const managerCandidates = managerIds.map((k) => directory.get(k)).filter((s): s is NonNullable<typeof s> => !!s)
+  const filteredManagers = await filterStaffByAudience(managerCandidates, audience)
+  const filteredKeys = new Set(filteredManagers.map((s) => normalizeStaffIdKey(s.staffId)))
+  const audienceFilteredManagerIds = audience.type === 'all' ? managerIds : managerIds.filter((k) => filteredKeys.has(k))
 
   const existing = await prisma.pDPManagerSurvey.findMany({ where: { cycleId: cycle.id }, select: { managerStaffId: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.managerStaffId)))
-  const toCreateKeys = managerIds.filter((k) => !existingKeys.has(k))
+  const toCreateKeys = audienceFilteredManagerIds.filter((k) => !existingKeys.has(k))
 
   const result: PDPLaunchResult = { created: 0, sent: 0, skipped: [] }
   for (const key of toCreateKeys) {
@@ -182,20 +190,26 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle): Promise<PDPLaunchRe
   return result
 }
 
+const DAY_MS = 86400000
+
 // Calendar-day cadence, same convention as sendCustomSurveyReminders and the Post-1/Post-2
 // training-survey reminders — once per day the cron runs, for anyone sent-but-not-responded, until
-// they respond. Covers all three PDP tracks in one call from the daily cron.
+// they respond or the cycle's expiryDays (default 30, same concept as Pre-Training's expiry)
+// passes since their original send. Covers all three PDP tracks in one call from the daily cron.
 export async function sendPDPReminders(): Promise<{ sent: number }> {
   if (!(await hasSmtpCredentials())) return { sent: 0 }
+  const now = Date.now()
   const todayKey = new Date().toISOString().slice(0, 10)
   let sent = 0
   const baseUrl = getAppBaseUrl()
+  const isExpired = (sentAt: Date, expiryDays: number) => now - sentAt.getTime() >= expiryDays * DAY_MS
 
   const staffDue = await prisma.pDPStaffSurvey.findMany({
     where: { sentAt: { not: null }, respondedAt: null, email: { not: null } },
     include: { cycle: true },
   })
   for (const s of staffDue) {
+    if (isExpired(s.sentAt!, s.cycle.expiryDays)) continue
     const last = s.reminderAt || s.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const { subject, html } = buildPDPStaffEmail({ cycleTitle: s.cycle.title, recipientName: s.staffName, formUrl: `${baseUrl}/survey/pdp/${s.surveyToken}`, isReminder: true })
@@ -211,6 +225,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     include: { staffSurvey: { include: { cycle: true } } },
   })
   for (const v of validationsDue) {
+    if (isExpired(v.sentAt!, v.staffSurvey.cycle.expiryDays)) continue
     const last = v.reminderAt || v.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const { subject, html } = buildPDPManagerValidationEmail({
@@ -229,6 +244,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     include: { cycle: true },
   })
   for (const m of managerSurveysDue) {
+    if (isExpired(m.sentAt!, m.cycle.expiryDays)) continue
     const last = m.reminderAt || m.sentAt!
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const { subject, html } = buildPDPManagerTeamEmail({ cycleTitle: m.cycle.title, managerName: m.managerName, formUrl: `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, isReminder: true })

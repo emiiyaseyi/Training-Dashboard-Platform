@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2 } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
@@ -13,15 +13,102 @@ interface Cycle {
   title: string
   status: string
   maxCapabilitiesPerPerson: number | null
+  expiryDays: number
   launchedAt: string | null
   _count: { staffSurveys: number; managerSurveys: number; managerOverrides: number }
 }
 
-interface Validation { managerName: string | null; respondedAt: string | null; answers: string | null }
-interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; respondedAt: string | null; answers: string | null; validations: Validation[] }
+interface Validation { id: string; managerName: string | null; respondedAt: string | null; answers: string | null }
+interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[] }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
-interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
+interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[] }
+
+interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }
+interface BusinessUnitOption { id: string; name: string }
+
+type AudienceType = 'all' | 'businessUnit' | 'department' | 'selected'
+
+function AudiencePicker({
+  label, businessUnits, roster, type, setType, value, setValue, selected, setSelected,
+}: {
+  label: string
+  businessUnits: BusinessUnitOption[]
+  roster: RosterStaff[]
+  type: AudienceType
+  setType: (t: AudienceType) => void
+  value: string
+  setValue: (v: string) => void
+  selected: RosterStaff[]
+  setSelected: (s: RosterStaff[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const pickedIds = new Set(selected.map((p) => p.staffId))
+    return roster.filter((r) => !pickedIds.has(r.staffId) && (r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q))).slice(0, 8)
+  }, [query, roster, selected])
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+      <select value={type} onChange={(e) => setType(e.target.value as AudienceType)} className="border border-slate-300 rounded-md px-2.5 py-1.5 text-xs">
+        <option value="all">Everyone</option>
+        <option value="businessUnit">By Business Unit</option>
+        <option value="department">By Department</option>
+        <option value="selected">Specific people (for testing)</option>
+      </select>
+      {type === 'businessUnit' && (
+        <select value={value} onChange={(e) => setValue(e.target.value)} className="block border border-slate-300 rounded-md px-2.5 py-1.5 text-xs w-full max-w-xs">
+          <option value="">Select Business Unit…</option>
+          {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
+        </select>
+      )}
+      {type === 'department' && (
+        <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Department name" className="block border border-slate-300 rounded-md px-2.5 py-1.5 text-xs w-full max-w-xs" />
+      )}
+      {type === 'selected' && (
+        <div>
+          <div className="relative max-w-sm">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name or Staff ID…"
+              className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+            />
+            {results.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {results.map((r) => (
+                  <button
+                    key={r.staffId}
+                    type="button"
+                    onClick={() => { setSelected([...selected, r]); setQuery('') }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+                  >
+                    <span>{r.name}</span>
+                    <span className="text-slate-400">{r.staffId}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {selected.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selected.map((p) => (
+                <span key={p.staffId} className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                  {p.name}
+                  <button type="button" onClick={() => setSelected(selected.filter((s) => s.staffId !== p.staffId))}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function PDPPage() {
   const { canAdmin, canExport } = usePagePermission()
@@ -31,11 +118,22 @@ export default function PDPPage() {
   const [detail, setDetail] = useState<CycleDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
+  const [roster, setRoster] = useState<RosterStaff[]>([])
+  const [businessUnits, setBusinessUnits] = useState<BusinessUnitOption[]>([])
+
   const [showCreate, setShowCreate] = useState(false)
   const [newYear, setNewYear] = useState(new Date().getFullYear() + 1)
   const [newTitle, setNewTitle] = useState('')
   const [newMax, setNewMax] = useState('')
+  const [newExpiry, setNewExpiry] = useState('30')
   const [creating, setCreating] = useState(false)
+
+  const [staffAudienceType, setStaffAudienceType] = useState<AudienceType>('all')
+  const [staffAudienceValue, setStaffAudienceValue] = useState('')
+  const [staffAudienceSelected, setStaffAudienceSelected] = useState<RosterStaff[]>([])
+  const [managerAudienceType, setManagerAudienceType] = useState<AudienceType>('all')
+  const [managerAudienceValue, setManagerAudienceValue] = useState('')
+  const [managerAudienceSelected, setManagerAudienceSelected] = useState<RosterStaff[]>([])
 
   const [launchingStaff, setLaunchingStaff] = useState(false)
   const [launchingManagers, setLaunchingManagers] = useState(false)
@@ -47,6 +145,9 @@ export default function PDPPage() {
   const [overrideError, setOverrideError] = useState('')
 
   const [exporting, setExporting] = useState(false)
+  const [showReport, setShowReport] = useState(false)
+  const [reportQuery, setReportQuery] = useState('')
+  const [stoppingId, setStoppingId] = useState<string | null>(null)
 
   const loadCycles = useCallback(async () => {
     setLoading(true)
@@ -72,6 +173,10 @@ export default function PDPPage() {
 
   useEffect(() => { loadCycles() }, [loadCycles])
   useEffect(() => { if (selectedId) loadDetail(selectedId) }, [selectedId, loadDetail])
+  useEffect(() => {
+    fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [])
 
   const createCycle = async () => {
     setCreating(true)
@@ -79,13 +184,14 @@ export default function PDPPage() {
       const res = await fetch('/api/admin/pdp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year: newYear, title: newTitle, maxCapabilitiesPerPerson: newMax ? Number(newMax) : null }),
+        body: JSON.stringify({ year: newYear, title: newTitle, maxCapabilitiesPerPerson: newMax ? Number(newMax) : null, expiryDays: newExpiry ? Number(newExpiry) : 30 }),
       })
       const cycle = await res.json()
       if (res.ok) {
         setShowCreate(false)
         setNewTitle('')
         setNewMax('')
+        setNewExpiry('30')
         await loadCycles()
         setSelectedId(cycle.id)
       }
@@ -94,12 +200,23 @@ export default function PDPPage() {
     }
   }
 
+  const buildAudience = (type: AudienceType, value: string, selected: RosterStaff[]) => {
+    if (type === 'businessUnit') return { type, value }
+    if (type === 'department') return { type, value }
+    if (type === 'selected') return { type, value: selected.map((s) => s.staffId) }
+    return { type: 'all' as const }
+  }
+
   const launchStaff = async () => {
     if (!selectedId) return
     setLaunchingStaff(true)
     setLaunchResult(null)
     try {
-      const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, { method: 'POST' })
+      const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected) }),
+      })
       const data = await res.json()
       if (res.ok) setLaunchResult({ track: 'Staff Self-Fill', ...data })
       else alert(data.error || 'Failed to launch.')
@@ -115,7 +232,11 @@ export default function PDPPage() {
     setLaunchingManagers(true)
     setLaunchResult(null)
     try {
-      const res = await fetch(`/api/admin/pdp/${selectedId}/launch-managers`, { method: 'POST' })
+      const res = await fetch(`/api/admin/pdp/${selectedId}/launch-managers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience: buildAudience(managerAudienceType, managerAudienceValue, managerAudienceSelected) }),
+      })
       const data = await res.json()
       if (res.ok) setLaunchResult({ track: 'Manager Team-Fill', ...data })
       else alert(data.error || 'Failed to launch.')
@@ -162,12 +283,27 @@ export default function PDPPage() {
     }
   }
 
+  const stopReminders = async (kind: 'staff-survey' | 'validation' | 'manager-survey', id: string) => {
+    if (!selectedId) return
+    setStoppingId(id)
+    try {
+      await fetch(`/api/admin/pdp/${kind}/${id}/stop-reminders`, { method: 'POST' })
+      await loadDetail(selectedId)
+    } finally {
+      setStoppingId(null)
+    }
+  }
+
   const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
   const selfTotal = detail?.staffSurveys.length ?? 0
   const validationsSubmitted = detail?.staffSurveys.reduce((s, x) => s + x.validations.filter((v) => v.respondedAt).length, 0) ?? 0
   const validationsTotal = detail?.staffSurveys.reduce((s, x) => s + x.validations.length, 0) ?? 0
   const teamMembersSubmitted = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.submittedAt).length, 0) ?? 0
   const teamMembersTotal = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added').length, 0) ?? 0
+
+  const q = reportQuery.trim().toLowerCase()
+  const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) => !q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) : []
+  const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) => !q || m.managerName.toLowerCase().includes(q) || m.managerStaffId.toLowerCase().includes(q)) : []
 
   return (
     <div className="flex flex-col">
@@ -202,10 +338,16 @@ export default function PDPPage() {
                 <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder={`${newYear} Personal Development Plan`} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
               </label>
             </div>
-            <label className="text-xs text-slate-500 block max-w-xs">
-              Max capabilities/needs per person (optional)
-              <input type="number" min={1} value={newMax} onChange={(e) => setNewMax(e.target.value)} placeholder="No limit" className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
-            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+              <label className="text-xs text-slate-500">
+                Max capabilities/needs per person (optional)
+                <input type="number" min={1} value={newMax} onChange={(e) => setNewMax(e.target.value)} placeholder="No limit" className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+              </label>
+              <label className="text-xs text-slate-500">
+                Reminders stop after (days unfilled)
+                <input type="number" min={1} value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+              </label>
+            </div>
             <div className="flex items-center gap-2">
               <button onClick={createCycle} disabled={creating} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                 {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Create
@@ -249,29 +391,44 @@ export default function PDPPage() {
                 <p className="text-xs text-slate-400 mt-1">{detail.managerSurveys.length} manager link(s) sent</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Cap per person</p>
-                <p className="text-2xl font-bold text-slate-800">{detail.cycle.maxCapabilitiesPerPerson ?? 'No limit'}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Cap / Reminders</p>
+                <p className="text-sm font-bold text-slate-800">{detail.cycle.maxCapabilitiesPerPerson ?? 'No cap'} · stop after {detail.cycle.expiryDays}d unfilled</p>
               </div>
             </div>
 
             {canAdmin && (
-              <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <p className="text-sm font-semibold text-slate-800 mb-3">Launch</p>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={launchStaff} disabled={launchingStaff} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
-                    {launchingStaff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    Launch Track A (Staff Self-Fill)
-                  </button>
-                  <button onClick={launchManagers} disabled={launchingManagers} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
-                    {launchingManagers ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
-                    Launch Track B (Manager Team-Fill)
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 mt-2">
-                  Re-running either only sends to people/managers not already created for this cycle — safe to re-run if interrupted.
+              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+                <p className="text-sm font-semibold text-slate-800">Launch</p>
+
+                <AudiencePicker
+                  label="Track A audience — who gets their own self-fill link"
+                  businessUnits={businessUnits} roster={roster}
+                  type={staffAudienceType} setType={setStaffAudienceType}
+                  value={staffAudienceValue} setValue={setStaffAudienceValue}
+                  selected={staffAudienceSelected} setSelected={setStaffAudienceSelected}
+                />
+                <button onClick={launchStaff} disabled={launchingStaff} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                  {launchingStaff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Launch Track A (Staff Self-Fill)
+                </button>
+
+                <AudiencePicker
+                  label="Track B audience — which managers get their team's link (filtered by the manager's own BU/department)"
+                  businessUnits={businessUnits} roster={roster}
+                  type={managerAudienceType} setType={setManagerAudienceType}
+                  value={managerAudienceValue} setValue={setManagerAudienceValue}
+                  selected={managerAudienceSelected} setSelected={setManagerAudienceSelected}
+                />
+                <button onClick={launchManagers} disabled={launchingManagers} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                  {launchingManagers ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+                  Launch Track B (Manager Team-Fill)
+                </button>
+
+                <p className="text-[11px] text-slate-400">
+                  Re-running either only sends to people/managers not already created for this cycle — safe to re-run with a wider audience later (e.g. test with a few people first, then launch to everyone).
                 </p>
                 {launchResult && (
-                  <div className="mt-3 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                     <p className="text-emerald-700">{launchResult.track}: {launchResult.created} created, {launchResult.sent} sent.</p>
                     {launchResult.skipped.length > 0 && (
                       <p className="text-amber-700 mt-1">{launchResult.skipped.length} skipped — {launchResult.skipped.slice(0, 5).map((s) => `${s.name} (${s.reason})`).join('; ')}{launchResult.skipped.length > 5 ? '…' : ''}</p>
@@ -315,6 +472,103 @@ export default function PDPPage() {
                 </p>
               </div>
             )}
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <button onClick={() => setShowReport((v) => !v)} className="w-full flex items-center justify-between text-left">
+                <p className="text-sm font-semibold text-slate-800">Response Report — who&apos;s filled, who hasn&apos;t</p>
+                {showReport ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </button>
+              {showReport && (
+                <div className="mt-4 space-y-5">
+                  <div className="relative max-w-xs">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={reportQuery}
+                      onChange={(e) => setReportQuery(e.target.value)}
+                      placeholder="Search by name or Staff ID…"
+                      className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 mb-2">Track A — Staff Self-Fill ({filteredStaffSurveys.length})</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-slate-400 uppercase tracking-wide border-b border-slate-100">
+                            <th className="py-1.5 pr-3">Staff</th>
+                            <th className="py-1.5 pr-3">BU</th>
+                            <th className="py-1.5 pr-3">Sent</th>
+                            <th className="py-1.5 pr-3">Filled</th>
+                            <th className="py-1.5 pr-3">Manager Validation(s)</th>
+                            <th className="py-1.5"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredStaffSurveys.map((s) => (
+                            <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                              <td className="py-1.5 pr-3 text-slate-700">{s.staffName} <span className="text-slate-400">({s.staffId})</span></td>
+                              <td className="py-1.5 pr-3 text-slate-500">{s.businessUnit}</td>
+                              <td className="py-1.5 pr-3">{s.sentAt ? '✓' : '—'}</td>
+                              <td className="py-1.5 pr-3">{s.respondedAt ? <span className="text-emerald-600 font-medium">✓</span> : <span className="text-slate-300">—</span>}</td>
+                              <td className="py-1.5 pr-3 text-slate-500">
+                                {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: ${v.respondedAt ? '✓' : 'pending'}`).join(', ')}
+                              </td>
+                              <td className="py-1.5 text-right">
+                                {!s.respondedAt && s.sentAt && canAdmin && (
+                                  <button onClick={() => stopReminders('staff-survey', s.id)} disabled={stoppingId === s.id} className="text-slate-400 hover:text-red-600" title="Stop reminders for this person">
+                                    {stoppingId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellOff className="w-3.5 h-3.5" />}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                          {filteredStaffSurveys.length === 0 && (
+                            <tr><td colSpan={6} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 mb-2">Track B — Manager Team-Fill ({filteredManagerSurveys.length})</p>
+                    <div className="space-y-2">
+                      {filteredManagerSurveys.map((m) => {
+                        const active = m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added')
+                        const done = active.filter((t) => t.submittedAt).length
+                        return (
+                          <div key={m.id} className="border border-slate-100 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-medium text-slate-700">{m.managerName} <span className="text-slate-400">({m.managerStaffId})</span></p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-slate-500">
+                                  {m.rosterConfirmedAt ? `${done}/${active.length} team members done` : 'Roster not yet confirmed'}
+                                  {m.respondedAt && <span className="text-emerald-600 font-medium"> — complete</span>}
+                                </span>
+                                {!m.respondedAt && m.sentAt && canAdmin && (
+                                  <button onClick={() => stopReminders('manager-survey', m.id)} disabled={stoppingId === m.id} className="text-slate-400 hover:text-red-600" title="Stop reminders for this manager">
+                                    {stoppingId === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BellOff className="w-3.5 h-3.5" />}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {active.length > 0 && (
+                              <ul className="mt-1.5 text-[11px] text-slate-500 space-y-0.5">
+                                {active.map((t) => (
+                                  <li key={t.id}>{t.staffName} — {t.submittedAt ? <span className="text-emerald-600">done</span> : 'pending'}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {filteredManagerSurveys.length === 0 && <p className="text-xs text-slate-400">No managers launched yet.</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {canExport && (
               <button onClick={downloadExcel} disabled={exporting} className="flex items-center gap-1.5 text-sm font-medium text-navy-700 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-50">
