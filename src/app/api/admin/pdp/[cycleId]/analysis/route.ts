@@ -20,8 +20,10 @@ function parseAnswers(raw: string | null): Answers | null {
 // manager-filled directly) — never both, so nobody is double-counted.
 interface FinalizedPlan {
   staffId: string
+  staffName: string
   businessUnit: string
   department: string | null
+  source: string
   answers: Answers
 }
 
@@ -46,14 +48,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     const completedValidation = s.validations.find((v) => v.respondedAt && v.editedAnswers)
     const answers = completedValidation ? parseAnswers(completedValidation.editedAnswers) : parseAnswers(s.answers)
     if (!answers) continue
-    plans.push({ staffId: s.staffId, businessUnit: s.businessUnit || 'Unassigned', department: s.department, answers })
+    plans.push({
+      staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department,
+      source: completedValidation ? `Self-Fill, validated by ${completedValidation.managerName || 'manager'}` : 'Self-Fill (not yet validated)',
+      answers,
+    })
   }
   for (const m of managerSurveys) {
     for (const t of m.teamMembers) {
       if ((t.status !== 'accepted' && t.status !== 'added') || !t.submittedAt) continue
       const answers = parseAnswers(t.answers)
       if (!answers) continue
-      plans.push({ staffId: t.staffId, businessUnit: t.businessUnit || 'Unassigned', department: null, answers })
+      plans.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName})`, answers })
     }
   }
 
@@ -103,10 +109,66 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
   const businessUnits = [...new Set(plans.map((p) => p.businessUnit))].sort()
   const departments = [...new Set(plans.map((p) => p.department).filter((d): d is string => !!d))].sort()
 
+  // One merged "what capabilities does the organisation need" ranking — the capabilities section
+  // normally holds a Primary and a Secondary capability question, counted together here (a person
+  // picking the same capability for both only counts once) rather than as two separate rankings a
+  // reader has to mentally combine themselves.
+  const capabilitiesSection = sections.find((s) => s.key === 'capabilities')
+  const capabilityDemand: QuestionBreakdown = { questionId: 'capabilityDemand', label: 'Capability Demand (Primary + Secondary combined)', sectionTitle: capabilitiesSection?.title || 'Capabilities', total: {}, byBusinessUnit: {}, byDepartment: {} }
+  if (capabilitiesSection) {
+    for (const plan of plans) {
+      const picked = new Set<string>()
+      for (const q of capabilitiesSection.questions) {
+        const v = plan.answers.answers[q.id]
+        if (typeof v === 'string' && v) picked.add(v)
+      }
+      for (const val of picked) {
+        bump(capabilityDemand.total, val)
+        if (!capabilityDemand.byBusinessUnit[plan.businessUnit]) capabilityDemand.byBusinessUnit[plan.businessUnit] = {}
+        bump(capabilityDemand.byBusinessUnit[plan.businessUnit], val)
+        const deptKey = plan.department || 'Unassigned'
+        if (!capabilityDemand.byDepartment[deptKey]) capabilityDemand.byDepartment[deptKey] = {}
+        bump(capabilityDemand.byDepartment[deptKey], val)
+      }
+    }
+  }
+
+  // Group-training candidates — same development need area, same Business Unit, picked by 2+
+  // people. A direct "here's where to combine training instead of running it one-on-one" signal
+  // for L&D, using the first select question in development_needs (the "what area" question,
+  // whatever it's currently labeled) as the grouping key.
+  const needsSection = sections.find((s) => s.key === 'development_needs')
+  const areaQuestion = needsSection?.questions.find((q) => q.type === 'select')
+  const groupOpportunities: { area: string; businessUnit: string; count: number; people: string[] }[] = []
+  if (areaQuestion) {
+    const groups = new Map<string, { area: string; businessUnit: string; people: string[] }>()
+    for (const plan of plans) {
+      for (const need of plan.answers.developmentNeeds) {
+        const area = need[areaQuestion.id]
+        if (typeof area !== 'string' || !area) continue
+        const key = `${area}::${plan.businessUnit}`
+        const g = groups.get(key) ?? { area, businessUnit: plan.businessUnit, people: [] }
+        if (!g.people.includes(plan.staffName)) g.people.push(plan.staffName)
+        groups.set(key, g)
+      }
+    }
+    for (const g of groups.values()) if (g.people.length >= 2) groupOpportunities.push({ ...g, count: g.people.length })
+    groupOpportunities.sort((a, b) => b.count - a.count)
+  }
+
   return NextResponse.json({
     totalPlans: plans.length,
     businessUnits,
     departments,
+    capabilityDemand,
+    groupOpportunities,
     questions: [...breakdowns.values()],
+    // Full section/question structure (including text/textarea/rating/yesno, not just the
+    // countable select/multiselect ones above) — lets the client render a complete per-person
+    // drill-down, not just the aggregate counts.
+    sections,
+    people: plans.map((p) => ({
+      staffId: p.staffId, staffName: p.staffName, businessUnit: p.businessUnit, department: p.department, source: p.source, answers: p.answers,
+    })),
   })
 }

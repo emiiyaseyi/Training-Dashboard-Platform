@@ -132,7 +132,16 @@ export default function PDPStaffSurveyPage() {
   const setNeedAnswer = (index: number, questionId: string, value: string | string[]) => {
     setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.map((n, i) => (i === index ? { ...n, [questionId]: value } : n)) })
   }
-  const addNeed = () => setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
+  // Advances to the new blank need's page immediately — without this, the "Add another" click
+  // appends to developmentNeeds but leaves `page` pointing at the same index, so the respondent
+  // stays on the page they were already looking at and nothing visibly happens (the button simply
+  // disappears, since it only shows on the last need page, making the click look like it did
+  // nothing). The new need always lands immediately after the current one in the page order, since
+  // it's appended to the end of developmentNeeds while the respondent is on the last existing need.
+  const addNeed = () => {
+    setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
+    setPage((p) => p + 1)
+  }
   const removeNeed = (index: number) => {
     setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.filter((_, i) => i !== index) })
     setPage((p) => Math.max(0, p - 1))
