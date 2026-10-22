@@ -4,6 +4,7 @@ import { createMailSender, hasSmtpCredentials, parseCcList } from '@/lib/mailer'
 import { buildSurveyEmail, surveyRecipientRole, type SurveyStage } from '@/lib/survey-email'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { loadRosterDirectory, resolveCurrentAttendeeFields, type ResolvedStaff } from '@/lib/staff-directory'
+import { parseSessionDates } from '@/lib/training-sessions'
 
 // Re-resolves an attendee's name/email/Line Manager against the CURRENT roster right before a
 // send, and persists whatever changed. Those fields are a snapshot taken when the attendee was
@@ -186,6 +187,7 @@ export async function sendSurveyStage(
         location: schedule.location,
         meetingLink: schedule.meetingLink,
         isHistorical: schedule.sourcedFromHistoricalData,
+        sessionDates: parseSessionDates(schedule.sessionDates),
       })
       try {
         await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: shouldSkipDefaultCc })
@@ -283,19 +285,26 @@ export async function sendSurveyReminders(
 
   const isExpired = (sentAt: Date) => settings.expiryEnabled && now - sentAt.getTime() >= settings.expiryDays * DAY_MS
 
-  const due: (TrainingScheduleAttendee & { _reopen: boolean })[] = []
+  const due: (TrainingScheduleAttendee & { _reopen: boolean; _detailOnly: boolean })[] = []
   for (const a of schedule.attendees) {
     const sentAt = a[sentField]
-    if (!sentAt || a[respondedField]) continue
+    if (!sentAt) continue
+    const responded = !!a[respondedField]
+    // Pre is the one stage where a responded attendee still gets a periodic reminder — a plain
+    // "your training is coming up" logistics notice (no survey link, see detailOnly in
+    // survey-email.ts), on the same cadence, right up to the training starting. Post-1/Post-2
+    // stop entirely once responded, as before — there's nothing left to remind them about.
+    if (stage !== 'pre' && responded) continue
+
     const expired = isExpired(sentAt)
     if (options.force) {
-      // A forced reminder to someone already past expiry would otherwise email a link the submit
-      // route independently re-checks and rejects (isSurveyExpired against the ORIGINAL sentAt) —
-      // a dead link is worse than none. Reopen their window (below) instead of just re-nudging it.
-      due.push({ ...a, _reopen: expired })
+      if (responded) continue // the manual "nudge everyone outstanding" button only means unresponded people
+      due.push({ ...a, _reopen: expired, _detailOnly: false })
       continue
     }
-    if (expired) continue
+    // Expiry only matters for someone who still needs to fill the survey — a responded attendee
+    // isn't filling anything, so their logistics reminder isn't gated by it.
+    if (!responded && expired) continue
     const lastNudge = a[reminderField] || sentAt
     if (lastNudge.toISOString().slice(0, 10) === todayKey) continue // already nudged today, regardless of cadence
 
@@ -303,10 +312,11 @@ export async function sendSurveyReminders(
       const intervalDays = settings.preReminderIntervalDays ?? 7
       const daysSinceLastNudge = (now - lastNudge.getTime()) / DAY_MS
       const daysUntilStart = (schedule.startDate.getTime() - now) / DAY_MS
+      if (daysUntilStart < 0) continue // training has already started — nothing left to remind about
       const isDayBeforeTraining = daysUntilStart <= 1 && daysUntilStart >= 0
-      if (daysSinceLastNudge >= intervalDays || isDayBeforeTraining) due.push({ ...a, _reopen: false })
+      if (daysSinceLastNudge >= intervalDays || isDayBeforeTraining) due.push({ ...a, _reopen: false, _detailOnly: responded })
     } else {
-      due.push({ ...a, _reopen: false })
+      due.push({ ...a, _reopen: false, _detailOnly: false })
     }
   }
   if (due.length === 0) return result
@@ -343,6 +353,8 @@ export async function sendSurveyReminders(
         meetingLink: schedule.meetingLink,
         isReminder: true,
         isHistorical: schedule.sourcedFromHistoricalData,
+        detailOnly: attendeeBefore._detailOnly,
+        sessionDates: parseSessionDates(schedule.sessionDates),
       })
       try {
         // A reminder is, by definition, a resend — sentField is already set, that's the whole

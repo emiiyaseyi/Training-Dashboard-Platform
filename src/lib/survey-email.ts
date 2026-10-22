@@ -69,12 +69,23 @@ export function buildSurveyEmail(input: {
   meetingLink?: string | null // join link, when trainingMode is "virtual" or "platform"
   isReminder?: boolean // prefixes the subject and adds a short nudge line — used by the daily reminder sweep
   isHistorical?: boolean // sent via "Already Attended Trainings" (retroactively created schedule) — adds a duplicate-fill caveat to Post-1 and reframes Post-2's intro
+  // Pre-stage only: this person already filled the Pre-Training survey, so the periodic
+  // every-N-days-until-start reminder becomes a plain "your training is coming up" logistics
+  // notice instead of a survey nudge — no survey link/button, since there's nothing left to fill.
+  detailOnly?: boolean
+  // For a training that meets more than once (e.g. twice a week over several weeks) rather than
+  // one continuous block — when present (2+ entries), the Pre-Training email lists every session
+  // date explicitly instead of the simple "from X to Y" range, which would otherwise misleadingly
+  // read as one continuous multi-day block.
+  sessionDates?: { date: string; startTime?: string | null; endTime?: string | null }[]
 }): { subject: string; html: string } {
-  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, trainingMode, location, meetingLink, isReminder, isHistorical } = input
+  const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, trainingMode, location, meetingLink, isReminder, isHistorical, detailOnly, sessionDates } = input
   const firstName = firstNameOf(recipientName)
-  const subject = stage === 'pre'
-    ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
-    : `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
+  const subject = stage === 'pre' && detailOnly
+    ? `Reminder: Upcoming Training — ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
+    : stage === 'pre'
+      ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
+      : `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
 
   // No max-width here — a fixed narrow column made the text wrap well before reaching the edge of
   // the actual reading pane, which read as broken/premature wrapping rather than a deliberate
@@ -87,15 +98,21 @@ export function buildSurveyEmail(input: {
   // fix for this exact "styles are all there but Outlook ignores them anyway" symptom.
   const wrap = (bodyHtml: string) => `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="${FONT}color:#1B1F3B;">
-      ${isReminder ? P('Reminder: we haven\'t received your response yet.', 'color:#C9A24B;font-weight:600;') : ''}
+      ${isReminder && !detailOnly ? P('Reminder: we haven\'t received your response yet.', 'color:#C9A24B;font-weight:600;') : ''}
       ${bodyHtml}
     </td></tr></table>
   `
 
   if (stage === 'pre') {
-    const scheduleLine = startDate && endDate
-      ? `scheduled to hold from ${fmtDate(startDate)} to ${fmtDate(endDate)}`
-      : 'scheduled to hold soon'
+    const hasMultipleSessions = (sessionDates?.length ?? 0) >= 2
+    const scheduleLine = hasMultipleSessions
+      ? 'scheduled to hold across multiple sessions (see the dates below)'
+      : startDate && endDate
+        ? `scheduled to hold from ${fmtDate(startDate)} to ${fmtDate(endDate)}`
+        : 'scheduled to hold soon'
+    const sessionListLine = hasMultipleSessions
+      ? P(`<strong>Session dates:</strong><br/>${sessionDates!.map((s) => `${fmtDate(s.date)}${s.startTime || s.endTime ? ` (${[s.startTime, s.endTime].filter(Boolean).join(' – ')})` : ''}`).join('<br/>')}`)
+      : ''
     // trainingType names vary — some are bare categories ("Summit", "Workshop") that read
     // naturally with " training" appended, others ("Internal Training", "External Training")
     // already end in the word themselves, which would otherwise double up as "External Training
@@ -112,11 +129,26 @@ export function buildSurveyEmail(input: {
           : trainingMode === 'platform' && meetingLink
             ? P(`This training will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
             : ''
+    if (detailOnly) {
+      return {
+        subject,
+        html: wrap(`
+          ${P(`Dear ${firstName},`)}
+          ${P(`This is a reminder that you are nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
+          ${sessionListLine}
+          ${venueLine}
+          ${P('You have already completed the pre-training survey for this programme — no further action is needed there.')}
+          ${P('We look forward to your participation.')}
+          ${SIGNOFF}
+        `),
+      }
+    }
     return {
       subject,
       html: wrap(`
         ${P(`Dear ${firstName},`)}
         ${P(`You have been nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
+        ${sessionListLine}
         ${venueLine}
         ${P('As part of your preparation, kindly complete the pre-training survey using the link below:')}
         ${BUTTON(formUrl, 'Pre-Training Survey')}

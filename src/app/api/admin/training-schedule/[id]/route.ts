@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import type { ExcludedQuestionIds } from '@/lib/survey-questions'
+import { parseSessionDates, deriveDateRangeFromSessions, type TrainingSession } from '@/lib/training-sessions'
 import { createMailSender } from '@/lib/mailer'
 import { buildScheduleChangeEmail, type ScheduleChangeReason } from '@/lib/schedule-change-email'
 
@@ -16,24 +17,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, skipLineManagerCc, trainingMode, location, meetingLink, excludedQuestionIds } = body as {
+    const { trainingName, businessUnit, startDate, endDate, hours, costPerAttendee, trainingType, capability, vendor, remindersEnabled, preEnabled, post1Enabled, post2Enabled, additionalCc, additionalCcMode, skipLineManagerCc, trainingMode, location, meetingLink, excludedQuestionIds, sessionDates } = body as {
       trainingName: string; businessUnit: string; startDate: string; endDate: string; hours?: number
       costPerAttendee?: number; trainingType?: string; capability?: string; vendor?: string
       remindersEnabled?: boolean; preEnabled?: boolean; post1Enabled?: boolean; post2Enabled?: boolean
       additionalCc?: string; additionalCcMode?: string; skipLineManagerCc?: boolean
       trainingMode?: string; location?: string; meetingLink?: string; excludedQuestionIds?: ExcludedQuestionIds
+      sessionDates?: TrainingSession[]
     }
     if (!trainingName?.trim()) return NextResponse.json({ error: 'Training name is required.' }, { status: 400 })
     if (!businessUnit?.trim()) return NextResponse.json({ error: 'Business Unit is required.' }, { status: 400 })
     if (!startDate || !endDate) return NextResponse.json({ error: 'Start and end dates are required.' }, { status: 400 })
+
+    const sessions = parseSessionDates(sessionDates ? JSON.stringify(sessionDates) : null)
+    const derivedRange = deriveDateRangeFromSessions(sessions)
 
     const schedule = await prisma.trainingSchedule.update({
       where: { id },
       data: {
         trainingName: trainingName.trim(),
         businessUnit: normalizeBUName(businessUnit),
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: derivedRange?.startDate ?? new Date(startDate),
+        endDate: derivedRange?.endDate ?? new Date(endDate),
+        sessionDates: sessions.length > 0 ? JSON.stringify(sessions) : null,
         hours: hours ? Number(hours) : null,
         costPerAttendee: costPerAttendee ? Number(costPerAttendee) : null,
         trainingType: trainingType?.trim() || null,

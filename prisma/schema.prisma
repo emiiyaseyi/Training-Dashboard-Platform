@@ -562,6 +562,13 @@ model TrainingSchedule {
   // created) via the cron sweep, which had no way to know the admin's choice at all.
   skipLineManagerCc Boolean @default(false)
   excludedQuestionIds String? // JSON: { pre: string[], post1: string[], post2: string[] } — SurveyQuestion ids to hide from THIS schedule's respondents only (the question bank itself is shared/global across all schedules); blank/missing stage key = show everything, as before this existed
+  // JSON array of { date: string (YYYY-MM-DD), startTime?: string, endTime?: string } — for a
+  // training that meets more than once (e.g. twice a week over several weeks), rather than one
+  // continuous startDate-endDate block. When set, startDate/endDate are still kept in sync as the
+  // min/max of this list (first session / last session), so Pre/Post-1/Post-2 timing logic keeps
+  // working unchanged — this field only adds the precise per-session detail shown to attendees in
+  // the Pre-Training email and the admin UI. Null/blank for an ordinary single continuous training.
+  sessionDates    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

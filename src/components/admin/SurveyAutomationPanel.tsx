@@ -7,6 +7,7 @@ import {
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { sendStageInBatches } from '@/lib/survey-send-batches'
+import type { TrainingSession } from '@/lib/training-sessions'
 import { TrainingScheduleSurveyView } from './TrainingScheduleSurveyView'
 import { SurveyInsightsPanel } from './SurveyInsightsPanel'
 import { DuplicateSurveyResponsesPanel } from './DuplicateSurveyResponsesPanel'
@@ -67,6 +68,7 @@ interface Schedule {
   location: string | null
   meetingLink: string | null
   excludedQuestionIds: Partial<Record<'pre' | 'post1' | 'post2', string[]>>
+  sessionDates: TrainingSession[]
   attendeeCount: number
   preSent: number
   post1Sent: number
@@ -162,6 +164,7 @@ interface NewScheduleDraft {
   newScheduleIncludeDefaultCc: boolean
   newScheduleIncludeLineManagerCc: boolean
   newScheduleSendPreNow?: boolean
+  sessionDates?: TrainingSession[]
 }
 
 function loadNewScheduleDraft(): NewScheduleDraft | null {
@@ -273,6 +276,12 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     preEnabled: true, post1Enabled: true, post2Enabled: true, additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual', isHistorical: false,
     trainingMode: 'physical' as 'physical' | 'virtual' | 'platform' | 'hybrid', location: '', meetingLink: '',
   })
+  // Multiple session dates (e.g. a training meeting twice a week over several weeks) — kept out
+  // of `newSchedule` since it's a list, not a plain form field. Empty = an ordinary single
+  // continuous training (Start date/End date fields apply as normal); 1+ entries means startDate/
+  // endDate are instead derived server-side as the first/last session (see training-sessions.ts).
+  const [sessionDates, setSessionDates] = useState<TrainingSession[]>(() => scheduleDraft?.sessionDates ?? [])
+  const [useMultipleSessions, setUseMultipleSessions] = useState(() => (scheduleDraft?.sessionDates?.length ?? 0) > 0)
   // Per-schedule question exclusion — lets an admin untick specific questions (from the shared,
   // global question bank) so THIS schedule's respondents never see them, without touching the
   // bank for any other schedule. Kept out of `newSchedule` since it's a nested object, not a
@@ -360,12 +369,12 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     if (editingScheduleId) return
     try {
       localStorage.setItem(NEW_SCHEDULE_DRAFT_KEY, JSON.stringify({
-        newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow,
+        newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow, sessionDates,
       }))
     } catch {
       // Storage full/blocked — the form still works, it just won't survive a refresh this time.
     }
-  }, [editingScheduleId, newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow])
+  }, [editingScheduleId, newSchedule, newSchedulePending, excludedQuestionIds, newScheduleIncludeDefaultCc, newScheduleIncludeLineManagerCc, newScheduleSendPreNow, sessionDates])
   // Progress feedback while the immediate send-on-create is running in batches (see saveSchedule)
   // — replaces a single long spinner with a live count, since a large participant list can take
   // a while (the mailer sends one at a time over one pooled SMTP connection).
@@ -518,6 +527,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     setNewScheduleIncludeDefaultCc(true)
     setNewScheduleIncludeLineManagerCc(true)
     setNewScheduleSendPreNow(false)
+    setSessionDates([])
+    setUseMultipleSessions(false)
     setCreateSendProgress(null)
     try { localStorage.removeItem(NEW_SCHEDULE_DRAFT_KEY) } catch { /* nothing to clean up */ }
   }
@@ -545,6 +556,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
     })
     setExcludedQuestionIds(s.excludedQuestionIds ?? {})
     setNewScheduleIncludeLineManagerCc(!s.skipLineManagerCc)
+    setSessionDates(s.sessionDates ?? [])
+    setUseMultipleSessions((s.sessionDates ?? []).length > 0)
     setEditingScheduleId(s.id)
     setShowAddSchedule(true)
   }
@@ -566,6 +579,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
             // send below — see skipLineManagerCc on TrainingSchedule for why.
             skipLineManagerCc: !newScheduleIncludeLineManagerCc,
             excludedQuestionIds,
+            sessionDates: useMultipleSessions ? sessionDates.filter((s) => s.date) : [],
           }),
         }
       )
@@ -1148,8 +1162,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               <p className="text-xs font-medium text-slate-600 mb-1.5">Reminders</p>
               <p className="text-[11px] text-slate-400 mb-2">
                 Post-1/Post-2: a nudge every day the scheduled sweep runs, for anyone already sent a stage who hasn&apos;t responded yet — not a fixed hour count, so it can&apos;t miss a day depending on what time the original survey went out.
-                Pre-Training instead nudges every N days (above) since the last nudge, plus one guaranteed extra reminder the day before the training starts regardless of where that falls in the interval.
-                All three stop once the person responds or (if enabled) the survey expires. Reminders can also be turned off per training schedule.
+                Pre-Training instead nudges every N days (above) since the last nudge, plus one guaranteed extra reminder the day before the training starts regardless of where that falls in the interval — and keeps going on
+                that same schedule even after the person responds, as a plain &quot;your training is coming up&quot; notice with no survey link, right up to the training start date (then stops).
+                Post-1/Post-2 stop once the person responds, or (if enabled) once the survey expires. Reminders can also be turned off per training schedule.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="text-xs text-slate-500 flex flex-col">
@@ -1399,7 +1414,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                   type="date"
                   value={newSchedule.startDate}
                   onChange={(e) => setNewSchedule({ ...newSchedule, startDate: e.target.value })}
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  disabled={useMultipleSessions}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 disabled:opacity-50 disabled:bg-slate-50"
                 />
               </label>
               <label className="text-xs text-slate-500">
@@ -1408,7 +1424,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                   type="date"
                   value={newSchedule.endDate}
                   onChange={(e) => setNewSchedule({ ...newSchedule, endDate: e.target.value })}
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  disabled={useMultipleSessions}
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 disabled:opacity-50 disabled:bg-slate-50"
                 />
               </label>
               <label className="text-xs text-slate-500">
@@ -1421,6 +1438,58 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                 />
               </label>
             </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={useMultipleSessions}
+                  onChange={(e) => setUseMultipleSessions(e.target.checked)}
+                />
+                This training meets more than once (e.g. twice a week, or runs over several weeks)
+              </label>
+              {useMultipleSessions && (
+                <div className="mt-2 border border-dashed border-slate-300 rounded-lg p-3 space-y-2">
+                  <p className="text-[11px] text-slate-400">
+                    Add every session date — Start date/End date above are set automatically from the earliest and latest session here, and
+                    every session is listed out for attendees in the Pre-Training email instead of a single date range.
+                  </p>
+                  {sessionDates.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={s.date}
+                        onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, date: e.target.value } : row)))}
+                        className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm"
+                      />
+                      <input
+                        value={s.startTime ?? ''}
+                        onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, startTime: e.target.value } : row)))}
+                        placeholder="Start time (optional)"
+                        className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm w-40"
+                      />
+                      <input
+                        value={s.endTime ?? ''}
+                        onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, endTime: e.target.value } : row)))}
+                        placeholder="End time (optional)"
+                        className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm w-40"
+                      />
+                      <button type="button" onClick={() => setSessionDates(sessionDates.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-600 shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSessionDates([...sessionDates, { date: '', startTime: '', endTime: '' }])}
+                    className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add session
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label className="text-xs text-slate-500">
                 Cost per attendee
@@ -1721,7 +1790,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{s.trainingName}</p>
                       <p className="text-xs text-slate-500">
-                        {s.businessUnit} · {fmtDate(s.startDate)}–{fmtDate(s.endDate)} · {s.hours ? `${s.hours}h` : 'no hours set'} ·{' '}
+                        {s.businessUnit} · {fmtDate(s.startDate)}–{fmtDate(s.endDate)}{s.sessionDates?.length > 1 ? ` (${s.sessionDates.length} sessions)` : ''} · {s.hours ? `${s.hours}h` : 'no hours set'} ·{' '}
                         {s.costPerAttendee ? `₦${s.costPerAttendee.toLocaleString()}/attendee` : 'no cost set'} · {s.attendeeCount} attendee{s.attendeeCount === 1 ? '' : 's'}
                         {s.trainingType ? ` · ${s.trainingType}` : ''}{s.capability ? ` · ${s.capability}` : ''}{s.vendor ? ` · ${s.vendor}` : ''}
                       </p>
