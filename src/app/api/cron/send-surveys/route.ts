@@ -4,6 +4,7 @@ import { sendSurveyStage, sendSurveyReminders } from '@/lib/survey-send'
 import type { SurveyStage } from '@/lib/survey-email'
 import { sendCronFailureAlert } from '@/lib/cron-alert'
 import { sendCustomSurveyReminders } from '@/lib/custom-survey'
+import { sendPDPReminders } from '@/lib/pdp-send'
 
 const DAY_MS = 86400000
 
@@ -107,16 +108,28 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Third sweep: PDP reminders (Track A self-fill, Track A manager validations, Track B manager
+  // team-fill) — same calendar-day cadence as everything above. A failure here shouldn't block
+  // either of the sweeps already run, so it's wrapped and reported the same way as the others.
+  let pdpResult: { sent: number } = { sent: 0 }
+  let pdpError: string | null = null
+  try {
+    pdpResult = await sendPDPReminders()
+  } catch (err) {
+    pdpError = err instanceof Error ? err.message : 'Failed to send PDP reminders.'
+  }
+
   await sendCronFailureAlert(
     'Survey send/reminder',
     [
       ...errors.map((e) => `Schedule ${e.scheduleId} (${e.stage}): ${e.message}`),
       ...customErrors.map((e) => `Custom Survey "${e.title}": ${e.message}`),
+      ...(pdpError ? [`PDP reminders: ${pdpError}`] : []),
     ]
   )
 
   return NextResponse.json({
-    success: errors.length === 0 && customErrors.length === 0,
-    results, errors, customResults, customErrors,
+    success: errors.length === 0 && customErrors.length === 0 && !pdpError,
+    results, errors, customResults, customErrors, pdpResult, pdpError,
   })
 }
