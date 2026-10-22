@@ -250,10 +250,16 @@ const DAY_MS = 86400000
 // entire day depending on what time the original send happened relative to the cron's fixed
 // time. Comparing calendar dates instead means anyone still unresponded gets reminded on every
 // day's run, full stop, until they respond or expire — matching the actual daily cadence.
+//
+// Pre is the one exception: with a lead time of weeks (default 30 days before start), a daily
+// nudge for the whole window would be excessive, so it instead re-nudges every
+// `preReminderIntervalDays` (default 7) since the last nudge, PLUS a guaranteed extra reminder
+// the day before startDate regardless of where that lands in the interval — see the `stage ===
+// 'pre'` branch below. Post-1/Post-2 keep the simpler daily-while-unresponded cadence.
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { expiryEnabled: boolean; expiryDays: number },
+  settings: { expiryEnabled: boolean; expiryDays: number; preReminderIntervalDays?: number },
   // Set by the admin's manual "Send Reminders to Everyone Outstanding" button — a deliberate,
   // one-off nudge that should reach EVERYONE still unresponded right now, including people the
   // daily sweep has stopped nudging because their survey expired, and regardless of whether
@@ -291,7 +297,17 @@ export async function sendSurveyReminders(
     }
     if (expired) continue
     const lastNudge = a[reminderField] || sentAt
-    if (lastNudge.toISOString().slice(0, 10) !== todayKey) due.push({ ...a, _reopen: false })
+    if (lastNudge.toISOString().slice(0, 10) === todayKey) continue // already nudged today, regardless of cadence
+
+    if (stage === 'pre') {
+      const intervalDays = settings.preReminderIntervalDays ?? 7
+      const daysSinceLastNudge = (now - lastNudge.getTime()) / DAY_MS
+      const daysUntilStart = (schedule.startDate.getTime() - now) / DAY_MS
+      const isDayBeforeTraining = daysUntilStart <= 1 && daysUntilStart >= 0
+      if (daysSinceLastNudge >= intervalDays || isDayBeforeTraining) due.push({ ...a, _reopen: false })
+    } else {
+      due.push({ ...a, _reopen: false })
+    }
   }
   if (due.length === 0) return result
 

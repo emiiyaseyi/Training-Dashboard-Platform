@@ -19,6 +19,7 @@ interface SettingsState {
   post2MirrorSheetName: string
   preMirrorSheetName: string
   preDaysBefore: number
+  preReminderIntervalDays: number
   post1DaysAfter: number
   post2DaysAfter: number
   expiryEnabled: boolean
@@ -180,7 +181,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
   const [scheduleDraft] = useState(() => (typeof window !== 'undefined' ? loadNewScheduleDraft() : null))
   const [settings, setSettings] = useState<SettingsState>({
     post1MirrorSheetName: '', post2MirrorSheetName: '', preMirrorSheetName: '',
-    preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30,
+    preDaysBefore: 30, preReminderIntervalDays: 7, post1DaysAfter: 1, post2DaysAfter: 30,
     expiryEnabled: true, expiryDays: 7, maxFileUploadMB: 20,
     excludeDefaultCcOnReminders: true,
   })
@@ -407,7 +408,8 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
         post1MirrorSheetName: data.post1MirrorSheetName || '',
         post2MirrorSheetName: data.post2MirrorSheetName || '',
         preMirrorSheetName: data.preMirrorSheetName || '',
-        preDaysBefore: data.preDaysBefore ?? 7,
+        preDaysBefore: data.preDaysBefore ?? 30,
+        preReminderIntervalDays: data.preReminderIntervalDays ?? 7,
         post1DaysAfter: data.post1DaysAfter ?? 1,
         post2DaysAfter: data.post2DaysAfter ?? 30,
         expiryEnabled: data.expiryEnabled ?? true,
@@ -1090,7 +1092,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
               <p className="text-[11px] text-slate-400 mb-2">
                 The daily automated check uses these to decide when each stage is due. Manual &quot;Send to all&quot; buttons ignore timing entirely.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <label className="text-xs text-slate-500">
                   Pre-Training — days before start
                   <input
@@ -1098,6 +1100,16 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                     min={0}
                     value={settings.preDaysBefore}
                     onChange={(e) => setSettings({ ...settings, preDaysBefore: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Pre-Training reminder — every N days
+                  <input
+                    type="number"
+                    min={1}
+                    value={settings.preReminderIntervalDays}
+                    onChange={(e) => setSettings({ ...settings, preReminderIntervalDays: Number(e.target.value) })}
                     className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
                   />
                 </label>
@@ -1127,7 +1139,9 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
             <div>
               <p className="text-xs font-medium text-slate-600 mb-1.5">Reminders</p>
               <p className="text-[11px] text-slate-400 mb-2">
-                A nudge every day the scheduled sweep runs, for anyone already sent a stage who hasn&apos;t responded yet — not a fixed hour count, so it can&apos;t miss a day depending on what time the original survey went out. Stops once they respond or (if enabled) the survey expires. Reminders can also be turned off per training schedule.
+                Post-1/Post-2: a nudge every day the scheduled sweep runs, for anyone already sent a stage who hasn&apos;t responded yet — not a fixed hour count, so it can&apos;t miss a day depending on what time the original survey went out.
+                Pre-Training instead nudges every N days (above) since the last nudge, plus one guaranteed extra reminder the day before the training starts regardless of where that falls in the interval.
+                All three stop once the person responds or (if enabled) the survey expires. Reminders can also be turned off per training schedule.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="text-xs text-slate-500 flex flex-col">

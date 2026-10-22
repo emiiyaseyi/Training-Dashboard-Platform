@@ -35,12 +35,13 @@ export async function GET(req: NextRequest) {
     prisma.trainingSchedule.findMany({ include: { attendees: true } }),
     prisma.surveySettings.findFirst(),
   ])
-  const preDaysBefore = settings?.preDaysBefore ?? 7
+  const preDaysBefore = settings?.preDaysBefore ?? 30
   const post1DaysAfter = settings?.post1DaysAfter ?? 1
   const post2DaysAfter = settings?.post2DaysAfter ?? 30
   const reminderSettings = {
     expiryEnabled: settings?.expiryEnabled ?? true,
     expiryDays: settings?.expiryDays ?? 7,
+    preReminderIntervalDays: settings?.preReminderIntervalDays ?? 7,
   }
 
   const results: { scheduleId: string; trainingName: string; stage: SurveyStage; sent: number; skipped: number; reminder?: boolean }[] = []

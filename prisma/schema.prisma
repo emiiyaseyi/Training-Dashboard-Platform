@@ -425,7 +425,13 @@ model SurveySettings {
   post1MirrorSheetName  String?
   post2MirrorSheetName  String?
   preMirrorSheetName    String?
-  preDaysBefore         Int      @default(7)  // Pre-Training survey sent this many days before startDate
+  preDaysBefore         Int      @default(30) // Pre-Training survey sent this many days before startDate
+  // Pre-Training reminder cadence — re-nudge once this many days have passed since the last nudge
+  // (default every 7 days), PLUS a guaranteed extra reminder the day before startDate regardless
+  // of where that falls in the interval. Post-1/Post-2 reminders stay on the simpler "every day
+  // the sweep runs, until responded or expired" cadence (see sendSurveyReminders) — only Pre has
+  // its own interval, since it's the stage with by far the longest lead time to worry about.
+  preReminderIntervalDays Int    @default(7)
   post1DaysAfter        Int      @default(1)  // Post-1 survey sent this many days after endDate
   post2DaysAfter        Int      @default(30) // Post-2 survey sent this many days after endDate
   expiryEnabled         Boolean  @default(true) // whether an unfilled survey stops accepting responses after expiryDays
