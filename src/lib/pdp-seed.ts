@@ -44,6 +44,7 @@ function toolSection(opts: {
   wouldHelpOptions?: string[] // defaults to canDoOptions, same as the source survey
   extraQuestions?: SeedQuestion[] // inserted right after the frequency question (e.g. AI tools used)
   overallRating?: boolean
+  closingLabel?: string // defaults to "Anything else about your use of <title> worth mentioning?"
 }): SeedSection {
   return {
     key: opts.key,
@@ -54,7 +55,7 @@ function toolSection(opts: {
       { label: opts.canDoLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: true, options: opts.canDoOptions },
       { label: opts.wouldHelpLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: true, options: opts.wouldHelpOptions ?? opts.canDoOptions },
       ...(opts.overallRating ? [{ label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select' as const, required: true, options: OVERALL_RATING_OPTIONS }] : []),
-      { label: `Anything else about your use of ${opts.title} worth mentioning?`, type: 'textarea', required: false },
+      { label: opts.closingLabel ?? `Anything else about your use of ${opts.title} worth mentioning?`, type: 'textarea', required: false },
     ],
   }
 }
@@ -62,12 +63,9 @@ function toolSection(opts: {
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   // Section A — completed by whoever is filling the form (the employee self-rating on Track A, or
   // the line manager rating on their behalf on Track B). Mirrors the 2026 "Digital Skills
-  // Self-Assessment" Custom Survey question-for-question, so L&D sees the same instrument across
-  // both surveys — wording for Word/Excel/PowerPoint/Outlook/Teams/Power BI/AI Literacy is
-  // transcribed from that survey's actual content; SQL, Power Automate, and Virtual Advisory &
-  // Digital Prospecting use placeholder checklist items pending the exact wording (see
-  // extract-digital-skills-survey.sql) since no respondent had answered those three on the sample
-  // reviewed.
+  // Self-Assessment" Custom Survey question-for-question (checklist wording transcribed verbatim
+  // from CustomSurveyQuestion via extract-digital-skills-survey.sql), so L&D sees the same
+  // instrument across both surveys.
   toolSection({
     key: 'digital_skill_word',
     title: 'Microsoft Word',
@@ -174,13 +172,13 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     canDoLabel: 'Which of these can you already do in SQL?',
     wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
     canDoOptions: [
-      'Write basic SELECT queries to retrieve data',
-      'Filter and sort results (WHERE, ORDER BY)',
-      'Join data across multiple tables',
-      'Aggregate data (GROUP BY, COUNT, SUM, AVG)',
-      'Write subqueries or common table expressions',
-      'Update/insert/delete data safely',
-      'Design or modify a table structure',
+      'Write a basic SELECT query to pull specific columns/rows',
+      'Filter data using WHERE with multiple conditions',
+      'Sort and aggregate data (ORDER BY, GROUP BY, COUNT/SUM/AVG)',
+      'Join two or more tables together (INNER/LEFT JOIN)',
+      'Write subqueries or use CTEs for more complex questions',
+      'Write/modify data (INSERT, UPDATE, DELETE) safely',
+      'Optimise a slow query or read a basic execution plan',
     ],
   }),
   toolSection({
@@ -190,13 +188,15 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     canDoLabel: 'Which of these can you already do?',
     wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
     canDoOptions: [
-      'Build a simple automated flow between two apps',
-      'Use triggers and conditions to control when a flow runs',
-      'Automate approvals or notifications',
-      'Connect a flow to a SharePoint list or Excel file',
-      'Troubleshoot a failed flow run',
-      'Build a multi-step flow across several systems',
+      'Understand what a "flow" is and where to find existing ones that affect your work',
+      'Set up a simple trigger-based flow (e.g. notify me when an email/file arrives)',
+      'Automate a repetitive multi-step task (e.g. approval routing, data entry between apps)',
+      'Connect two or more different apps/systems in one flow',
+      'Use conditions/branching logic within a flow',
+      'Troubleshoot a flow that is failing or behaving unexpectedly',
+      'Build and maintain a flow used by a whole team, not just yourself',
     ],
+    closingLabel: 'Anything else worth mentioning?',
   }),
   toolSection({
     key: 'digital_skill_ai',
@@ -222,6 +222,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Know which AI tools are officially approved for work use',
       'Spot when AI output might be biased, outdated, or confidently wrong',
     ],
+    closingLabel: 'Anything else about your use of AI tools worth mentioning?',
   }),
   toolSection({
     key: 'digital_skill_virtual_advisory',
@@ -230,12 +231,17 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     canDoLabel: 'Which of these can you already do?',
     wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
     canDoOptions: [
-      'Run a professional, well-prepared virtual client meeting',
-      'Use digital channels (social, email, WhatsApp) to prospect for new clients compliantly',
-      'Share and present materials effectively in a virtual meeting',
-      'Follow up and track virtual client interactions systematically',
-      'Build trust and rapport with a client without meeting in person',
+      'Conduct a client meeting/consultation over video call professionally (audio/video/screen-share working smoothly)',
+      'Share and walk a client through portfolios, proposals, or documents on screen during a virtual meeting',
+      'Use the CRM to log, track, and follow up on client/prospect interactions',
+      'Identify and reach new prospects through digital channels (LinkedIn, email, social media)',
+      'Build a personal digital presence (e.g. LinkedIn profile/content) that attracts client interest',
+      'Onboard a new client fully digitally (e-signature, online KYC/forms) without an in-person meeting',
+      'Use client data/engagement patterns to identify cross-sell or upsell opportunities',
+      'Build trust and rapport with a client remotely, without in-person cues',
+      'Stay compliant (data protection, advice suitability, record-keeping) when advising or prospecting digitally',
     ],
+    closingLabel: 'Anything else worth mentioning?',
   }),
   {
     key: 'role_alignment',
