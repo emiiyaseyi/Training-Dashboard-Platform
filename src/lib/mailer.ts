@@ -100,6 +100,36 @@ export function parseCcList(raw: string | null | undefined): string[] {
   return raw.split(/[,;]/).map((e) => e.trim()).filter(Boolean)
 }
 
+// Every email builder across the app (survey-email.ts, custom-survey-email.ts, pdp-email.ts,
+// schedule-change-email.ts, …) hands buildMessage a bare HTML fragment — no <!DOCTYPE>, no <html>/
+// <body>. Sent as-is, several webmail clients (Outlook/OWA's Word rendering engine especially)
+// don't reliably wrap that fragment's text at all: instead of breaking onto new lines, a long
+// paragraph runs past the reading pane's right edge and is clipped there, reading as "truncated"
+// even though the full text was sent — nothing was actually cut from the message. Wrapping every
+// outgoing email in a real HTML document, with explicit word-wrap/overflow-wrap and Tahoma 12px
+// set on <body>, is what makes clients wrap instead of clip. This is the one choke point every
+// send passes through, so the fix applies everywhere at once rather than needing to be copied
+// into each individual email-builder file.
+function wrapHtmlDocument(bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  body { margin: 0; padding: 0; font-family: Tahoma, Geneva, sans-serif; font-size: 12px; }
+  table { border-collapse: collapse; }
+  img { max-width: 100%; }
+</style>
+</head>
+<body style="margin:0;padding:16px;background:#ffffff;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">
+<div style="max-width:600px;margin:0 auto;word-wrap:break-word;overflow-wrap:break-word;">
+${bodyHtml}
+</div>
+</body>
+</html>`
+}
+
 function buildMessage(settings: { fromAddress: string | null; fromName: string; defaultCc: string | null; username: string | null }, input: SendMailInput) {
   const address = settings.fromAddress || settings.username || undefined
   const name = input.fromName || settings.fromName
@@ -113,7 +143,7 @@ function buildMessage(settings: { fromAddress: string | null; fromName: string; 
     to: input.to,
     cc: allCc.length > 0 ? allCc.join(', ') : undefined,
     subject: input.subject,
-    html: input.html,
+    html: wrapHtmlDocument(input.html),
     attachments: input.attachments,
   }
 }
