@@ -215,7 +215,7 @@ export default function PDPStaffSurveyPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="mb-4">
           <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}</h1>
         </div>

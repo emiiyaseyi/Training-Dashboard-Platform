@@ -11,6 +11,8 @@ export interface PDPFormQuestion {
   required: boolean
   searchable: boolean
   maxSelect: number | null
+  showIfQuestionId: string | null
+  showIfEquals: string | null
 }
 
 export interface PDPFormSection {
@@ -60,6 +62,8 @@ export async function resolvePDPSections(cycleId: string, opts: { onlyKeys?: str
       required: q.required,
       searchable: q.searchable,
       maxSelect: q.maxSelect,
+      showIfQuestionId: q.showIfQuestionId,
+      showIfEquals: q.showIfEquals,
     })),
   }))
 }

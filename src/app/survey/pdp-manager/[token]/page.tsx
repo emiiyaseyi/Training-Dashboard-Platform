@@ -369,7 +369,7 @@ export default function PDPManagerTeamPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <p className="text-[15px] text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
         <h1 className="text-[23px] font-bold text-slate-900">
           {currentMember.needsReview ? 'Review ' : 'Fill '}{currentMember.staffName}&apos;s Plan

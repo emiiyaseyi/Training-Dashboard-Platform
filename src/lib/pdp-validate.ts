@@ -12,6 +12,8 @@ export interface PDPQuestionLike {
   type: string
   required: boolean
   maxSelect: number | null
+  showIfQuestionId?: string | null
+  showIfEquals?: string | null
 }
 
 export interface PDPSectionLike {
@@ -26,12 +28,22 @@ function isEmpty(v: string | string[] | undefined): boolean {
   return v == null || (Array.isArray(v) ? v.length === 0 : !String(v).trim())
 }
 
+// A conditional question (e.g. "Which of these would help you most…", shown only after "Do you
+// require training in Word?" is answered Yes) is skipped by both validators below when its
+// condition isn't met — never required, never counted against maxSelect, exactly as if it weren't
+// on the page at all.
+function isVisible(q: PDPQuestionLike, values: Record<string, string | string[]>): boolean {
+  if (!q.showIfQuestionId) return true
+  return values[q.showIfQuestionId] === q.showIfEquals
+}
+
 // Client-side, single-page check used by the public pages to block "Next"/"Submit" before the
 // request even goes out — the same required/maxSelect rules validatePDPFormAnswers enforces
 // server-side, scoped to just the questions on the page currently showing. Returns the first
 // problem found, or null when the page is complete.
 export function firstPageIssue(questions: PDPQuestionLike[], values: Record<string, string | string[]>): string | null {
   for (const q of questions) {
+    if (!isVisible(q, values)) continue
     if (q.required && isEmpty(values[q.id])) return `"${q.label}" is required.`
     if (q.type === 'multiselect' && q.maxSelect != null) {
       const v = values[q.id]
@@ -58,6 +70,7 @@ export function validatePDPFormAnswers(formAnswers: PDPFormAnswers, sections: PD
       if (needs.length > section.maxRepeats) return `At most ${section.maxRepeats} "${section.title}" entries can be added — ${needs.length} were added.`
       for (let i = 0; i < needs.length; i++) {
         for (const q of section.questions) {
+          if (!isVisible(q, needs[i])) continue
           if (q.required && isEmpty(needs[i][q.id])) return `${section.title} ${i + 1}: "${q.label}" is required.`
           if (q.type === 'multiselect' && q.maxSelect != null) {
             const v = needs[i][q.id]
@@ -69,6 +82,7 @@ export function validatePDPFormAnswers(formAnswers: PDPFormAnswers, sections: PD
     }
 
     for (const q of section.questions) {
+      if (!isVisible(q, formAnswers.answers)) continue
       const v = formAnswers.answers[q.id]
       if (q.required && isEmpty(v)) return `"${q.label}" is required.`
       if (q.type === 'multiselect' && q.maxSelect != null && Array.isArray(v) && v.length > q.maxSelect) {

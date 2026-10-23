@@ -9,6 +9,13 @@ interface SeedQuestion {
   required?: boolean
   searchable?: boolean
   maxSelect?: number
+  // Cross-question conditional visibility within the same section — a local, section-scoped
+  // handle (not a real id, since ids don't exist until seedDefaultPDPSections inserts the question)
+  // used to wire e.g. "which would help you most…" to only show once "Do you require training in
+  // X?" is answered Yes. Resolved to a real PDPQuestion.id at seed/retrofit time.
+  localKey?: string
+  showIfLocalKey?: string
+  showIfEquals?: string
 }
 
 interface SeedSection {
@@ -29,11 +36,11 @@ const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Occasionally', 'Rarely or never']
 const OVERALL_RATING_OPTIONS = ['Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
 
 // Rebuilds one tool's block of the Digital Skill Assessment as its own PDPSection — mirrors the
-// structure of the 2026 "Digital Skills Self-Assessment" Custom Survey (one section per tool: a
-// frequency-of-use gate, a "can already do" checklist, a "would help most" checklist, and an
-// optional free-text note), rather than the single flat list of 1-5 skill ratings this used to be.
-// `overallRating` adds a fifth question rating the respondent's overall skill level in that tool —
-// only asked for the core MS Office apps, per L&D's request.
+// 2026 "Digital Skills Self-Assessment" Custom Survey, extended per L&D's follow-up request:
+// - the overall skill-level rating (MS Office apps only) moves to question 2, right after
+//   frequency, instead of sitting at the end;
+// - "which would help you most" is no longer always shown — a "Do you require training in X?"
+//   yes/no question gates it, so a respondent who says No never sees an irrelevant checklist.
 function toolSection(opts: {
   key: string
   title: string
@@ -42,19 +49,29 @@ function toolSection(opts: {
   canDoOptions: string[]
   wouldHelpLabel: string
   wouldHelpOptions?: string[] // defaults to canDoOptions, same as the source survey
-  extraQuestions?: SeedQuestion[] // inserted right after the frequency question (e.g. AI tools used)
+  extraQuestions?: SeedQuestion[] // inserted right after frequency/overall rating (e.g. AI tools used)
   overallRating?: boolean
   closingLabel?: string // defaults to "Anything else about your use of <title> worth mentioning?"
 }): SeedSection {
+  const requireTrainingKey = `${opts.key}_require_training`
   return {
     key: opts.key,
     title: opts.title,
     questions: [
       { label: opts.freqLabel, type: 'select', required: true, options: FREQUENCY_OPTIONS },
+      ...(opts.overallRating ? [{ label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select' as const, required: true, options: OVERALL_RATING_OPTIONS }] : []),
       ...(opts.extraQuestions ?? []),
       { label: opts.canDoLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: false, options: opts.canDoOptions },
-      { label: opts.wouldHelpLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: false, options: opts.wouldHelpOptions ?? opts.canDoOptions },
-      ...(opts.overallRating ? [{ label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select' as const, required: true, options: OVERALL_RATING_OPTIONS }] : []),
+      { label: `Do you require training in ${opts.title}?`, type: 'yesno', required: true, localKey: requireTrainingKey },
+      {
+        label: opts.wouldHelpLabel,
+        description: 'Tick all that apply.',
+        type: 'multiselect',
+        searchable: false,
+        options: opts.wouldHelpOptions ?? opts.canDoOptions,
+        showIfLocalKey: requireTrainingKey,
+        showIfEquals: 'Yes',
+      },
       { label: opts.closingLabel ?? `Anything else about your use of ${opts.title} worth mentioning?`, type: 'textarea', required: false },
     ],
   }
@@ -79,6 +96,10 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Insert and format tables, images, and headings consistently',
       'Create a table of contents from heading styles',
       'Use mail merge for bulk letters/labels',
+      'Use Find & Replace with formatting options, not just plain text',
+      'Convert a document to PDF while preserving layout',
+      'Use built-in templates for common documents (memos, letters)',
+      'Protect a document (restrict editing, password-protect)',
     ],
     overallRating: true,
   }),
@@ -97,6 +118,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Create and format charts appropriate to the data',
       'Apply data validation and protect key cells/sheets',
       'Use basic macros/VBA to automate repetitive tasks',
+      'Use Flash Fill / Text to Columns to clean up messy data quickly',
+      'Freeze panes and split windows to navigate large sheets',
     ],
     overallRating: true,
   }),
@@ -114,6 +137,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Apply simple, purposeful animations/transitions',
       'Present confidently using the deck as a visual aid',
       'Link live Excel data into slides (linked charts/tables that update)',
+      'Use Slide Master to apply a consistent theme across a deck',
+      'Reuse slides from another presentation without breaking formatting',
+      'Export/share a deck as a PDF or video',
     ],
     overallRating: true,
   }),
@@ -130,6 +156,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Flag, categorise, and follow up on action items',
       'Use out-of-office and forwarding settings correctly',
       'Use Quick Steps or templates to speed up repetitive emails',
+      'Use shared mailboxes/calendars correctly',
+      'Search effectively across a large mailbox',
     ],
     overallRating: true,
   }),
@@ -146,6 +174,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use @mentions and threaded replies so conversations stay organised',
       'Record meetings and use/review auto-generated transcripts',
       'Set up and manage a Team (channels, permissions, guest access) for a project',
+      'Pin important channels/messages for quick access',
+      'Use Teams on mobile to stay responsive while away from your desk',
     ],
     overallRating: true,
   }),
@@ -163,6 +193,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Build and publish a full report/dashboard to a workspace',
       'Use Power Query to clean/transform data before it hits the report',
       'Write more advanced DAX (time intelligence, relationships across tables)',
+      'Apply row-level security to control who sees what',
+      'Schedule automatic data refreshes',
+      'Use bookmarks to build a guided report narrative',
     ],
   }),
   toolSection({
@@ -179,6 +212,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Write subqueries or use CTEs for more complex questions',
       'Write/modify data (INSERT, UPDATE, DELETE) safely',
       'Optimise a slow query or read a basic execution plan',
+      'Use window functions (RANK, ROW_NUMBER, running totals)',
+      'Handle NULLs and data-type conversions correctly',
+      'Design or modify a table structure',
     ],
   }),
   toolSection({
@@ -195,6 +231,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use conditions/branching logic within a flow',
       'Troubleshoot a flow that is failing or behaving unexpectedly',
       'Build and maintain a flow used by a whole team, not just yourself',
+      'Use an approval flow with multiple approvers',
+      'Handle errors and retries within a flow',
+      'Hand over ownership of a flow to a colleague',
     ],
     closingLabel: 'Anything else worth mentioning?',
   }),
@@ -221,6 +260,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use multi-step prompting (breaking a task down, giving examples) to get better results',
       'Know which AI tools are officially approved for work use',
       'Spot when AI output might be biased, outdated, or confidently wrong',
+      'Use AI to analyse or summarise a spreadsheet/dataset',
+      'Adjust AI output style/tone for different audiences',
+      'Understand the limits of using AI in regulated/compliance-sensitive work',
     ],
     closingLabel: 'Anything else about your use of AI tools worth mentioning?',
   }),
@@ -240,6 +282,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use client data/engagement patterns to identify cross-sell or upsell opportunities',
       'Build trust and rapport with a client remotely, without in-person cues',
       'Stay compliant (data protection, advice suitability, record-keeping) when advising or prospecting digitally',
+      'Use digital signature/e-KYC tools confidently',
     ],
     closingLabel: 'Anything else worth mentioning?',
   }),
@@ -550,20 +593,29 @@ export async function seedDefaultPDPSections(cycleId: string): Promise<void> {
         maxRepeats: section.maxRepeats ?? 1,
       },
     })
-    await prisma.pDPQuestion.createMany({
-      data: section.questions.map((q, i) => ({
-        cycleId,
-        sectionId: created.id,
-        order: i,
-        label: q.label,
-        description: q.description || null,
-        type: q.type,
-        options: q.options && q.options.length > 0 ? JSON.stringify(q.options) : null,
-        optionsSource: q.optionsSource || null,
-        required: q.required ?? false,
-        searchable: q.searchable ?? false,
-        maxSelect: q.maxSelect ?? null,
-      })),
-    })
+    // Inserted one at a time (not createMany) so a question with `showIfLocalKey` can resolve it
+    // against the real id of the question created moments earlier in this same loop — createMany
+    // doesn't hand back per-row ids in a usable order for that.
+    const localKeyToId: Record<string, string> = {}
+    for (const [i, q] of section.questions.entries()) {
+      const createdQuestion = await prisma.pDPQuestion.create({
+        data: {
+          cycleId,
+          sectionId: created.id,
+          order: i,
+          label: q.label,
+          description: q.description || null,
+          type: q.type,
+          options: q.options && q.options.length > 0 ? JSON.stringify(q.options) : null,
+          optionsSource: q.optionsSource || null,
+          required: q.required ?? false,
+          searchable: q.searchable ?? false,
+          maxSelect: q.maxSelect ?? null,
+          showIfQuestionId: q.showIfLocalKey ? (localKeyToId[q.showIfLocalKey] ?? null) : null,
+          showIfEquals: q.showIfEquals ?? null,
+        },
+      })
+      if (q.localKey) localKeyToId[q.localKey] = createdQuestion.id
+    }
   }
 }

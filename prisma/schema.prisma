@@ -1106,6 +1106,13 @@ model PDPQuestion {
   required      Boolean  @default(false)
   searchable    Boolean  @default(false) // renders as a searchable combobox instead of a plain dropdown — for long option lists
   maxSelect     Int?     // multiselect only — "choose up to N"
+  // Conditional visibility — this question only renders (and is only required-checked) when the
+  // question identified by showIfQuestionId has answered exactly showIfEquals. Not a DB-level FK on
+  // purpose: the referenced question is a sibling in the same section, created moments earlier in
+  // the same seed/retrofit pass, and enforcing a relation here would complicate ordering during
+  // that insert for no real benefit — it's read as a plain id by the respondent-facing code.
+  showIfQuestionId String?
+  showIfEquals      String?
   createdAt     DateTime @default(now())
 
   cycle   PDPCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)

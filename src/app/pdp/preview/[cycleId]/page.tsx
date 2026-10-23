@@ -127,7 +127,7 @@ export default function PDPFormPreviewPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-[14px] mb-4">
           <Eye className="w-4 h-4 shrink-0" />
           Preview mode — this is what staff will see. Nothing here is saved or sent.

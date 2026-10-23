@@ -13,6 +13,8 @@ export interface PDPQuestion {
   required: boolean
   searchable: boolean
   maxSelect: number | null
+  showIfQuestionId?: string | null
+  showIfEquals?: string | null
 }
 
 export type PDPValueMap = Record<string, string | string[]>
@@ -71,7 +73,12 @@ export function PDPSectionRenderer({
 }) {
   return (
     <div className="space-y-4">
-      {questions.map((q) => (
+      {questions.map((q) => {
+        // Conditional question (e.g. "which would help you most…" after "Do you require
+        // training?") — not on the page at all until its condition is met, same as the
+        // server-side validators treat it.
+        if (q.showIfQuestionId && values[q.showIfQuestionId] !== q.showIfEquals) return null
+        return (
         <div key={q.id}>
           <label className="block text-[15px] font-medium text-slate-600 mb-1">
             {q.label}{q.required && <span className="text-red-500"> *</span>}
@@ -138,8 +145,19 @@ export function PDPSectionRenderer({
           {q.type === 'multiselect' && !q.searchable && (() => {
             const current = asStringArray(values[q.id])
             const otherEntry = current.find(isOtherValue)
+            const optionsList = q.options || []
+            const allSelected = optionsList.length > 0 && optionsList.every((o) => (o === OTHER_LABEL ? !!otherEntry : current.includes(o)))
             return (
               <div>
+                {optionsList.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(q.id, allSelected ? [] : [...optionsList])}
+                    className="text-[13px] font-medium text-navy-600 hover:underline mb-2"
+                  >
+                    {allSelected ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                   {(q.options || []).map((o) => {
                     const checked = o === OTHER_LABEL ? !!otherEntry : current.includes(o)
@@ -234,7 +252,8 @@ export function PDPSectionRenderer({
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
