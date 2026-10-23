@@ -22,7 +22,7 @@ interface Cycle {
 }
 
 interface Validation { id: string; managerName: string | null; respondedAt: string | null; answers: string | null }
-interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; lineManagerNames: string[] }
+interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; lineManagerNames: string[]; rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file' }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
@@ -851,7 +851,11 @@ export default function PDPPage() {
                                 )}
                               </td>
                               <td className="py-1.5 pr-3 text-slate-500">
-                                {s.lineManagerNames.length === 0 ? <span className="text-amber-600" title="No line manager found on the current roster for this person">None on file</span> : s.lineManagerNames.join(', ')}
+                                {s.lineManagerNames.length > 0 ? s.lineManagerNames.join(', ') : s.rosterStatus === 'not-in-roster' ? (
+                                  <span className="text-red-600" title="This person's Staff ID doesn't match anyone in the current roster — likely a Staff ID formatting mismatch or they've been removed from the roster since this link was created.">Not in current roster</span>
+                                ) : (
+                                  <span className="text-amber-600" title="Found in the roster, but no Line Manager Staff ID is on file for them.">No manager on file</span>
+                                )}
                               </td>
                               <td className="py-1.5 pr-3 text-slate-500">
                                 {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: `).map((label, i) => (

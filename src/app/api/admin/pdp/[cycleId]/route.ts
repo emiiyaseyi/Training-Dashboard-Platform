@@ -42,7 +42,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
       const mgr = directory.get(normalizeStaffIdKey(secondId))
       names.push(mgr?.name || secondId)
     }
-    return { ...s, lineManagerNames: names }
+    // Two different reasons names can come back empty, surfaced separately so the admin can tell
+    // "this person's own Staff ID doesn't match anything in the current roster" (a data problem to
+    // fix at the source) apart from "the roster has them, it just has no Line Manager Staff ID on
+    // file for them" (a different, narrower gap) — a bare blank cell left the admin unable to tell
+    // which one they were looking at.
+    const rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file' =
+      names.length > 0 ? 'ok' : !staff ? 'not-in-roster' : 'no-manager-on-file'
+    return { ...s, lineManagerNames: names, rosterStatus }
   })
 
   return NextResponse.json({ cycle, staffSurveys: staffSurveysWithManagers, managerSurveys, overrides, sections, reviews })
