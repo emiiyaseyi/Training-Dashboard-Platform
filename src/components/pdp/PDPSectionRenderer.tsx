@@ -149,7 +149,9 @@ export function PDPSectionRenderer({
             const allSelected = optionsList.length > 0 && optionsList.every((o) => (o === OTHER_LABEL ? !!otherEntry : current.includes(o)))
             return (
               <div>
-                {optionsList.length > 1 && (
+                {/* Select all only makes sense with no cap — with a maxSelect, selecting
+                    everything is never a valid answer, so the control is simply not offered. */}
+                {optionsList.length > 1 && q.maxSelect == null && (
                   <button
                     type="button"
                     onClick={() => onChange(q.id, allSelected ? [] : [...optionsList])}

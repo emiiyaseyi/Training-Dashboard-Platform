@@ -393,7 +393,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'What is the other reason for your proposed development? Select up to two.',
         type: 'multiselect',
         maxSelect: 2,
-        required: false,
+        required: true,
         searchable: false,
         options: [
           'Improve performance in my current role',
@@ -508,9 +508,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       { label: 'Brief description of the specific gap', type: 'textarea', required: false },
       {
         label: 'Expected improvement after the learning intervention',
-        description: 'Select up to three.',
+        description: 'Select every one that applies.',
         type: 'multiselect',
-        maxSelect: 3,
         searchable: false,
         required: true,
         options: [
@@ -531,9 +530,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       },
       {
         label: 'How will the improvement be demonstrated?',
-        description: 'Select up to three.',
+        description: 'Select every one that applies.',
         type: 'multiselect',
-        maxSelect: 3,
         searchable: false,
         required: true,
         options: [
