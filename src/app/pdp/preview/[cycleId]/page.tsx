@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation'
 import { Loader2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2, Eye } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
+import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions, isToolSectionVisible } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible, isSectionAKey } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -33,7 +34,7 @@ interface Context {
   prefill: PrefillSnapshot
 }
 
-type PageDescriptor = { type: 'intro' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
+type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
 
 // Admin-only, read from the live cycle's current sections/questions — no token, nothing is ever
 // saved or sent. Lets an admin click through exactly what staff will see before launching Track A,
@@ -62,8 +63,13 @@ export default function PDPFormPreviewPage() {
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
+    let insertedTrainingHistory = false
     for (const section of ctx.sections) {
       if (!isToolSectionVisible(section, ctx.sections, answers)) continue
+      if (!insertedTrainingHistory && !isSectionAKey(section.key)) {
+        out.push({ type: 'training-history' })
+        insertedTrainingHistory = true
+      }
       if (section.key === 'development_needs') {
         const count = Math.max(1, developmentNeeds.length)
         for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
@@ -105,7 +111,7 @@ export default function PDPFormPreviewPage() {
   }
 
   const checkCurrentPage = (): boolean => {
-    if (!current || current.type === 'intro') { setPageError(''); return true }
+    if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (developmentNeeds[current.index] || {}) : answers
     const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, answers)
     const issue = firstPageIssue(questions, values)
@@ -113,7 +119,7 @@ export default function PDPFormPreviewPage() {
     if (current.type === 'need' && areaQuestionId) {
       const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, ctx.prefill.trainingHistory2026)
       if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
-        setPageError('This need was already covered by a 2026 Learning Intervention — please select a reason for repeating it.')
+        setPageError('This need was already covered by a 2026 Learning Intervention. Please select a reason for repeating it.')
         return false
       }
     }
@@ -131,7 +137,7 @@ export default function PDPFormPreviewPage() {
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 text-[14px] mb-4">
           <Eye className="w-4 h-4 shrink-0" />
-          Preview mode — this is what staff will see. Nothing here is saved or sent.
+          Preview mode. This is what staff will see. Nothing here is saved or sent.
         </div>
 
         <div className="mb-4">
@@ -150,8 +156,11 @@ export default function PDPFormPreviewPage() {
               businessUnit={ctx.prefill.businessUnit}
               department={ctx.prefill.department}
               role={ctx.prefill.role}
-              trainingHistory2026={ctx.prefill.trainingHistory2026}
             />
+          )}
+
+          {current?.type === 'training-history' && (
+            <PDPTrainingHistoryPage trainingHistory2026={ctx.prefill.trainingHistory2026} />
           )}
 
           {current?.type === 'section' && (
@@ -218,7 +227,7 @@ export default function PDPFormPreviewPage() {
           ) : (
             <button
               disabled
-              title="Preview only — nothing is submitted here"
+              title="Preview only. Nothing is submitted here"
               className="flex items-center gap-1.5 text-[18px] font-medium text-white bg-emerald-600/60 rounded-lg px-4 py-2 cursor-not-allowed"
             >
               Submit (preview only)

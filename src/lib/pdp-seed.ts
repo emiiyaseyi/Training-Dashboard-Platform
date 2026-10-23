@@ -35,12 +35,18 @@ interface SeedSection {
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Occasionally', 'Rarely or never']
 const OVERALL_RATING_OPTIONS = ['Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
 
+const NONE_YET = 'None yet'
+
 // Rebuilds one tool's block of the Digital Skill Assessment as its own PDPSection — mirrors the
-// 2026 "Digital Skills Self-Assessment" Custom Survey, extended per L&D's follow-up request:
-// - the overall skill-level rating (MS Office apps only) moves to question 2, right after
-//   frequency, instead of sitting at the end;
+// 2026 "Digital Skills Self-Assessment" Custom Survey, extended per L&D's follow-up requests:
+// - the overall skill-level rating is question 2, right after frequency, for every tool (not just
+//   the core MS Office apps);
 // - "which would help you most" is no longer always shown — a "Do you require training in X?"
-//   yes/no question gates it, so a respondent who says No never sees an irrelevant checklist.
+//   yes/no question gates it (and, once shown, is itself required — picking "Yes" without
+//   selecting anything there isn't an answer), so a respondent who says No never sees an
+//   irrelevant checklist, and one who says Yes can't skip past it empty;
+// - the "can already do" checklist always ends with a "None yet" option, same as the AI tools-used
+//   question already had.
 function toolSection(opts: {
   key: string
   title: string
@@ -50,7 +56,6 @@ function toolSection(opts: {
   wouldHelpLabel: string
   wouldHelpOptions?: string[] // defaults to canDoOptions, same as the source survey
   extraQuestions?: SeedQuestion[] // inserted right after frequency/overall rating (e.g. AI tools used)
-  overallRating?: boolean
   closingLabel?: string // defaults to "Anything else about your use of <title> worth mentioning?"
 }): SeedSection {
   const requireTrainingKey = `${opts.key}_require_training`
@@ -59,15 +64,16 @@ function toolSection(opts: {
     title: opts.title,
     questions: [
       { label: opts.freqLabel, type: 'select', required: true, options: FREQUENCY_OPTIONS },
-      ...(opts.overallRating ? [{ label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select' as const, required: true, options: OVERALL_RATING_OPTIONS }] : []),
+      { label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select', required: true, options: OVERALL_RATING_OPTIONS },
       ...(opts.extraQuestions ?? []),
-      { label: opts.canDoLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: false, options: opts.canDoOptions },
+      { label: opts.canDoLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: false, options: [...opts.canDoOptions, NONE_YET] },
       { label: `Do you require training in ${opts.title}?`, type: 'yesno', required: true, localKey: requireTrainingKey },
       {
         label: opts.wouldHelpLabel,
         description: 'Tick all that apply.',
         type: 'multiselect',
         searchable: false,
+        required: true,
         options: opts.wouldHelpOptions ?? opts.canDoOptions,
         showIfLocalKey: requireTrainingKey,
         showIfEquals: 'Yes',
@@ -93,7 +99,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   {
     key: 'digital_skill_tool_selection',
     title: 'Which of these do you use, or expect to use, in your role?',
-    description: 'Tick everything that applies — you\'ll only be asked about the tools you select here. "AI" covers tools like ChatGPT/Copilot/Claude; "Virtual Advisory" covers remote client advisory and digital prospecting (web, SMS, email, etc.).',
+    description: 'Tick everything that applies. You\'ll only be asked about the tools you select here. "AI" covers tools like ChatGPT/Copilot/Claude; "Virtual Advisory" covers remote client advisory and digital prospecting (web, SMS, email, etc.).',
     questions: [
       {
         label: 'Tools you use or expect to use',
@@ -127,7 +133,6 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use built-in templates for common documents (memos, letters)',
       'Protect a document (restrict editing, password-protect)',
     ],
-    overallRating: true,
   }),
   toolSection({
     key: 'digital_skill_excel',
@@ -147,7 +152,6 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use Flash Fill / Text to Columns to clean up messy data quickly',
       'Freeze panes and split windows to navigate large sheets',
     ],
-    overallRating: true,
   }),
   toolSection({
     key: 'digital_skill_powerpoint',
@@ -167,7 +171,6 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Reuse content from another presentation without breaking formatting',
       'Export/share a deck as a PDF or video',
     ],
-    overallRating: true,
   }),
   toolSection({
     key: 'digital_skill_outlook',
@@ -184,8 +187,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use Quick Steps or templates to speed up repetitive emails',
       'Use shared mailboxes/calendars correctly',
       'Search effectively across a large mailbox',
+      'Set up and send a Teams meeting invite directly from Outlook',
     ],
-    overallRating: true,
   }),
   toolSection({
     key: 'digital_skill_teams',
@@ -202,8 +205,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Set up and manage a Team (channels, permissions, guest access) for a project',
       'Pin important channels/messages for quick access',
       'Use Teams on mobile to stay responsive while away from your desk',
+      'Set up and host a webinar session',
+      'Set an out of office message and update your presence status',
     ],
-    overallRating: true,
   }),
   toolSection({
     key: 'digital_skill_powerbi',
@@ -222,6 +226,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Apply row-level security to control who sees what',
       'Schedule automatic data refreshes',
       'Use bookmarks to build a guided report narrative',
+      'View and interact with a Power BI dashboard/report as a consumer',
+      'Export a Power BI visual or report to PDF, Excel, or PowerPoint',
     ],
   }),
   toolSection({
@@ -260,6 +266,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use an approval flow with multiple approvers',
       'Handle errors and retries within a flow',
       'Hand over ownership of a flow to a colleague',
+      'Build a simple end-to-end automation process for a repetitive personal or team task',
+      'Build or use a simple Power App connected to a flow or data source',
     ],
     closingLabel: 'Anything else worth mentioning?',
   }),
@@ -275,7 +283,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'Tick all that apply.',
         type: 'multiselect',
         searchable: false,
-        options: ['ChatGPT', 'Microsoft Copilot', 'Google Gemini', 'Claude', 'Another AI writing/image tool', 'None yet'],
+        options: ['ChatGPT', 'Microsoft Copilot', 'Google Gemini', 'Claude', 'DeepSeek', 'Meta AI', 'Another AI writing/image tool', 'None yet'],
       },
     ],
     canDoOptions: [
@@ -289,6 +297,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Use AI to analyse or summarise a spreadsheet/dataset',
       'Adjust AI output style/tone for different audiences',
       'Understand the limits of using AI in regulated/compliance-sensitive work',
+      'Use AI-powered "vibecoding" platforms to build simple solutions or designs',
+      'Integrate AI into Office tools (e.g. Word, Excel, PowerPoint) for tasks like worksheet generation, slide creation, or document generation/editing',
     ],
     closingLabel: 'Anything else about your use of AI tools worth mentioning?',
   }),
@@ -319,7 +329,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   {
     key: 'digital_skill_wrapup',
     title: 'Training Priority',
-    description: "Put these in the order you'd like to be trained on them (most important first — use the arrows to reorder). Anything you're already comfortable with, or rarely/never use, won't be shown here.",
+    description: "Put these in the order you'd like to be trained on them (most important first, use the arrows to reorder). Anything you're already comfortable with, or rarely/never use, won't be shown here.",
     questions: [
       {
         label: 'Your training priority order',
@@ -343,7 +353,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'Select up to three responsibilities that are most critical to your role.',
         type: 'multiselect',
         maxSelect: 3,
-        searchable: true,
+        searchable: false,
         required: true,
         options: [
           'Client acquisition and relationship management',
@@ -379,11 +389,30 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         ],
       },
       {
+        label: 'Secondary Development Driver',
+        description: 'What is the other reason for your proposed development? Select up to two.',
+        type: 'multiselect',
+        maxSelect: 2,
+        required: false,
+        searchable: false,
+        options: [
+          'Improve performance in my current role',
+          'Close an identified skills or knowledge gap',
+          "Support my team's 2027 objectives",
+          'Support a new responsibility or expanded role',
+          'Adapt to a new system, technology or process',
+          'Meet a regulatory or compliance requirement',
+          'Improve productivity, quality or turnaround time',
+          'Prepare for future business or role requirements',
+        ],
+      },
+      {
         label: 'Relevant Business Outcome',
-        description: 'Which outcome would your development primarily support?',
-        type: 'select',
+        description: 'Which outcome would your development primarily support? Select up to two.',
+        type: 'multiselect',
+        maxSelect: 2,
         required: true,
-        searchable: true,
+        searchable: false,
         options: [
           'Revenue growth and business development',
           'Customer experience and client satisfaction',
@@ -410,7 +439,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   {
     key: 'development_needs',
     title: 'Skills Gap and Development Needs',
-    description: 'Complete one entry for each priority development need — add up to three.',
+    description: 'Complete one entry for each priority development need. Add up to three.',
     maxRepeats: 3,
     questions: [
       {
@@ -476,13 +505,13 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
           'Low: Longer-term development need',
         ],
       },
-      { label: 'Brief description of the specific gap', type: 'textarea', required: true },
+      { label: 'Brief description of the specific gap', type: 'textarea', required: false },
       {
         label: 'Expected improvement after the learning intervention',
         description: 'Select up to three.',
         type: 'multiselect',
         maxSelect: 3,
-        searchable: true,
+        searchable: false,
         required: true,
         options: [
           'Improved technical competence',
@@ -505,7 +534,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'Select up to three.',
         type: 'multiselect',
         maxSelect: 3,
-        searchable: true,
+        searchable: false,
         required: true,
         options: [
           'Practical assessment or simulation',
@@ -523,7 +552,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         label: 'Expected measure of success',
         description: 'Select every way this will be measured.',
         type: 'multiselect',
-        searchable: true,
+        searchable: false,
         required: true,
         options: [
           'Percentage increase',
@@ -551,7 +580,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   {
     key: 'manager_validation',
     title: 'Line Manager Validation',
-    description: "To be completed by the line manager. Confirms the relevance of the development need — it does not constitute final approval of training expenditure.",
+    description: "To be completed by the line manager. Confirms the relevance of the development need. It does not constitute final approval of training expenditure.",
     questions: [
       {
         label: "Do the identified development needs accurately reflect the employee's role, available evidence, and team/business priorities?",

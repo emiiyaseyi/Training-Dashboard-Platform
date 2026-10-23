@@ -204,7 +204,7 @@ export function PDPSectionRenderer({
           {q.type === 'ranking' && (() => {
             const optionsList = q.options || []
             if (optionsList.length === 0) {
-              return <p className="text-[15px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">Nothing to prioritize — based on your answers above, you&apos;re already comfortable with everything covered.</p>
+              return <p className="text-[15px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">Nothing to prioritize. Based on your answers above, you&apos;re already comfortable with everything covered.</p>
             }
             // Falls back to the given (already-filtered) order until the respondent actually
             // reorders something — an unseeded answer still means "default priority order", not

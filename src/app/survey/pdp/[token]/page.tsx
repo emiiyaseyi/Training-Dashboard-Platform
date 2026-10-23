@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
+import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions, isToolSectionVisible } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible, isSectionAKey } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -43,7 +44,7 @@ interface Context {
   answers: Answers | null
 }
 
-type PageDescriptor = { type: 'intro' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
+type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
 
 export default function PDPStaffSurveyPage() {
   const { token } = useParams<{ token: string }>()
@@ -94,8 +95,13 @@ export default function PDPStaffSurveyPage() {
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx || !form) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
+    let insertedTrainingHistory = false
     for (const section of ctx.sections) {
       if (!isToolSectionVisible(section, ctx.sections, form.answers)) continue
+      if (!insertedTrainingHistory && !isSectionAKey(section.key)) {
+        out.push({ type: 'training-history' })
+        insertedTrainingHistory = true
+      }
       if (section.key === 'development_needs') {
         const count = Math.max(1, form.developmentNeeds.length)
         for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
@@ -131,7 +137,7 @@ export default function PDPStaffSurveyPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
-        <p className="text-[18px] font-medium text-slate-800">Thank you, {ctx.staffName.split(' ')[0]} — your Personal Development Plan has been submitted.</p>
+        <p className="text-[18px] font-medium text-slate-800">Thank you, {ctx.staffName.split(' ')[0]}. Your Personal Development Plan has been submitted.</p>
         <p className="text-[15px] text-slate-500 mt-2">Your line manager will be asked to review it.</p>
       </div>
     </div>
@@ -172,7 +178,7 @@ export default function PDPStaffSurveyPage() {
   // or submitting — the intro page has nothing to check. Returns true when the page is clear to
   // leave.
   const checkCurrentPage = (): boolean => {
-    if (!current || current.type === 'intro') { setPageError(''); return true }
+    if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
     const issue = firstPageIssue(questions, values)
@@ -180,7 +186,7 @@ export default function PDPStaffSurveyPage() {
     if (current.type === 'need' && areaQuestionId) {
       const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, ctx.prefill.trainingHistory2026)
       if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
-        setPageError('This need was already covered by a 2026 Learning Intervention — please select a reason for repeating it.')
+        setPageError('This need was already covered by a 2026 Learning Intervention. Please select a reason for repeating it.')
         return false
       }
     }
@@ -194,7 +200,7 @@ export default function PDPStaffSurveyPage() {
   }
 
   const submit = async () => {
-    if (confirmationBlocked) { setPageError('You selected "No" on the confirmation question — please review and update your plan, or select "Yes" once it reflects your actual development needs, before submitting.'); return }
+    if (confirmationBlocked) { setPageError('You selected "No" on the confirmation question. Please review and update your plan, or select "Yes" once it reflects your actual development needs, before submitting.'); return }
     if (!checkCurrentPage()) return
     setSubmitting(true)
     setSubmitError('')
@@ -208,7 +214,7 @@ export default function PDPStaffSurveyPage() {
       if (!res.ok) { setSubmitError(data.error || 'Failed to submit.'); return }
       setSubmitted(true)
     } catch {
-      setSubmitError('Failed to submit — network error.')
+      setSubmitError('Failed to submit. Network error.')
     } finally {
       setSubmitting(false)
     }
@@ -233,8 +239,11 @@ export default function PDPStaffSurveyPage() {
               businessUnit={ctx.prefill.businessUnit}
               department={ctx.prefill.department}
               role={ctx.prefill.role}
-              trainingHistory2026={ctx.prefill.trainingHistory2026}
             />
+          )}
+
+          {current?.type === 'training-history' && (
+            <PDPTrainingHistoryPage trainingHistory2026={ctx.prefill.trainingHistory2026} />
           )}
 
           {current?.type === 'section' && (

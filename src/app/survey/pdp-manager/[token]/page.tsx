@@ -5,9 +5,10 @@ import { useParams } from 'next/navigation'
 import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, Trash2, Search, X } from 'lucide-react'
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
+import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions, isToolSectionVisible } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible, isSectionAKey } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -48,7 +49,7 @@ interface Context {
 
 interface SearchHit { staffId: string; name: string; businessUnit: string | null; role: string | null }
 
-type PageDescriptor = { type: 'intro' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
+type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
 
 export default function PDPManagerTeamPage() {
   const { token } = useParams<{ token: string }>()
@@ -125,8 +126,13 @@ export default function PDPManagerTeamPage() {
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx || !form) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
+    let insertedTrainingHistory = false
     for (const section of ctx.sections) {
       if (!isToolSectionVisible(section, ctx.sections, form.answers)) continue
+      if (!insertedTrainingHistory && !isSectionAKey(section.key)) {
+        out.push({ type: 'training-history' })
+        insertedTrainingHistory = true
+      }
       if (section.key === 'development_needs') {
         const count = Math.max(1, form.developmentNeeds.length)
         for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
@@ -210,7 +216,7 @@ export default function PDPManagerTeamPage() {
         <div className="max-w-xl mx-auto">
           <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}</h1>
           <p className="text-[18px] text-slate-500 mt-0.5 mb-5">
-            Hi {ctx.managerName.split(' ')[0]} — please confirm your team before filling in each person&apos;s Development Plan.
+            Hi {ctx.managerName.split(' ')[0]}, please confirm your team before filling in each person&apos;s Development Plan.
             Decline anyone who shouldn&apos;t be here, or add someone missing. You&apos;ll then fill one page per person.
           </p>
 
@@ -219,7 +225,7 @@ export default function PDPManagerTeamPage() {
               <p className="text-[18px] font-semibold text-slate-800">Your team ({pending.length})</p>
               <button onClick={acceptAll} className="text-[15px] font-medium text-navy-700 hover:underline">Accept all</button>
             </div>
-            {pending.length === 0 && <p className="text-[15px] text-slate-400">No one found reporting to you on the current roster — add people below.</p>}
+            {pending.length === 0 && <p className="text-[15px] text-slate-400">No one found reporting to you on the current roster. Add people below.</p>}
             <div className="space-y-1.5">
               {pending.map((m) => {
                 const isDeclined = decided[m.id] === 'declined'
@@ -321,7 +327,7 @@ export default function PDPManagerTeamPage() {
   }
 
   const checkCurrentPage = (): boolean => {
-    if (!current || current.type === 'intro') { setPageError(''); return true }
+    if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
     const issue = firstPageIssue(questions, values)
@@ -333,7 +339,7 @@ export default function PDPManagerTeamPage() {
     if (current.type === 'need' && areaQuestionId) {
       const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, memberTrainingHistory2026)
       if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
-        setPageError('This need was already covered by a 2026 Learning Intervention — please select a reason for repeating it.')
+        setPageError('This need was already covered by a 2026 Learning Intervention. Please select a reason for repeating it.')
         return false
       }
     }
@@ -347,7 +353,7 @@ export default function PDPManagerTeamPage() {
   }
 
   const saveAndNext = async () => {
-    if (confirmationBlocked) { setPageError('The confirmation question is set to "No" — update the plan, or set it to "Yes" once it\'s ready, before submitting this person.'); return }
+    if (confirmationBlocked) { setPageError('The confirmation question is set to "No". Update the plan, or set it to "Yes" once it\'s ready, before submitting this person.'); return }
     if (!checkCurrentPage()) return
     setSaving(true)
     setSaveError('')
@@ -362,7 +368,7 @@ export default function PDPManagerTeamPage() {
       if (data.allDone) { setAllDone(true); return }
       setMemberIndex((i) => i + 1)
     } catch {
-      setSaveError('Failed to save — network error.')
+      setSaveError('Failed to save. Network error.')
     } finally {
       setSaving(false)
     }
@@ -377,7 +383,7 @@ export default function PDPManagerTeamPage() {
         </h1>
         {currentMember.needsReview && (
           <p className="text-[14px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
-            {currentMember.staffName} has already submitted their own plan, pre-filled below — review it, edit anything needed, and confirm.
+            {currentMember.staffName} has already submitted their own plan, pre-filled below. Review it, edit anything needed, and confirm.
           </p>
         )}
 
@@ -394,8 +400,11 @@ export default function PDPManagerTeamPage() {
               businessUnit={currentMember.prefill?.businessUnit || currentMember.businessUnit || ''}
               department={currentMember.prefill?.department ?? null}
               role={currentMember.prefill?.role ?? currentMember.role}
-              trainingHistory2026={currentMember.prefill?.trainingHistory2026 || []}
             />
+          )}
+
+          {current?.type === 'training-history' && (
+            <PDPTrainingHistoryPage trainingHistory2026={currentMember.prefill?.trainingHistory2026 || []} />
           )}
 
           {current?.type === 'section' && (

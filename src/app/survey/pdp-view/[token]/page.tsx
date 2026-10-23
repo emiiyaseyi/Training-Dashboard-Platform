@@ -18,7 +18,7 @@ interface Context {
 }
 
 function renderValue(v: string | string[] | undefined): string {
-  return v == null ? '—' : Array.isArray(v) ? (v.join(', ') || '—') : v
+  return v == null ? '-' : Array.isArray(v) ? (v.join(', ') || '-') : v
 }
 
 // Read-only — the link sent once a line manager finalizes a plan (either track), so the employee
@@ -59,7 +59,7 @@ export default function PDPViewPage() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="mb-4">
-          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle} — Finalized Plan</h1>
+          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}: Finalized Plan</h1>
           <p className="text-[15px] text-slate-500 mt-0.5">
             {ctx.staffName}{ctx.managerName ? ` · Reviewed by ${ctx.managerName}` : ''}
           </p>

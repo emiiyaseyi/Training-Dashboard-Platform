@@ -32,7 +32,7 @@ function sameValue(a: string | string[] | undefined, b: string | string[] | unde
   return an === bn
 }
 function renderValue(v: string | string[] | undefined): string {
-  return v == null ? '—' : Array.isArray(v) ? (v.join(', ') || '—') : v
+  return v == null ? '-' : Array.isArray(v) ? (v.join(', ') || '-') : v
 }
 
 // The staff member's submitted plan, now EDITABLE by the line manager (not just a read-only
@@ -184,7 +184,7 @@ export default function PDPManagerValidatePage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
-        <p className="text-[18px] font-medium text-slate-800">Thank you — your review of {ctx.staffName}&apos;s Development Plan has been recorded. {ctx.staffName} will receive a copy of the finalized plan.</p>
+        <p className="text-[18px] font-medium text-slate-800">Thank you. Your review of {ctx.staffName}&apos;s Development Plan has been recorded. {ctx.staffName} will receive a copy of the finalized plan.</p>
       </div>
     </div>
   )
@@ -193,7 +193,7 @@ export default function PDPManagerValidatePage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-        <p className="text-[18px] text-slate-600">{ctx.staffName} hasn&apos;t submitted their plan yet — check back once they have.</p>
+        <p className="text-[18px] text-slate-600">{ctx.staffName} hasn&apos;t submitted their plan yet. Check back once they have.</p>
       </div>
     </div>
   )
@@ -224,7 +224,7 @@ export default function PDPManagerValidatePage() {
         const need = editedForm.developmentNeeds[i]
         const repeatMatch = findRepeatedCapability(need[areaQuestionId] as string | undefined, ctx.prefill.trainingHistory2026)
         if (repeatMatch && !repeatReasonSatisfied(need[REPEAT_REASON_KEY] as string | undefined)) {
-          setSubmitError(`Development Need ${i + 1} was already covered by a 2026 Learning Intervention — select a reason for repeating it.`)
+          setSubmitError(`Development Need ${i + 1} was already covered by a 2026 Learning Intervention. Select a reason for repeating it.`)
           return
         }
       }
@@ -241,7 +241,7 @@ export default function PDPManagerValidatePage() {
       if (!res.ok) { setSubmitError(data.error || 'Failed to submit.'); return }
       setSubmitted(true)
     } catch {
-      setSubmitError('Failed to submit — network error.')
+      setSubmitError('Failed to submit. Network error.')
     } finally {
       setSubmitting(false)
     }
@@ -251,7 +251,7 @@ export default function PDPManagerValidatePage() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="mb-4">
-          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle} — Review</h1>
+          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}: Review</h1>
           <p className="text-[18px] text-slate-500 mt-0.5">
             {ctx.staffName} · {ctx.prefill.role || 'Role not on file'} · {ctx.prefill.businessUnit}
           </p>
@@ -259,7 +259,7 @@ export default function PDPManagerValidatePage() {
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-4">
           <p className="text-[18px] font-semibold text-slate-800 mb-1">Submitted Plan</p>
-          <p className="text-[14px] text-slate-400 mb-3">Edit anything below if needed before accepting — fields you change show what {ctx.staffName.split(' ')[0]} originally selected.</p>
+          <p className="text-[14px] text-slate-400 mb-3">Edit anything below if needed before accepting. Fields you change show what {ctx.staffName.split(' ')[0]} originally selected.</p>
           <EditablePlanSections
             sections={ctx.respondentSections}
             original={staffAnswers}
