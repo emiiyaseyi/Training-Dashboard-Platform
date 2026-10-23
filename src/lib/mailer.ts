@@ -104,40 +104,50 @@ export function parseCcList(raw: string | null | undefined): string[] {
 // schedule-change-email.ts, …) hands buildMessage a bare HTML fragment — no <!DOCTYPE>, no <html>/
 // <body>. Sent as-is, several webmail clients don't reliably wrap that fragment's text: instead of
 // breaking onto new lines, a long paragraph runs past the reading pane's right edge and is clipped
-// there, reading as "truncated" even though the full text was sent. Three distinct, well-documented
-// Outlook/OWA quirks combine to cause this, so all three are fixed here, at the one choke point
-// every send passes through (rather than copied into each individual email-builder file):
-//   1. Outlook desktop's rendering engine is Microsoft Word, which does not reliably respect
-//      max-width on a <div> — a <table> with an explicit width attribute is the one sizing
-//      mechanism Word actually honours, the standard "bulletproof" email layout pattern.
-//   2. Outlook.com / OWA (what the reported screenshot was) wraps the body in its own
-//      ".ExternalClass" scope, which can override inherited width/line-height unless those
-//      selectors are explicitly reset.
-//   3. Word's auto-hyphenation (mso-hyphenate) can insert hyphens mid-word in Outlook; turned off
-//      explicitly rather than left to find out the hard way.
+// there, reading as "truncated" even though the full text was sent. The fixes below are the
+// standard "bulletproof HTML email" pattern for this (Outlook desktop's Word rendering engine +
+// Outlook.com/OWA's ExternalClass scope + mobile Mail apps' auto text-resize all contribute),
+// applied once here at the one choke point every send passes through rather than copied into each
+// individual email-builder file:
+//   1. A <table> with an explicit width attribute, not max-width on a <div> — Word does not
+//      reliably respect the latter.
+//   2. ".ExternalClass" selectors (with !important, since Outlook.com's own injected styles can
+//      out-specificity a plain rule) reset width/line-height Outlook.com/OWA otherwise overrides.
+//   3. mso-hyphenate: none, both inline and in an Outlook-only <!--[if gte mso 9]> block, so
+//      Word's auto-hyphenation can't insert hyphens mid-word.
+//   4. -webkit-/-ms-text-size-adjust: 100%, so mobile Mail apps don't auto-bump font size and
+//      reflow the layout unpredictably.
+// XHTML 1.0 Transitional is used as the doctype rather than HTML5's bare <!DOCTYPE html> — the
+// doctype email clients (not browsers) are most consistently tested and documented against.
 function wrapHtmlDocument(bodyHtml: string): string {
-  return `<!DOCTYPE html>
-<html>
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-  body { margin: 0; padding: 0; font-family: Tahoma, Geneva, sans-serif; font-size: 12px; mso-hyphenate: none; }
-  table { border-collapse: collapse; }
-  img { max-width: 100%; }
+<style type="text/css">
   .ExternalClass, .ExternalClass p, .ExternalClass span, .ExternalClass font, .ExternalClass td, .ExternalClass div {
-    width: 100%;
+    width: 100% !important;
     line-height: 100%;
   }
+  body { margin: 0; padding: 0; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table { border-collapse: collapse; }
+  img { max-width: 100%; }
+  p { margin: 0 0 1em 0; padding: 0; }
 </style>
+<!--[if gte mso 9]>
+<style type="text/css">
+  span, font, p, div, td, a { mso-hyphenate: none !important; }
+</style>
+<![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#ffffff;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;mso-hyphenate:none;">
-<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+<body style="margin:0;padding:0;width:100% !important;background:#ffffff;font-family:Tahoma,Geneva,sans-serif;font-size:12px;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;mso-hyphenate:none;">
+<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="width:100%;">
 <tr>
 <td align="center" style="padding:16px;">
-<table role="presentation" width="600" style="width:100%;max-width:600px;" border="0" cellspacing="0" cellpadding="0">
+<table role="presentation" width="600" border="0" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;">
 <tr>
-<td style="font-family:Tahoma,Geneva,sans-serif;font-size:12px;word-wrap:break-word;overflow-wrap:break-word;mso-hyphenate:none;">
+<td style="font-family:Tahoma,Geneva,sans-serif;font-size:12px;line-height:1.5;text-align:left;word-wrap:break-word;overflow-wrap:break-word;mso-hyphenate:none;">
 ${bodyHtml}
 </td>
 </tr>

@@ -122,13 +122,20 @@ function substituteTokens(text: string, tokens: Record<string, string>): string 
   return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => tokens[key] ?? '')
 }
 
+// Only actual block-level tags (list/table/heading/div) count as "already complete markup" and
+// skip the <p> wrap — an inline tag like <strong>Validation Deadline:</strong> ... also starts
+// with '<' but is still a plain paragraph that needs its own <p>, just like any other block; a
+// bare startsWith('<') check wrongly swallowed those into the surrounding flow with no block
+// separation at all (caught by rendering an actual sample email and reading the generated HTML,
+// not just reasoning about the regex).
+const BLOCK_TAG_RE = /^<(ul|ol|table|div|h[1-6])\b/i
 function renderBody(body: string, tokens: Record<string, string>): string {
   const substituted = substituteTokens(body, tokens)
   return substituted
     .split(/\n\s*\n/)
     .map((block) => block.trim())
     .filter(Boolean)
-    .map((block) => (block.startsWith('<') ? block : P(block)))
+    .map((block) => (BLOCK_TAG_RE.test(block) ? block : P(block)))
     .join('\n')
 }
 
