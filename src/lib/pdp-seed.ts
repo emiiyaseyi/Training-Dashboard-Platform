@@ -25,7 +25,65 @@ interface SeedSection {
 // — it's system-rendered from the roster + 2026 training history, not an editable question bank.
 // Section 8 (L&D Use Only) isn't here either — see PDPReview, filled later in the admin panel,
 // never shown to a respondent.
+const SKILL_RATING_OPTIONS = ['Proficient', 'Needs Practice', 'Not Yet Able', 'N/A']
+// One 'select' question per skill item, with the app name folded into the label itself since the
+// section/question model has no native sub-heading — kept in the same order as the source
+// checklist (Word, Excel, PowerPoint, Outlook) so the app groupings still read clearly.
+function skillQuestion(label: string): SeedQuestion {
+  return { label, type: 'select', options: SKILL_RATING_OPTIONS, required: true, searchable: true }
+}
+
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
+  // Section A — completed by whoever is filling the form (the employee self-rating on Track A, or
+  // the line manager rating on their behalf on Track B), same as every other respondent section;
+  // not specific to one track. Transcribed from "Line Manager's MS Office Skills Assessment
+  // Checklist" (MS_Office_Skills_Assessment_Checklist.docx) rather than re-written, so the wording
+  // matches what L&D already uses elsewhere.
+  {
+    key: 'digital_skill_assessment',
+    title: 'Digital Skill Assessment',
+    description: 'Rate each skill: Proficient / Needs Practice / Not Yet Able / N/A (not required for your role). Focus on skills relevant to your role — it’s fine to mark items N/A.',
+    questions: [
+      skillQuestion('Microsoft Word — Formats documents using styles (not manual formatting)'),
+      skillQuestion('Microsoft Word — Applies headers/footers, page numbers, and page breaks correctly'),
+      skillQuestion('Microsoft Word — Uses track changes and comments for collaborative review'),
+      skillQuestion('Microsoft Word — Inserts and formats tables, images, and headings consistently'),
+      skillQuestion('Microsoft Word — Creates a table of contents from heading styles'),
+      skillQuestion('Microsoft Word — Uses mail merge for bulk letters/labels'),
+      skillQuestion('Microsoft Excel — Builds and audits basic formulas (SUM, AVERAGE, IF)'),
+      skillQuestion('Microsoft Excel — Applies consistent formatting (number formats, conditional formatting)'),
+      skillQuestion('Microsoft Excel — Sorts and filters data reliably'),
+      skillQuestion('Microsoft Excel — Uses lookup functions (VLOOKUP/XLOOKUP/INDEX-MATCH)'),
+      skillQuestion('Microsoft Excel — Builds PivotTables to summarise data'),
+      skillQuestion('Microsoft Excel — Creates and formats charts appropriate to the data'),
+      skillQuestion('Microsoft Excel — Applies data validation and protects key cells/sheets'),
+      skillQuestion('Microsoft PowerPoint — Builds slides using the master/template rather than ad-hoc formatting'),
+      skillQuestion('Microsoft PowerPoint — Structures a clear narrative across a deck (not just bullet dumps)'),
+      skillQuestion('Microsoft PowerPoint — Uses speaker notes effectively for delivery'),
+      skillQuestion('Microsoft PowerPoint — Inserts and formats charts/images/tables cleanly'),
+      skillQuestion('Microsoft PowerPoint — Applies simple, purposeful animation/transitions (not excessive)'),
+      skillQuestion('Microsoft PowerPoint — Presents confidently using the deck as a visual aid'),
+      skillQuestion('Microsoft Outlook — Manages inbox with folders/rules rather than a single flooded inbox'),
+      skillQuestion('Microsoft Outlook — Schedules meetings with correct attendees, rooms, and reminders'),
+      skillQuestion('Microsoft Outlook — Uses calendar sharing/delegation appropriately'),
+      skillQuestion('Microsoft Outlook — Flags, categorises, and follows up on action items'),
+      skillQuestion('Microsoft Outlook — Uses out-of-office and forwarding settings correctly'),
+      { label: 'Priority areas identified', description: 'Based on the ratings above, which skills most need development?', type: 'textarea', required: true },
+      {
+        label: 'Recommended action',
+        type: 'select',
+        required: true,
+        searchable: true,
+        options: [
+          'Self-paced module',
+          'Live workshop / group training session',
+          'Peer coaching / super-user pairing',
+          'One-on-one refresher with L&D',
+          'No action needed — proficient across relevant areas',
+        ],
+      },
+    ],
+  },
   {
     key: 'role_alignment',
     title: 'Role and Business Alignment',
