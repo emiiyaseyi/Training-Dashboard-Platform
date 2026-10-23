@@ -10,6 +10,25 @@ import { firstNameOf, formatDeadline, renderPDPEmail } from './pdp-email'
 import { resolvePDPEmailTemplate } from './pdp-email-templates'
 import { resolveRespondentSections } from './pdp-form'
 import type { PDPFormAnswers } from './pdp-validate'
+import { randomUUID } from 'crypto'
+
+// viewToken is nullable at the schema level (no DB-level default is possible for a cuid-shaped
+// value — see the field's comment in schema.prisma) — generated and persisted here the first time
+// one is actually needed, for a row that predates this feature or was never a candidate for one
+// until just now. Every call site that needs a staff member's or team member's view link goes
+// through one of these two instead of reading `.viewToken` directly.
+export async function ensureStaffSurveyViewToken(staffSurveyId: string, existing: string | null): Promise<string> {
+  if (existing) return existing
+  const token = randomUUID()
+  await prisma.pDPStaffSurvey.update({ where: { id: staffSurveyId }, data: { viewToken: token } })
+  return token
+}
+export async function ensureTeamMemberViewToken(entryId: string, existing: string | null): Promise<string> {
+  if (existing) return existing
+  const token = randomUUID()
+  await prisma.pDPManagerTeamMemberEntry.update({ where: { id: entryId }, data: { viewToken: token } })
+  return token
+}
 
 export interface PDPLaunchResult {
   created: number
@@ -451,7 +470,8 @@ export async function sendPDPValidationCompleteEmails(validationId: string): Pro
   const editedAnswers = JSON.parse(validation.editedAnswers) as PDPFormAnswers
   const sections = await resolveRespondentSections(validation.staffSurvey.cycleId)
   const recap = renderPDPAnswersRecap(sections, editedAnswers)
-  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${validation.staffSurvey.viewToken}`
+  const viewToken = await ensureStaffSurveyViewToken(validation.staffSurvey.id, validation.staffSurvey.viewToken)
+  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${viewToken}`
   const subject = `${validation.staffSurvey.cycle.title} — Finalized for ${validation.staffSurvey.staffName}`
   const html = `
     <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 620px;">
@@ -495,7 +515,8 @@ export async function sendPDPMemberFinalizedEmail(entryId: string): Promise<void
   const answers = JSON.parse(entry.answers) as PDPFormAnswers
   const sections = await resolveRespondentSections(entry.managerSurvey.cycleId)
   const recap = renderPDPAnswersRecap(sections, answers)
-  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${entry.viewToken}`
+  const viewToken = await ensureTeamMemberViewToken(entry.id, entry.viewToken)
+  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${viewToken}`
   const subject = `${entry.managerSurvey.cycle.title} — Finalized for ${entry.staffName}`
   const html = `
     <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 620px;">

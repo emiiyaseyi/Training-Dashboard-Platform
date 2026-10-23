@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
-import { notifyManagerOfTeamUpdate } from '@/lib/pdp-send'
+import { notifyManagerOfTeamUpdate, ensureTeamMemberViewToken } from '@/lib/pdp-send'
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections } from '@/lib/pdp-form'
@@ -28,7 +28,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         where: { staffId: survey.staffId, submittedAt: { not: null }, managerSurvey: { cycleId: survey.cycleId } },
         include: { managerSurvey: true },
       })
-      if (finalizedEntry) finalizedByManager = { managerName: finalizedEntry.managerSurvey.managerName, viewToken: finalizedEntry.viewToken }
+      if (finalizedEntry) {
+        const viewToken = await ensureTeamMemberViewToken(finalizedEntry.id, finalizedEntry.viewToken)
+        finalizedByManager = { managerName: finalizedEntry.managerSurvey.managerName, viewToken }
+      }
     }
 
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
