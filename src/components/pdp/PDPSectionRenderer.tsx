@@ -1,5 +1,6 @@
 'use client'
 
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { SearchableSelect, SearchableMultiSelect } from './SearchableSelect'
 
 export interface PDPQuestion {
@@ -181,6 +182,42 @@ export function PDPSectionRenderer({
               ))}
             </div>
           )}
+          {q.type === 'ranking' && (() => {
+            const optionsList = q.options || []
+            if (optionsList.length === 0) {
+              return <p className="text-[15px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">Nothing to prioritize — based on your answers above, you&apos;re already comfortable with everything covered.</p>
+            }
+            // Falls back to the given (already-filtered) order until the respondent actually
+            // reorders something — an unseeded answer still means "default priority order", not
+            // "unanswered", so there's nothing to persist to state until a move happens.
+            const current = asStringArray(values[q.id])
+            const known = current.filter((v) => optionsList.includes(v))
+            const order = known.length > 0 ? [...known, ...optionsList.filter((o) => !known.includes(o))] : optionsList
+            const move = (i: number, dir: -1 | 1) => {
+              const j = i + dir
+              if (j < 0 || j >= order.length) return
+              const next = [...order]
+              ;[next[i], next[j]] = [next[j], next[i]]
+              onChange(q.id, next)
+            }
+            return (
+              <div className="space-y-1.5">
+                {order.map((item, i) => (
+                  <div key={item} className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2">
+                    <span className="text-[16px] text-slate-700"><span className="text-slate-400 mr-2">{i + 1}.</span>{item}</span>
+                    <div className="flex gap-1 shrink-0">
+                      <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20">
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => move(i, 1)} disabled={i === order.length - 1} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20">
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
           {q.type === 'yesno' && (
             <div className="flex gap-2">
               {['Yes', 'No'].map((o) => (

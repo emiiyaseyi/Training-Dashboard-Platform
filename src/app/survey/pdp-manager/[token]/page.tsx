@@ -7,6 +7,7 @@ import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectio
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
+import { resolveWrapupSectionQuestions } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -321,7 +322,8 @@ export default function PDPManagerTeamPage() {
   const checkCurrentPage = (): boolean => {
     if (!current || current.type === 'intro') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
-    const issue = firstPageIssue(current.section.questions, values)
+    const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
+    const issue = firstPageIssue(questions, values)
     if (issue) { setPageError(issue); return false }
     if (current.type === 'need' && ctx.needReviewSection) {
       const reviewIssue = firstPageIssue(ctx.needReviewSection.questions, values)
@@ -399,7 +401,7 @@ export default function PDPManagerTeamPage() {
             <div>
               <h2 className="text-[18px] font-semibold text-slate-800 mb-1">{current.section.title}</h2>
               {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
-              <PDPSectionRenderer questions={current.section.questions} values={form.answers} onChange={setAnswer} />
+              <PDPSectionRenderer questions={resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)} values={form.answers} onChange={setAnswer} />
             </div>
           )}
 

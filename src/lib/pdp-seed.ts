@@ -3,7 +3,7 @@ import { prisma } from './prisma'
 interface SeedQuestion {
   label: string
   description?: string
-  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'yesno'
+  type: 'text' | 'textarea' | 'select' | 'multiselect' | 'rating' | 'yesno' | 'ranking'
   options?: string[]
   optionsSource?: 'capabilities'
   required?: boolean
@@ -243,6 +243,27 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     ],
     closingLabel: 'Anything else worth mentioning?',
   }),
+  // Not required — the list of tools shown here is filtered at render time down to whatever the
+  // respondent still needs training on (see resolveWrapupSectionQuestions in pdp-wrapup.ts): a
+  // tool they said they rarely/never use, or already rated themselves Advanced/Expert in, is left
+  // out entirely. `options` here is the full fallback list before that filtering runs.
+  {
+    key: 'digital_skill_wrapup',
+    title: 'Training Priority',
+    description: "Put these in the order you'd like to be trained on them (most important first — use the arrows to reorder). Anything you're already comfortable with, or rarely/never use, won't be shown here.",
+    questions: [
+      {
+        label: 'Your training priority order',
+        type: 'ranking',
+        required: false,
+        options: [
+          'Microsoft Word', 'Microsoft Excel', 'Microsoft PowerPoint', 'Microsoft Outlook', 'Microsoft Teams',
+          'Power BI', 'SQL', 'Power Automate / no-code workflow automation',
+          'AI Literacy, Prompt Engineering & Responsible AI', 'Virtual Advisory & Digital Prospecting',
+        ],
+      },
+    ],
+  },
   {
     key: 'role_alignment',
     title: 'Role and Business Alignment',
