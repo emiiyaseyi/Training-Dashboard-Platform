@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, 
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
+import { PDPSkillGapSummary } from '@/components/pdp/PDPSkillGapSummary'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
 import { resolveWrapupSectionQuestions, isToolSectionVisible, isSectionAKey } from '@/lib/pdp-wrapup'
@@ -49,7 +50,7 @@ interface Context {
 
 interface SearchHit { staffId: string; name: string; businessUnit: string | null; role: string | null }
 
-type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
+type PageDescriptor = { type: 'intro' } | { type: 'skill-gap-summary' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
 
 export default function PDPManagerTeamPage() {
   const { token } = useParams<{ token: string }>()
@@ -126,8 +127,14 @@ export default function PDPManagerTeamPage() {
   const pages: PageDescriptor[] = useMemo(() => {
     if (!ctx || !form) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
+    // A manager reviewing an already-submitted plan (needsReview) validates Section B only — they
+    // see a read-only summary of Section A instead of re-walking all 60+ assessment questions.
+    // Someone filling from scratch for a team member who never submitted still gets the full flow,
+    // since nobody else has filled Section A for that person.
+    if (currentMember?.needsReview) out.push({ type: 'skill-gap-summary' })
     let insertedTrainingHistory = false
     for (const section of ctx.sections) {
+      if (currentMember?.needsReview && isSectionAKey(section.key)) continue
       if (!isToolSectionVisible(section, ctx.sections, form.answers)) continue
       if (!insertedTrainingHistory && !isSectionAKey(section.key)) {
         out.push({ type: 'training-history' })
@@ -141,7 +148,7 @@ export default function PDPManagerTeamPage() {
       }
     }
     return out
-  }, [ctx, form])
+  }, [ctx, form, currentMember])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 
@@ -327,7 +334,7 @@ export default function PDPManagerTeamPage() {
   }
 
   const checkCurrentPage = (): boolean => {
-    if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
+    if (!current || current.type === 'intro' || current.type === 'training-history' || current.type === 'skill-gap-summary') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
     const issue = firstPageIssue(questions, values)
@@ -405,6 +412,10 @@ export default function PDPManagerTeamPage() {
 
           {current?.type === 'training-history' && (
             <PDPTrainingHistoryPage trainingHistory2026={currentMember.prefill?.trainingHistory2026 || []} />
+          )}
+
+          {current?.type === 'skill-gap-summary' && (
+            <PDPSkillGapSummary sections={ctx.sections} answers={currentMember.answers?.answers || {}} staffName={currentMember.staffName} bare />
           )}
 
           {current?.type === 'section' && (
