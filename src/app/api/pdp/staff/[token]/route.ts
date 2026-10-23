@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
-import { sendPDPManagerValidation } from '@/lib/pdp-send'
+import { notifyManagerOfTeamUpdate } from '@/lib/pdp-send'
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections } from '@/lib/pdp-form'
@@ -18,6 +18,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
 
     const alreadyResponded = !!survey.respondedAt
+
+    // A line manager can finalize (review or fill) this person's plan before they ever self-fill
+    // it themselves, via the consolidated Track B-style link — once that's happened, this link is
+    // no longer theirs to fill; they're pointed to the read-only copy of what was finalized.
+    let finalizedByManager: { managerName: string; viewToken: string } | null = null
+    if (!alreadyResponded) {
+      const finalizedEntry = await prisma.pDPManagerTeamMemberEntry.findFirst({
+        where: { staffId: survey.staffId, submittedAt: { not: null }, managerSurvey: { cycleId: survey.cycleId } },
+        include: { managerSurvey: true },
+      })
+      if (finalizedEntry) finalizedByManager = { managerName: finalizedEntry.managerSurvey.managerName, viewToken: finalizedEntry.viewToken }
+    }
+
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
     const sections = await resolveRespondentSections(survey.cycleId)
 
@@ -26,6 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       cycleTitle: survey.cycle.title,
       staffName: survey.staffName,
       alreadyResponded,
+      finalizedByManager,
       sections,
       prefill,
       answers: survey.answers ? JSON.parse(survey.answers) : null,
@@ -68,6 +82,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     if (!survey) return NextResponse.json({ error: 'This link is invalid.' }, { status: 404 })
     if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
 
+    // Defensive — matches the GET route's check. A manager could in principle finalize this
+    // person's entry in the brief window between the GET that loaded this form and this submit.
+    const finalizedEntry = await prisma.pDPManagerTeamMemberEntry.findFirst({
+      where: { staffId: survey.staffId, submittedAt: { not: null }, managerSurvey: { cycleId: survey.cycleId } },
+    })
+    if (finalizedEntry) return NextResponse.json({ error: 'Your line manager has already completed this for you.' }, { status: 400 })
+
     const body = (await req.json()) as PDPFormAnswers
     const sections = await resolveRespondentSections(survey.cycleId)
     const validationError = validatePDPFormAnswers(body, sections)
@@ -78,12 +99,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       data: { answers: JSON.stringify(body), respondedAt: new Date() },
     })
 
-    // Fire-and-forget — the manager validation email going out shouldn't make the staff member's
-    // own submit hang, and a failure there is still visible/recoverable from the admin panel.
-    // Reads the snapshot captured when THIS survey was launched, not the cycle's current setting
-    // (which may have changed since) — see PDPStaffSurvey.requireManagerValidation.
+    // Fire-and-forget — getting this in front of the line manager shouldn't make the staff
+    // member's own submit hang, and a failure there is still visible/recoverable from the admin
+    // panel. Reads the snapshot captured when THIS survey was launched, not the cycle's current
+    // setting (which may have changed since) — see PDPStaffSurvey.requireManagerValidation.
     if (survey.requireManagerValidation) {
-      sendPDPManagerValidation(survey.id).catch((err) => console.error('[pdp/staff submit] manager validation send failed', err))
+      notifyManagerOfTeamUpdate(survey.id).catch((err) => console.error('[pdp/staff submit] manager notify failed', err))
     }
 
     return NextResponse.json({ success: true })

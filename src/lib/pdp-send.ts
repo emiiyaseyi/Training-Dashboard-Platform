@@ -157,6 +157,106 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<{
   return result
 }
 
+// Triggered once a PDPStaffSurvey is submitted (see the submit route) — the CURRENT mechanism for
+// getting a self-filled plan in front of the line manager, replacing the old one-link-per-staff-
+// member PDPManagerValidation trigger (kept working as its own flow for any link already sent, see
+// sendPDPManagerValidation above, but never created fresh anymore). Every line manager reviews
+// their WHOLE team through one single link: this finds or creates that manager's PDPManagerSurvey
+// for the cycle (pulling their full team the first time, same as a deliberate Track B launch), and
+// prefills this one team member's entry with their self-fill submission (needsReview: true) so the
+// manager's per-member page shows it as something to review/edit rather than fill from scratch.
+// The manager still goes through the Accept/Decline/Add roster step on a brand-new link, same as
+// any Track B launch — nothing here skips that.
+export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<void> {
+  const survey = await prisma.pDPStaffSurvey.findUnique({ where: { id: staffSurveyId } })
+  if (!survey || !survey.answers) return
+
+  const directory = await loadRosterDirectory()
+  const staff = directory.get(normalizeStaffIdKey(survey.staffId))
+  const managerIds = new Set<string>()
+  if (staff?.lineManagerStaffId) managerIds.add(normalizeStaffIdKey(staff.lineManagerStaffId))
+  const overrides = await prisma.pDPManagerOverride.findMany({ where: { cycleId: survey.cycleId, staffId: survey.staffId } })
+  for (const o of overrides) managerIds.add(normalizeStaffIdKey(o.secondManagerStaffId))
+  if (managerIds.size === 0) return
+
+  const cycle = await prisma.pDPCycle.findUnique({ where: { id: survey.cycleId } })
+  if (!cycle) return
+  const canSend = await hasSmtpCredentials()
+  const baseUrl = getAppBaseUrl()
+  const template = canSend ? await resolvePDPEmailTemplate(cycle.id, 'managerTeam') : null
+
+  for (const managerKey of managerIds) {
+    const manager = directory.get(managerKey)
+    let managerSurvey = await prisma.pDPManagerSurvey.findUnique({ where: { cycleId_managerStaffId: { cycleId: cycle.id, managerStaffId: manager?.staffId ?? managerKey } } })
+    let isNewManagerSurvey = false
+
+    if (!managerSurvey) {
+      isNewManagerSurvey = true
+      managerSurvey = await prisma.pDPManagerSurvey.create({
+        data: { cycleId: cycle.id, managerStaffId: manager?.staffId ?? managerKey, managerName: manager?.name ?? managerKey, email: manager?.email ?? null },
+      })
+      const team = await getTeamMembersForManager(cycle.id, managerKey)
+      if (team.length > 0) {
+        await prisma.pDPManagerTeamMemberEntry.createMany({
+          data: team.map((t) => ({
+            managerSurveyId: managerSurvey!.id,
+            staffId: t.staffId,
+            staffName: t.name,
+            businessUnit: t.businessUnit,
+            role: t.role,
+            status: 'pending',
+          })),
+        })
+      }
+    }
+
+    // Prefill (or refresh) this one team member's entry with their self-fill submission — create
+    // the row if they weren't part of the original team snapshot (a reporting-line change since),
+    // but never touch an entry that's already been finalized (submittedAt set) by the manager.
+    const existingEntry = await prisma.pDPManagerTeamMemberEntry.findUnique({
+      where: { managerSurveyId_staffId: { managerSurveyId: managerSurvey.id, staffId: survey.staffId } },
+    })
+    if (existingEntry) {
+      if (!existingEntry.submittedAt) {
+        await prisma.pDPManagerTeamMemberEntry.update({
+          where: { id: existingEntry.id },
+          data: { answers: survey.answers, needsReview: true },
+        })
+      }
+    } else {
+      await prisma.pDPManagerTeamMemberEntry.create({
+        data: {
+          managerSurveyId: managerSurvey.id,
+          staffId: survey.staffId,
+          staffName: survey.staffName,
+          businessUnit: survey.businessUnit,
+          department: survey.department,
+          role: survey.role,
+          status: 'pending',
+          answers: survey.answers,
+          needsReview: true,
+        },
+      })
+    }
+
+    // Only ever emails on a brand-new link — an existing, already-sent manager link is updated
+    // silently here and picked up next time the manager opens it (or on the next day's reminder,
+    // same as any other outstanding link), rather than emailing again on every single team
+    // member's submission.
+    if (isNewManagerSurvey && canSend && template && manager?.email) {
+      const { subject, html } = renderPDPEmail('managerTeam', template, {
+        firstName: firstNameOf(manager.name), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.managerDeadline, cycle.expiryDays)),
+      }, `${baseUrl}/survey/pdp-manager/${managerSurvey.surveyToken}`)
+      try {
+        await sendMail({ to: manager.email, subject, html })
+        await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+      } catch (err) {
+        console.error('[notifyManagerOfTeamUpdate] send failed', err)
+      }
+    }
+  }
+}
+
 // Track B — one PDPManagerSurvey per distinct manager, with one PDPManagerTeamMemberEntry per
 // direct report found via getTeamMembersForManager (status "pending" until the manager accepts/
 // declines them on the roster-review page). No staff self-fill prerequisite.
@@ -315,9 +415,9 @@ function recapValue(v: string | string[] | undefined): string {
   return Array.isArray(v) ? (v.join(', ') || '—') : v
 }
 
-// Flattens a finalized PDPFormAnswers into a simple HTML Q&A table for the completion email —
-// the recipient's actual inbox copy of what was agreed, not a link to click through to (neither
-// the staff member nor, after responding, the manager has a page left to view it on).
+// Flattens a finalized PDPFormAnswers into a simple HTML Q&A table for the completion email — an
+// inline copy of what was agreed, alongside the read-only view link (/survey/pdp-view/[token])
+// so the recipient has both without needing to keep the email forever.
 function renderPDPAnswersRecap(sections: Awaited<ReturnType<typeof resolveRespondentSections>>, answers: PDPFormAnswers): string {
   const rows: string[] = []
   for (const section of sections) {
@@ -351,12 +451,14 @@ export async function sendPDPValidationCompleteEmails(validationId: string): Pro
   const editedAnswers = JSON.parse(validation.editedAnswers) as PDPFormAnswers
   const sections = await resolveRespondentSections(validation.staffSurvey.cycleId)
   const recap = renderPDPAnswersRecap(sections, editedAnswers)
+  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${validation.staffSurvey.viewToken}`
   const subject = `${validation.staffSurvey.cycle.title} — Finalized for ${validation.staffSurvey.staffName}`
   const html = `
     <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 620px;">
       <p style="margin:0 0 14px 0;">
         ${validation.managerName || 'The line manager'} has reviewed and finalized this Personal Development Plan. A copy of the agreed plan is below for your records.
       </p>
+      <p style="margin:0 0 14px 0;"><a href="${viewUrl}" style="display:inline-block;background:#1E7145;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">View My Finalized Plan</a></p>
       ${recap}
       <p style="margin:14px 0 0 0;color:#6B7280;">Regards,<br/>Learning &amp; Development</p>
     </div>
@@ -370,5 +472,44 @@ export async function sendPDPValidationCompleteEmails(validationId: string): Pro
     await sendMail({ to: to || validation.email!, cc: to ? cc : undefined, subject, html })
   } catch (err) {
     console.error('[sendPDPValidationCompleteEmails]', err)
+  }
+}
+
+// Sent once a line manager finalizes one team member's entry on the consolidated Track B-style
+// link (whether that was reviewing a self-filled plan or filling it from scratch) — the Track B
+// equivalent of sendPDPValidationCompleteEmails above, to the team member themselves (manager is
+// already the one who just submitted it, no separate copy needed for them the way Track A's two-
+// person validation flow needs one).
+export async function sendPDPMemberFinalizedEmail(entryId: string): Promise<void> {
+  if (!(await hasSmtpCredentials())) return
+  const entry = await prisma.pDPManagerTeamMemberEntry.findUnique({
+    where: { id: entryId },
+    include: { managerSurvey: { include: { cycle: true } } },
+  })
+  if (!entry || !entry.answers) return
+
+  const directory = await loadRosterDirectory()
+  const staffEmail = directory.get(normalizeStaffIdKey(entry.staffId))?.email
+  if (!staffEmail) return
+
+  const answers = JSON.parse(entry.answers) as PDPFormAnswers
+  const sections = await resolveRespondentSections(entry.managerSurvey.cycleId)
+  const recap = renderPDPAnswersRecap(sections, answers)
+  const viewUrl = `${getAppBaseUrl()}/survey/pdp-view/${entry.viewToken}`
+  const subject = `${entry.managerSurvey.cycle.title} — Finalized for ${entry.staffName}`
+  const html = `
+    <div style="font-family: Tahoma, Geneva, sans-serif; font-size: 12px; color: #1B1F3B; max-width: 620px;">
+      <p style="margin:0 0 14px 0;">
+        ${entry.managerSurvey.managerName} has ${entry.needsReview ? 'reviewed and finalized' : 'completed'} your Personal Development Plan. A copy is below for your records.
+      </p>
+      <p style="margin:0 0 14px 0;"><a href="${viewUrl}" style="display:inline-block;background:#1E7145;color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">View My Finalized Plan</a></p>
+      ${recap}
+      <p style="margin:14px 0 0 0;color:#6B7280;">Regards,<br/>Learning &amp; Development</p>
+    </div>
+  `
+  try {
+    await sendMail({ to: staffEmail, subject, html })
+  } catch (err) {
+    console.error('[sendPDPMemberFinalizedEmail]', err)
   }
 }

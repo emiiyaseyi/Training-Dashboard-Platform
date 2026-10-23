@@ -36,6 +36,7 @@ interface Context {
   cycleTitle: string
   staffName: string
   alreadyResponded: boolean
+  finalizedByManager: { managerName: string; viewToken: string } | null
   sections: Section[]
   prefill: PrefillSnapshot
   answers: Answers | null
@@ -110,6 +111,16 @@ export default function PDPStaffSurveyPage() {
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
         <p className="text-[18px] text-slate-600">{error || 'This link is invalid.'}</p>
+      </div>
+    </div>
+  )
+
+  if (ctx.finalizedByManager) return (
+    <div className="flex items-center justify-center min-h-screen p-6">
+      <div className="max-w-md text-center">
+        <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
+        <p className="text-[18px] font-medium text-slate-800">{ctx.finalizedByManager.managerName} has already completed your Personal Development Plan for you.</p>
+        <a href={`/survey/pdp-view/${ctx.finalizedByManager.viewToken}`} className="inline-block mt-4 text-[15px] font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700">View My Finalized Plan</a>
       </div>
     </div>
   )

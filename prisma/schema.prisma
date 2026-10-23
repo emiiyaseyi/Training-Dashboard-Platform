@@ -1175,6 +1175,10 @@ model PDPStaffSurvey {
   // don't" — that's correct, expected behaviour once it's a per-launch snapshot rather than a
   // single cycle-wide value that can drift between launches).
   requireManagerValidation Boolean @default(true)
+  // A separate, read-only token for the staff member's own "view what was finalized" page — never
+  // the same as surveyToken (which still opens the editable fill form while unanswered), so the
+  // completion-notification link can't be mistaken for an invitation to edit anything.
+  viewToken   String    @unique @default(cuid())
 
   cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   validations PDPManagerValidation[]
@@ -1254,6 +1258,9 @@ model PDPManagerTeamMemberEntry {
   // report "N of M team members have completed their own plan and are awaiting your review"
   // separately from "P team members you still need to fill in for".
   needsReview     Boolean   @default(false)
+  // Same purpose as PDPStaffSurvey.viewToken — a read-only link for the team member themselves,
+  // sent once their manager finalizes (fills or reviews-and-accepts) their entry.
+  viewToken       String    @unique @default(cuid())
 
   managerSurvey PDPManagerSurvey @relation(fields: [managerSurveyId], references: [id], onDelete: Cascade)
 

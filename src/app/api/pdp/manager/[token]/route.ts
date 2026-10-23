@@ -5,7 +5,8 @@ import { loadRosterDirectory, resolveStaffLoose } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { buildPDPPrefillIndex, getPDPPrefillForStaff } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
-import { resolveRespondentSections } from '@/lib/pdp-form'
+import { resolveRespondentSections, resolvePDPSections } from '@/lib/pdp-form'
+import { sendPDPMemberFinalizedEmail } from '@/lib/pdp-send'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-manager-get', 60, 60_000)
@@ -28,6 +29,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     }
 
     const sections = await resolveRespondentSections(survey.cycleId)
+    // Only ever rendered here (and on the validate page) — the manager's own per-need assessment
+    // (Priority + baseline proficiency rating), shown for every member regardless of whether their
+    // entry was prefilled from a self-fill submission or is being filled from scratch.
+    const needReviewSections = await resolvePDPSections(survey.cycleId, { onlyKeys: ['manager_need_review'] })
 
     return NextResponse.json({
       valid: true,
@@ -37,6 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       rosterConfirmed: !!survey.rosterConfirmedAt,
       alreadyResponded: !!survey.respondedAt,
       sections,
+      needReviewSection: needReviewSections[0] ?? null,
       teamMembers: survey.teamMembers.map((m) => ({
         id: m.id,
         staffId: m.staffId,
@@ -44,6 +50,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         businessUnit: m.businessUnit,
         role: m.role,
         status: m.status,
+        needsReview: m.needsReview,
         prefill: m.prefillSnapshot ? JSON.parse(m.prefillSnapshot) : null,
         answers: m.answers ? JSON.parse(m.answers) : null,
         submitted: !!m.submittedAt,
@@ -147,15 +154,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
       return NextResponse.json({ success: true })
     }
 
-    const sections = await resolveRespondentSections(survey.cycleId)
+    const [sections, needReviewSections] = await Promise.all([
+      resolveRespondentSections(survey.cycleId),
+      resolvePDPSections(survey.cycleId, { onlyKeys: ['manager_need_review'] }),
+    ])
     const answers = body.answers as PDPFormAnswers
-    const validationError = validatePDPFormAnswers(answers, sections)
+    // manager_need_review's questions live in the SAME developmentNeeds[i] objects as the
+    // respondent's own per-need fields (distinct question ids, no collision) — validating both
+    // section lists together checks both sets of required fields against that one shared array.
+    const validationError = validatePDPFormAnswers(answers, [...sections, ...needReviewSections])
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
     await prisma.pDPManagerTeamMemberEntry.update({
       where: { id: entryId },
       data: { answers: JSON.stringify(body.answers), submittedAt: new Date() },
     })
+    sendPDPMemberFinalizedEmail(entryId).catch((err) => console.error('[pdp/manager PUT] member finalized email failed', err))
 
     const remaining = survey.teamMembers.filter((m) => m.id !== entryId && (m.status === 'accepted' || m.status === 'added') && !m.submittedAt)
     if (remaining.length === 0) {

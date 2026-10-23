@@ -26,6 +26,7 @@ interface TeamMember {
   businessUnit: string | null
   role: string | null
   status: 'pending' | 'accepted' | 'declined' | 'added'
+  needsReview: boolean
   prefill: PrefillSnapshot | null
   answers: Answers | null
   submitted: boolean
@@ -40,6 +41,7 @@ interface Context {
   rosterConfirmed: boolean
   alreadyResponded: boolean
   sections: Section[]
+  needReviewSection: Section | null
   teamMembers: TeamMember[]
 }
 
@@ -321,6 +323,10 @@ export default function PDPManagerTeamPage() {
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const issue = firstPageIssue(current.section.questions, values)
     if (issue) { setPageError(issue); return false }
+    if (current.type === 'need' && ctx.needReviewSection) {
+      const reviewIssue = firstPageIssue(ctx.needReviewSection.questions, values)
+      if (reviewIssue) { setPageError(reviewIssue); return false }
+    }
     if (current.type === 'need' && areaQuestionId) {
       const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, memberTrainingHistory2026)
       if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
@@ -363,7 +369,14 @@ export default function PDPManagerTeamPage() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-xl mx-auto">
         <p className="text-[15px] text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
-        <h1 className="text-[23px] font-bold text-slate-900">{currentMember.staffName}</h1>
+        <h1 className="text-[23px] font-bold text-slate-900">
+          {currentMember.needsReview ? 'Review ' : 'Fill '}{currentMember.staffName}&apos;s Plan
+        </h1>
+        {currentMember.needsReview && (
+          <p className="text-[14px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+            {currentMember.staffName} has already submitted their own plan, pre-filled below — review it, edit anything needed, and confirm.
+          </p>
+        )}
 
         <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-3">
           <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((page + 1) / pages.length) * 100}%` }} />
@@ -417,6 +430,16 @@ export default function PDPManagerTeamPage() {
                   />
                 ) : null
               })()}
+              {ctx.needReviewSection && (
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <p className="text-[14px] font-semibold text-slate-600 mb-2">{ctx.needReviewSection.title}</p>
+                  <PDPSectionRenderer
+                    questions={ctx.needReviewSection.questions}
+                    values={form.developmentNeeds[current.index] || {}}
+                    onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
+                  />
+                </div>
+              )}
               {current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
                 <button onClick={addNeed} className="flex items-center gap-1.5 text-[15px] font-medium text-navy-700 hover:underline mt-4">
                   <Plus className="w-3.5 h-3.5" /> Add another Development Need
