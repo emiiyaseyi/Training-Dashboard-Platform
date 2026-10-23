@@ -16,6 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cyc
   const audience: PDPAudience = body?.audience && ['all', 'businessUnit', 'department', 'selected'].includes(body.audience.type)
     ? body.audience
     : { type: 'all' }
+  if (!Array.isArray(audience.excludeStaffIds)) audience.excludeStaffIds = undefined
 
   try {
     const result = await sendPDPManagerSurvey(cycle, audience)

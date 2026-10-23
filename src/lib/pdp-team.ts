@@ -5,6 +5,11 @@ import { loadRosterDirectory, resolveStaffLoose, type ResolvedStaff } from './st
 export interface PDPAudience {
   type: 'all' | 'businessUnit' | 'department' | 'selected'
   value?: string | string[] | null // BU/department name for those two types, Staff ID list for 'selected'
+  // Applied on top of whichever type above resolves to — a one-time "exclude these specific
+  // people from this launch" list the admin panel's Launch section offers alongside the audience
+  // picker, independent of audience type (so e.g. "everyone in a Business Unit, except these two"
+  // works without a dedicated audience type for it).
+  excludeStaffIds?: string[]
 }
 
 // Shared audience filter for both PDP launch tracks — same audienceType vocabulary as Custom
@@ -13,26 +18,29 @@ export interface PDPAudience {
 // reads StaffRosterRecord directly for that one case, same latest-row-per-staffId pattern used
 // throughout this codebase.
 export async function filterStaffByAudience(staff: ResolvedStaff[], audience: PDPAudience): Promise<ResolvedStaff[]> {
-  if (!audience || audience.type === 'all') return staff
+  if (!audience) return staff
+  let result = staff
   if (audience.type === 'businessUnit') {
     const bu = String(audience.value || '')
-    return staff.filter((s) => s.businessUnit === bu)
-  }
-  if (audience.type === 'selected') {
+    result = result.filter((s) => s.businessUnit === bu)
+  } else if (audience.type === 'selected') {
     const identifiers = Array.isArray(audience.value) ? audience.value : []
     const directory = await loadRosterDirectory()
     const resolved = identifiers.map((id) => resolveStaffLoose(id, directory)).filter((s): s is ResolvedStaff => !!s)
     const keys = new Set(resolved.map((s) => normalizeStaffIdKey(s.staffId)))
-    return staff.filter((s) => keys.has(normalizeStaffIdKey(s.staffId)))
-  }
-  if (audience.type === 'department') {
+    result = result.filter((s) => keys.has(normalizeStaffIdKey(s.staffId)))
+  } else if (audience.type === 'department') {
     const dept = String(audience.value || '').trim().toLowerCase()
     const roster = await prisma.staffRosterRecord.findMany({ select: { staffId: true, department: true }, orderBy: { createdAt: 'asc' } })
     const deptByStaffId = new Map<string, string>()
     for (const r of roster) deptByStaffId.set(normalizeStaffIdKey(r.staffId), (r.department || '').trim().toLowerCase())
-    return staff.filter((s) => deptByStaffId.get(normalizeStaffIdKey(s.staffId)) === dept)
+    result = result.filter((s) => deptByStaffId.get(normalizeStaffIdKey(s.staffId)) === dept)
   }
-  return staff
+  if (audience.excludeStaffIds && audience.excludeStaffIds.length > 0) {
+    const excludeKeys = new Set(audience.excludeStaffIds.map(normalizeStaffIdKey))
+    result = result.filter((s) => !excludeKeys.has(normalizeStaffIdKey(s.staffId)))
+  }
+  return result
 }
 
 // "Manager -> list of reports" does not exist anywhere else in this codebase (every other place

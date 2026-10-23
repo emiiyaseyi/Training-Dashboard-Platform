@@ -101,7 +101,7 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
       firstName: firstNameOf(survey.staffName), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.staffDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp/${survey.surveyToken}`)
     try {
-      await sendMail({ to: survey.email, subject, html })
+      await sendMail({ to: survey.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
       await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
       result.sent++
     } catch (err) {
@@ -166,7 +166,7 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<{
       firstName: firstNameOf(manager.name), staffName: survey.staffName, cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.validationDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`)
     try {
-      await sendMail({ to: manager.email, subject, html })
+      await sendMail({ to: manager.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
       await prisma.pDPManagerValidation.update({ where: { id: validation.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
       result.sent++
     } catch (err) {
@@ -267,7 +267,7 @@ export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<
         firstName: firstNameOf(manager.name), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.managerDeadline, cycle.expiryDays)),
       }, `${baseUrl}/survey/pdp-manager/${managerSurvey.surveyToken}`)
       try {
-        await sendMail({ to: manager.email, subject, html })
+        await sendMail({ to: manager.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
         await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
       } catch (err) {
         console.error('[notifyManagerOfTeamUpdate] send failed', err)
@@ -288,7 +288,12 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
   const managerCandidates = managerIds.map((k) => directory.get(k)).filter((s): s is NonNullable<typeof s> => !!s)
   const filteredManagers = await filterStaffByAudience(managerCandidates, audience)
   const filteredKeys = new Set(filteredManagers.map((s) => normalizeStaffIdKey(s.staffId)))
-  const audienceFilteredManagerIds = audience.type === 'all' ? managerIds : managerIds.filter((k) => filteredKeys.has(k))
+  // The 'all' shortcut deliberately keeps every id from getAllManagerStaffIds, even one that
+  // doesn't resolve in the roster directory (filterStaffByAudience can only filter resolved
+  // ResolvedStaff objects) — exclusion is applied separately on top, directly by key, so it still
+  // works for 'all' without losing those unresolved-but-valid manager ids.
+  const excludeKeys = new Set((audience.excludeStaffIds || []).map(normalizeStaffIdKey))
+  const audienceFilteredManagerIds = (audience.type === 'all' ? managerIds : managerIds.filter((k) => filteredKeys.has(k))).filter((k) => !excludeKeys.has(k))
 
   const existing = await prisma.pDPManagerSurvey.findMany({ where: { cycleId: cycle.id }, select: { managerStaffId: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.managerStaffId)))
@@ -338,7 +343,7 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
       firstName: firstNameOf(survey.managerName), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.managerDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`)
     try {
-      await sendMail({ to: survey.email, subject, html })
+      await sendMail({ to: survey.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
       await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
       result.sent++
     } catch (err) {
@@ -354,6 +359,11 @@ const DAY_MS = 86400000
 // training-survey reminders — once per day the cron runs, for anyone sent-but-not-responded, until
 // they respond or the cycle's expiryDays (default 30, same concept as Pre-Training's expiry)
 // passes since their original send. Covers all three PDP tracks in one call from the daily cron.
+// Every reminder always skips the platform-wide Default Cc, unconditionally — a daily nudge
+// re-copying the same people every single day isn't useful the way the original launch email's Cc
+// is, so this isn't gated on PDPCycle.excludeDefaultCcOnReminders. That field instead controls
+// whether the very first (launch) email includes the Default Cc — see the sendPDP*Survey/
+// notifyManagerOfTeamUpdate functions above, where it's read directly from the cycle.
 export async function sendPDPReminders(): Promise<{ sent: number }> {
   if (!(await hasSmtpCredentials())) return { sent: 0 }
   const now = Date.now()
@@ -381,7 +391,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
       firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(resolveTrackDeadline(s.cycle.staffDeadline, s.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp/${s.surveyToken}`, true)
     try {
-      await sendMail({ to: s.email!, subject, html, skipDefaultCc: s.cycle.excludeDefaultCcOnReminders })
+      await sendMail({ to: s.email!, subject, html, skipDefaultCc: true })
       await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }
@@ -401,7 +411,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
       deadline: formatDeadline(resolveTrackDeadline(v.staffSurvey.cycle.validationDeadline, v.staffSurvey.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, true)
     try {
-      await sendMail({ to: v.email!, subject, html, skipDefaultCc: v.staffSurvey.cycle.excludeDefaultCcOnReminders })
+      await sendMail({ to: v.email!, subject, html, skipDefaultCc: true })
       await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }
@@ -420,7 +430,7 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
       firstName: firstNameOf(m.managerName), cycleTitle: m.cycle.title, deadline: formatDeadline(resolveTrackDeadline(m.cycle.managerDeadline, m.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, true)
     try {
-      await sendMail({ to: m.email!, subject, html, skipDefaultCc: m.cycle.excludeDefaultCcOnReminders })
+      await sendMail({ to: m.email!, subject, html, skipDefaultCc: true })
       await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }

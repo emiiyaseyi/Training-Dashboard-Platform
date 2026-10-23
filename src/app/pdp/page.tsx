@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle, Eye, Pencil } from 'lucide-react'
+import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle, Eye, Pencil, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
@@ -139,6 +139,60 @@ function AudiencePicker({
   )
 }
 
+// Search-and-chips picker for "exclude these specific people from this launch" — the same
+// search/chip mechanics as AudiencePicker's "Specific people" mode, but standalone (no audience
+// type selector) since exclusion is an orthogonal filter applied on top of whatever audience type
+// is chosen above it, not an audience type of its own.
+function StaffExcludePicker({ roster, selected, setSelected }: { roster: RosterStaff[]; selected: RosterStaff[]; setSelected: (s: RosterStaff[]) => void }) {
+  const [query, setQuery] = useState('')
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const pickedIds = new Set(selected.map((p) => p.staffId))
+    return roster.filter((r) => !pickedIds.has(r.staffId) && (r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q))).slice(0, 8)
+  }, [query, roster, selected])
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+      <p className="text-[11px] font-medium text-slate-500">Exclude these people from this launch (optional, one-time — not remembered for next time)</p>
+      <div className="relative max-w-sm">
+        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or Staff ID…"
+          className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+        />
+        {results.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {results.map((r) => (
+              <button
+                key={r.staffId}
+                type="button"
+                onClick={() => { setSelected([...selected, r]); setQuery('') }}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
+              >
+                <span>{r.name}</span>
+                <span className="text-slate-400">{r.staffId}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selected.map((p) => (
+            <span key={p.staffId} className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-700 rounded-full pl-2.5 pr-1.5 py-1">
+              {p.name}
+              <button type="button" onClick={() => setSelected(selected.filter((s) => s.staffId !== p.staffId))}><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PDPPage() {
   const { canAdmin, canExport } = usePagePermission()
   const [cycles, setCycles] = useState<Cycle[]>([])
@@ -159,10 +213,12 @@ export default function PDPPage() {
   const [staffAudienceType, setStaffAudienceType] = useState<AudienceType>('all')
   const [staffAudienceValue, setStaffAudienceValue] = useState('')
   const [staffAudienceSelected, setStaffAudienceSelected] = useState<RosterStaff[]>([])
+  const [staffExcludeSelected, setStaffExcludeSelected] = useState<RosterStaff[]>([])
   const [staffRequireValidation, setStaffRequireValidation] = useState(true)
   const [managerAudienceType, setManagerAudienceType] = useState<AudienceType>('all')
   const [managerAudienceValue, setManagerAudienceValue] = useState('')
   const [managerAudienceSelected, setManagerAudienceSelected] = useState<RosterStaff[]>([])
+  const [managerExcludeSelected, setManagerExcludeSelected] = useState<RosterStaff[]>([])
 
   const [launchingStaff, setLaunchingStaff] = useState(false)
   const [launchingManagers, setLaunchingManagers] = useState(false)
@@ -311,11 +367,12 @@ export default function PDPPage() {
     }
   }
 
-  const buildAudience = (type: AudienceType, value: string, selected: RosterStaff[]) => {
-    if (type === 'businessUnit') return { type, value }
-    if (type === 'department') return { type, value }
-    if (type === 'selected') return { type, value: selected.map((s) => s.staffId) }
-    return { type: 'all' as const }
+  const buildAudience = (type: AudienceType, value: string, selected: RosterStaff[], exclude: RosterStaff[] = []) => {
+    const excludeStaffIds = exclude.length > 0 ? exclude.map((s) => s.staffId) : undefined
+    if (type === 'businessUnit') return { type, value, excludeStaffIds }
+    if (type === 'department') return { type, value, excludeStaffIds }
+    if (type === 'selected') return { type, value: selected.map((s) => s.staffId), excludeStaffIds }
+    return { type: 'all' as const, excludeStaffIds }
   }
 
   const launchStaff = async () => {
@@ -326,11 +383,16 @@ export default function PDPPage() {
       const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected), requireManagerValidation: staffRequireValidation }),
+        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected, staffExcludeSelected), requireManagerValidation: staffRequireValidation }),
       })
       const data = await res.json()
-      if (res.ok) setLaunchResult({ track: 'Staff Self-Fill', ...data })
-      else alert(data.error || 'Failed to launch.')
+      if (res.ok) {
+        setLaunchResult({ track: 'Staff Self-Fill', ...data })
+        setStaffAudienceSelected([])
+        setStaffExcludeSelected([])
+      } else {
+        alert(data.error || 'Failed to launch.')
+      }
       await loadCycles()
       await loadDetail(selectedId)
     } finally {
@@ -346,11 +408,16 @@ export default function PDPPage() {
       const res = await fetch(`/api/admin/pdp/${selectedId}/launch-managers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audience: buildAudience(managerAudienceType, managerAudienceValue, managerAudienceSelected) }),
+        body: JSON.stringify({ audience: buildAudience(managerAudienceType, managerAudienceValue, managerAudienceSelected, managerExcludeSelected) }),
       })
       const data = await res.json()
-      if (res.ok) setLaunchResult({ track: 'Manager Team-Fill', ...data })
-      else alert(data.error || 'Failed to launch.')
+      if (res.ok) {
+        setLaunchResult({ track: 'Manager Team-Fill', ...data })
+        setManagerAudienceSelected([])
+        setManagerExcludeSelected([])
+      } else {
+        alert(data.error || 'Failed to launch.')
+      }
       await loadCycles()
       await loadDetail(selectedId)
     } finally {
@@ -771,7 +838,7 @@ export default function PDPPage() {
                         checked={reminderDraft.excludeDefaultCcOnReminders}
                         onChange={(e) => setReminderDraft({ ...reminderDraft, excludeDefaultCcOnReminders: e.target.checked })}
                       />
-                      Exclude the platform-wide Default Cc from reminder emails (off by default — reminders include it, same as the original send; same setting as Survey Automation&apos;s)
+                      Exclude the platform-wide Default Cc from the first email sent for each track (off by default). Daily reminder nudges never include the Default Cc, regardless of this setting.
                     </label>
                     <button onClick={saveReminderSettings} disabled={savingReminderSettings} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                       {savingReminderSettings && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
@@ -834,6 +901,7 @@ export default function PDPPage() {
                   value={staffAudienceValue} setValue={setStaffAudienceValue}
                   selected={staffAudienceSelected} setSelected={setStaffAudienceSelected}
                 />
+                <StaffExcludePicker roster={roster} selected={staffExcludeSelected} setSelected={setStaffExcludeSelected} />
                 <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                   <input type="checkbox" checked={staffRequireValidation} onChange={(e) => setStaffRequireValidation(e.target.checked)} />
                   Require line manager review after this batch submits (on by default). Applies only to the people launched below — Track B managers skip this since they are the line manager already, and launching Track A again later can use a different setting.
@@ -850,6 +918,7 @@ export default function PDPPage() {
                   value={managerAudienceValue} setValue={setManagerAudienceValue}
                   selected={managerAudienceSelected} setSelected={setManagerAudienceSelected}
                 />
+                <StaffExcludePicker roster={roster} selected={managerExcludeSelected} setSelected={setManagerExcludeSelected} />
                 <button onClick={launchManagers} disabled={launchingManagers} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                   {launchingManagers ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
                   Launch Track B (Manager Team-Fill)
@@ -859,11 +928,14 @@ export default function PDPPage() {
                   Re-running either only sends to people/managers not already created for this cycle — safe to re-run with a wider audience later (e.g. test with a few people first, then launch to everyone).
                 </p>
                 {launchResult && (
-                  <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    <p className="text-emerald-700">{launchResult.track}: {launchResult.created} created, {launchResult.sent} sent.</p>
-                    {launchResult.skipped.length > 0 && (
-                      <p className="text-amber-700 mt-1">{launchResult.skipped.length} skipped — {launchResult.skipped.slice(0, 5).map((s) => `${s.name} (${s.reason})`).join('; ')}{launchResult.skipped.length > 5 ? '…' : ''}</p>
-                    )}
+                  <div className="flex items-start gap-2 text-sm bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-emerald-800 font-medium">{launchResult.track} launched — {launchResult.created} created, {launchResult.sent} sent.</p>
+                      {launchResult.skipped.length > 0 && (
+                        <p className="text-amber-700 mt-1 text-xs">{launchResult.skipped.length} skipped: {launchResult.skipped.slice(0, 5).map((s) => `${s.name} (${s.reason})`).join('; ')}{launchResult.skipped.length > 5 ? '…' : ''}</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
