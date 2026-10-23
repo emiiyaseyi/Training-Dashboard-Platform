@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle, Eye } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
@@ -715,7 +715,17 @@ export default function PDPPage() {
 
             {canAdmin && (
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-                <p className="text-sm font-semibold text-slate-800">Launch</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-800">Launch</p>
+                  <a
+                    href={`/pdp/preview/${selectedId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-medium text-navy-600 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Preview Form
+                  </a>
+                </div>
 
                 <AudiencePicker
                   label="Track A audience — who gets their own self-fill link"

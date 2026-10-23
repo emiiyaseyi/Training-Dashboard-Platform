@@ -25,65 +25,218 @@ interface SeedSection {
 // — it's system-rendered from the roster + 2026 training history, not an editable question bank.
 // Section 8 (L&D Use Only) isn't here either — see PDPReview, filled later in the admin panel,
 // never shown to a respondent.
-const SKILL_RATING_OPTIONS = ['Proficient', 'Needs Practice', 'Not Yet Able', 'N/A']
-// One 'select' question per skill item, with the app name folded into the label itself since the
-// section/question model has no native sub-heading — kept in the same order as the source
-// checklist (Word, Excel, PowerPoint, Outlook) so the app groupings still read clearly.
-function skillQuestion(label: string): SeedQuestion {
-  return { label, type: 'select', options: SKILL_RATING_OPTIONS, required: true, searchable: true }
+const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Occasionally', 'Rarely or never']
+const OVERALL_RATING_OPTIONS = ['Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
+
+// Rebuilds one tool's block of the Digital Skill Assessment as its own PDPSection — mirrors the
+// structure of the 2026 "Digital Skills Self-Assessment" Custom Survey (one section per tool: a
+// frequency-of-use gate, a "can already do" checklist, a "would help most" checklist, and an
+// optional free-text note), rather than the single flat list of 1-5 skill ratings this used to be.
+// `overallRating` adds a fifth question rating the respondent's overall skill level in that tool —
+// only asked for the core MS Office apps, per L&D's request.
+function toolSection(opts: {
+  key: string
+  title: string
+  freqLabel: string
+  canDoLabel: string
+  canDoOptions: string[]
+  wouldHelpLabel: string
+  wouldHelpOptions?: string[] // defaults to canDoOptions, same as the source survey
+  extraQuestions?: SeedQuestion[] // inserted right after the frequency question (e.g. AI tools used)
+  overallRating?: boolean
+}): SeedSection {
+  return {
+    key: opts.key,
+    title: opts.title,
+    questions: [
+      { label: opts.freqLabel, type: 'select', required: true, options: FREQUENCY_OPTIONS },
+      ...(opts.extraQuestions ?? []),
+      { label: opts.canDoLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: true, options: opts.canDoOptions },
+      { label: opts.wouldHelpLabel, description: 'Tick all that apply.', type: 'multiselect', searchable: true, options: opts.wouldHelpOptions ?? opts.canDoOptions },
+      ...(opts.overallRating ? [{ label: `Overall, how would you rate your current skill level in ${opts.title}?`, type: 'select' as const, required: true, options: OVERALL_RATING_OPTIONS }] : []),
+      { label: `Anything else about your use of ${opts.title} worth mentioning?`, type: 'textarea', required: false },
+    ],
+  }
 }
 
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   // Section A — completed by whoever is filling the form (the employee self-rating on Track A, or
-  // the line manager rating on their behalf on Track B), same as every other respondent section;
-  // not specific to one track. Transcribed from "Line Manager's MS Office Skills Assessment
-  // Checklist" (MS_Office_Skills_Assessment_Checklist.docx) rather than re-written, so the wording
-  // matches what L&D already uses elsewhere.
-  {
-    key: 'digital_skill_assessment',
-    title: 'Digital Skill Assessment',
-    description: 'Rate each skill: Proficient / Needs Practice / Not Yet Able / N/A (not required for your role). Focus on skills relevant to your role — it’s fine to mark items N/A.',
-    questions: [
-      skillQuestion('Microsoft Word — Formats documents using styles (not manual formatting)'),
-      skillQuestion('Microsoft Word — Applies headers/footers, page numbers, and page breaks correctly'),
-      skillQuestion('Microsoft Word — Uses track changes and comments for collaborative review'),
-      skillQuestion('Microsoft Word — Inserts and formats tables, images, and headings consistently'),
-      skillQuestion('Microsoft Word — Creates a table of contents from heading styles'),
-      skillQuestion('Microsoft Word — Uses mail merge for bulk letters/labels'),
-      skillQuestion('Microsoft Excel — Builds and audits basic formulas (SUM, AVERAGE, IF)'),
-      skillQuestion('Microsoft Excel — Applies consistent formatting (number formats, conditional formatting)'),
-      skillQuestion('Microsoft Excel — Sorts and filters data reliably'),
-      skillQuestion('Microsoft Excel — Uses lookup functions (VLOOKUP/XLOOKUP/INDEX-MATCH)'),
-      skillQuestion('Microsoft Excel — Builds PivotTables to summarise data'),
-      skillQuestion('Microsoft Excel — Creates and formats charts appropriate to the data'),
-      skillQuestion('Microsoft Excel — Applies data validation and protects key cells/sheets'),
-      skillQuestion('Microsoft PowerPoint — Builds slides using the master/template rather than ad-hoc formatting'),
-      skillQuestion('Microsoft PowerPoint — Structures a clear narrative across a deck (not just bullet dumps)'),
-      skillQuestion('Microsoft PowerPoint — Uses speaker notes effectively for delivery'),
-      skillQuestion('Microsoft PowerPoint — Inserts and formats charts/images/tables cleanly'),
-      skillQuestion('Microsoft PowerPoint — Applies simple, purposeful animation/transitions (not excessive)'),
-      skillQuestion('Microsoft PowerPoint — Presents confidently using the deck as a visual aid'),
-      skillQuestion('Microsoft Outlook — Manages inbox with folders/rules rather than a single flooded inbox'),
-      skillQuestion('Microsoft Outlook — Schedules meetings with correct attendees, rooms, and reminders'),
-      skillQuestion('Microsoft Outlook — Uses calendar sharing/delegation appropriately'),
-      skillQuestion('Microsoft Outlook — Flags, categorises, and follows up on action items'),
-      skillQuestion('Microsoft Outlook — Uses out-of-office and forwarding settings correctly'),
-      { label: 'Priority areas identified', description: 'Based on the ratings above, which skills most need development?', type: 'textarea', required: true },
+  // the line manager rating on their behalf on Track B). Mirrors the 2026 "Digital Skills
+  // Self-Assessment" Custom Survey question-for-question, so L&D sees the same instrument across
+  // both surveys — wording for Word/Excel/PowerPoint/Outlook/Teams/Power BI/AI Literacy is
+  // transcribed from that survey's actual content; SQL, Power Automate, and Virtual Advisory &
+  // Digital Prospecting use placeholder checklist items pending the exact wording (see
+  // extract-digital-skills-survey.sql) since no respondent had answered those three on the sample
+  // reviewed.
+  toolSection({
+    key: 'digital_skill_word',
+    title: 'Microsoft Word',
+    freqLabel: 'How often do you use Microsoft Word in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in Word?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Format documents using styles (not manual formatting)',
+      'Apply headers/footers, page numbers, and page breaks',
+      'Use track changes and comments for collaborative review',
+      'Insert and format tables, images, and headings consistently',
+      'Create a table of contents from heading styles',
+      'Use mail merge for bulk letters/labels',
+    ],
+    overallRating: true,
+  }),
+  toolSection({
+    key: 'digital_skill_excel',
+    title: 'Microsoft Excel',
+    freqLabel: 'How often do you use Microsoft Excel in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in Excel?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Enter and format data (number formats, conditional formatting)',
+      'Build and audit basic formulas (SUM, AVERAGE, IF)',
+      'Sort and filter data reliably',
+      'Use lookup functions (VLOOKUP/XLOOKUP/INDEX-MATCH)',
+      'Build PivotTables to summarise data',
+      'Create and format charts appropriate to the data',
+      'Apply data validation and protect key cells/sheets',
+      'Use basic macros/VBA to automate repetitive tasks',
+    ],
+    overallRating: true,
+  }),
+  toolSection({
+    key: 'digital_skill_powerpoint',
+    title: 'Microsoft PowerPoint',
+    freqLabel: 'How often do you use Microsoft PowerPoint in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in PowerPoint?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Build slides using the master/template rather than ad-hoc formatting',
+      'Structure a clear narrative across a deck (not just bullet dumps)',
+      'Use speaker notes effectively for delivery',
+      'Insert and format charts/images/tables cleanly',
+      'Apply simple, purposeful animations/transitions',
+      'Present confidently using the deck as a visual aid',
+      'Link live Excel data into slides (linked charts/tables that update)',
+    ],
+    overallRating: true,
+  }),
+  toolSection({
+    key: 'digital_skill_outlook',
+    title: 'Microsoft Outlook',
+    freqLabel: 'How often do you use Microsoft Outlook in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in Outlook?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Manage inbox with folders/rules rather than a flooded inbox',
+      'Schedule meetings with correct attendees, rooms, and reminders',
+      'Use calendar sharing/delegation appropriately',
+      'Flag, categorise, and follow up on action items',
+      'Use out-of-office and forwarding settings correctly',
+      'Use Quick Steps or templates to speed up repetitive emails',
+    ],
+    overallRating: true,
+  }),
+  toolSection({
+    key: 'digital_skill_teams',
+    title: 'Microsoft Teams',
+    freqLabel: 'How often do you use Microsoft Teams in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in Teams?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Join/host meetings, share screen, and use chat during a call',
+      'Organise files and conversations using channels and tabs',
+      'Co-author a document live with others inside Teams',
+      'Use @mentions and threaded replies so conversations stay organised',
+      'Record meetings and use/review auto-generated transcripts',
+      'Set up and manage a Team (channels, permissions, guest access) for a project',
+    ],
+    overallRating: true,
+  }),
+  toolSection({
+    key: 'digital_skill_powerbi',
+    title: 'Power BI',
+    freqLabel: 'How often do you use Power BI in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in Power BI?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Connect to a data source and load data into Power BI',
+      'Build basic visuals (bar/line/table) from existing data',
+      'Use filters and slicers to make a report explorable',
+      'Create simple calculated columns/measures (basic DAX)',
+      'Build and publish a full report/dashboard to a workspace',
+      'Use Power Query to clean/transform data before it hits the report',
+      'Write more advanced DAX (time intelligence, relationships across tables)',
+    ],
+  }),
+  toolSection({
+    key: 'digital_skill_sql',
+    title: 'SQL',
+    freqLabel: 'How often do you write or read SQL (Structured Query Language) in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do in SQL?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Write basic SELECT queries to retrieve data',
+      'Filter and sort results (WHERE, ORDER BY)',
+      'Join data across multiple tables',
+      'Aggregate data (GROUP BY, COUNT, SUM, AVG)',
+      'Write subqueries or common table expressions',
+      'Update/insert/delete data safely',
+      'Design or modify a table structure',
+    ],
+  }),
+  toolSection({
+    key: 'digital_skill_power_automate',
+    title: 'Power Automate / no-code workflow automation',
+    freqLabel: 'How often do you use Power Automate or similar no-code workflow tools in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Build a simple automated flow between two apps',
+      'Use triggers and conditions to control when a flow runs',
+      'Automate approvals or notifications',
+      'Connect a flow to a SharePoint list or Excel file',
+      'Troubleshoot a failed flow run',
+      'Build a multi-step flow across several systems',
+    ],
+  }),
+  toolSection({
+    key: 'digital_skill_ai',
+    title: 'AI Literacy, Prompt Engineering & Responsible AI',
+    freqLabel: 'How often do you use AI tools (e.g. ChatGPT, Microsoft Copilot) in your day-to-day work?',
+    canDoLabel: 'Which of these can you already do?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    extraQuestions: [
       {
-        label: 'Recommended action',
-        type: 'select',
-        required: true,
+        label: 'Which AI tools do you currently use for work?',
+        description: 'Tick all that apply.',
+        type: 'multiselect',
         searchable: true,
-        options: [
-          'Self-paced module',
-          'Live workshop / group training session',
-          'Peer coaching / super-user pairing',
-          'One-on-one refresher with L&D',
-          'No action needed — proficient across relevant areas',
-        ],
+        options: ['ChatGPT', 'Microsoft Copilot', 'Google Gemini', 'Claude', 'Another AI writing/image tool', 'None yet'],
       },
     ],
-  },
+    canDoOptions: [
+      'Use an AI tool for everyday tasks like drafting emails or summarising text',
+      'Write clear, specific prompts to get a useful result on the first or second try',
+      'Fact-check and review AI-generated output before using it in real work',
+      'Know what company/client data is NOT safe to put into an AI tool',
+      'Use multi-step prompting (breaking a task down, giving examples) to get better results',
+      'Know which AI tools are officially approved for work use',
+      'Spot when AI output might be biased, outdated, or confidently wrong',
+    ],
+  }),
+  toolSection({
+    key: 'digital_skill_virtual_advisory',
+    title: 'Virtual Advisory & Digital Prospecting',
+    freqLabel: 'How often does virtual client advisory or digital prospecting form part of your day-to-day work?',
+    canDoLabel: 'Which of these can you already do?',
+    wouldHelpLabel: 'Which of these would help you most in your role if you could do them?',
+    canDoOptions: [
+      'Run a professional, well-prepared virtual client meeting',
+      'Use digital channels (social, email, WhatsApp) to prospect for new clients compliantly',
+      'Share and present materials effectively in a virtual meeting',
+      'Follow up and track virtual client interactions systematically',
+      'Build trust and rapport with a client without meeting in person',
+    ],
+  }),
   {
     key: 'role_alignment',
     title: 'Role and Business Alignment',
