@@ -24,6 +24,15 @@ export function PDPIntroPage({
   const trainingHistory2026 = Array.isArray(trainingHistory2026Prop) ? trainingHistory2026Prop : []
   return (
     <div className="space-y-4">
+      <div className="bg-navy-50 border border-navy-100 rounded-lg px-3.5 py-3">
+        <p className="text-[15px] font-medium text-navy-800 mb-1">Before you start</p>
+        <p className="text-[14px] text-navy-700 leading-relaxed">
+          This form has two parts. <strong>Section A — Digital Skill Assessment</strong> rates your comfort with core workplace tools
+          (Word, Excel, Teams, AI tools, and more). <strong>Section B — Personal Development Plan</strong> captures your 2027 development
+          needs. Work through both in order — your progress saves automatically as you go, so it&apos;s fine to close the tab and come back.
+        </p>
+      </div>
+
       <div>
         <h2 className="text-[18px] font-semibold text-slate-800 mb-2">Employee Information</h2>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-[18px]">
@@ -36,12 +45,10 @@ export function PDPIntroPage({
         </dl>
       </div>
 
-      <div>
-        <h2 className="text-[18px] font-semibold text-slate-800 mb-1">2026 Learning Interventions Attended</h2>
-        <p className="text-[14px] text-slate-400 mb-2">For reference — the capabilities and development needs you select on the next pages should build on this, not repeat it.</p>
-        {trainingHistory2026.length === 0 ? (
-          <p className="text-[15px] text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">No training on file for 2026.</p>
-        ) : (
+      {trainingHistory2026.length > 0 && (
+        <div>
+          <h2 className="text-[18px] font-semibold text-slate-800 mb-1">2026 Learning Interventions Attended</h2>
+          <p className="text-[14px] text-slate-400 mb-2">For reference — the capabilities and development needs you select on the next pages should build on this, not repeat it.</p>
           <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
             {trainingHistory2026.map((t, i) => (
               <div key={i} className="px-3 py-2 text-[15px] flex items-center justify-between gap-2">
@@ -50,8 +57,8 @@ export function PDPIntroPage({
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

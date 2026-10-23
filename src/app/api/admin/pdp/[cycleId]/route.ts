@@ -84,3 +84,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ cycl
   const cycle = await prisma.pDPCycle.update({ where: { id: cycleId }, data })
   return NextResponse.json(cycle)
 }
+
+// Permanently deletes a cycle and everything under it (sections, questions, staff/manager
+// surveys, overrides, reviews, email templates — all cascade via the schema's onDelete: Cascade),
+// including any already-submitted plans. Irreversible, so the admin panel gates this behind a
+// typed confirmation, not just a click.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ cycleId: string }> }) {
+  const gate = await requirePermission('pdp', 'admin')
+  if (gate instanceof NextResponse) return gate
+
+  const { cycleId } = await params
+  await prisma.pDPCycle.delete({ where: { id: cycleId } })
+  return NextResponse.json({ success: true })
+}

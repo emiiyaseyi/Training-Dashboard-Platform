@@ -140,16 +140,17 @@ export function PDPSectionRenderer({
             const otherEntry = current.find(isOtherValue)
             return (
               <div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                   {(q.options || []).map((o) => {
                     const checked = o === OTHER_LABEL ? !!otherEntry : current.includes(o)
                     const atLimit = q.maxSelect != null && current.length >= q.maxSelect && !checked
                     return (
-                      <label key={o} className={`flex items-center gap-1.5 text-[15px] border rounded-full px-2.5 py-1 ${atLimit ? 'text-slate-300 border-slate-100' : 'text-slate-600 border-slate-200'}`}>
+                      <label key={o} className={`flex items-start gap-2 text-[15px] ${atLimit ? 'text-slate-300' : 'text-slate-700'}`}>
                         <input
                           type="checkbox"
                           checked={checked}
                           disabled={atLimit}
+                          className="mt-0.5 shrink-0"
                           onChange={() => {
                             if (o === OTHER_LABEL) {
                               onChange(q.id, otherEntry ? current.filter((v) => !isOtherValue(v)) : [...current, OTHER_LABEL])
@@ -158,7 +159,7 @@ export function PDPSectionRenderer({
                             }
                           }}
                         />
-                        {o}
+                        <span>{o}</span>
                       </label>
                     )
                   })}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle, Eye } from 'lucide-react'
+import { RefreshCw, Plus, Send, Users, Loader2, Download, UserPlus, Trash2, BellOff, ChevronDown, ChevronUp, Search, X, XCircle, Mail, AlertTriangle, Eye, Pencil } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AlertBadge } from '@/components/ui/AlertBadge'
 import { usePagePermission } from '@/lib/use-page-permission'
@@ -195,6 +195,13 @@ export default function PDPPage() {
   const [sendingIgnoreEmail, setSendingIgnoreEmail] = useState(false)
   const [ignoreEmailResult, setIgnoreEmailResult] = useState<{ sent: number; skipped: { name: string; reason: string }[] } | null>(null)
 
+  const [renamingCycle, setRenamingCycle] = useState(false)
+  const [cycleRenameDraft, setCycleRenameDraft] = useState('')
+  const [savingCycleRename, setSavingCycleRename] = useState(false)
+  const [confirmDeleteCycle, setConfirmDeleteCycle] = useState(false)
+  const [deleteCycleConfirmText, setDeleteCycleConfirmText] = useState('')
+  const [deletingCycle, setDeletingCycle] = useState(false)
+
   const loadCycles = useCallback(async () => {
     setLoading(true)
     try {
@@ -257,6 +264,50 @@ export default function PDPPage() {
       }
     } finally {
       setCreating(false)
+    }
+  }
+
+  const startRenameCycle = () => {
+    if (!detail) return
+    setCycleRenameDraft(detail.cycle.title)
+    setRenamingCycle(true)
+  }
+  const saveCycleRename = async () => {
+    if (!selectedId || !cycleRenameDraft.trim()) return
+    setSavingCycleRename(true)
+    try {
+      const res = await fetch(`/api/admin/pdp/${selectedId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: cycleRenameDraft.trim() }),
+      })
+      if (res.ok) {
+        setRenamingCycle(false)
+        await loadCycles()
+        await loadDetail(selectedId)
+      }
+    } finally {
+      setSavingCycleRename(false)
+    }
+  }
+
+  // Irreversible — deletes the cycle and everything under it (sections, questions, every staff
+  // and manager survey, including already-submitted plans). Gated behind typing the cycle's exact
+  // title, not just a click, since this can't be undone.
+  const deleteCycle = async () => {
+    if (!selectedId || !detail || deleteCycleConfirmText !== detail.cycle.title) return
+    setDeletingCycle(true)
+    try {
+      const res = await fetch(`/api/admin/pdp/${selectedId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setConfirmDeleteCycle(false)
+        setDeleteCycleConfirmText('')
+        setSelectedId(null)
+        setDetail(null)
+        await loadCycles()
+      }
+    } finally {
+      setDeletingCycle(false)
     }
   }
 
@@ -604,6 +655,55 @@ export default function PDPPage() {
                 {c.title} <span className="opacity-70">({c.status})</span>
               </button>
             ))}
+          </div>
+        )}
+
+        {canAdmin && detail && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {renamingCycle ? (
+              <>
+                <input
+                  value={cycleRenameDraft}
+                  onChange={(e) => setCycleRenameDraft(e.target.value)}
+                  className="border border-slate-300 rounded-md px-2.5 py-1.5 text-sm w-72"
+                  autoFocus
+                />
+                <button onClick={saveCycleRename} disabled={savingCycleRename || !cycleRenameDraft.trim()} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                  {savingCycleRename ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Save
+                </button>
+                <button onClick={() => setRenamingCycle(false)} className="text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+              </>
+            ) : (
+              <button onClick={startRenameCycle} className="flex items-center gap-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50">
+                <Pencil className="w-3.5 h-3.5" /> Rename Cycle
+              </button>
+            )}
+
+            {!confirmDeleteCycle ? (
+              <button onClick={() => setConfirmDeleteCycle(true)} className="flex items-center gap-1.5 text-xs text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50">
+                <Trash2 className="w-3.5 h-3.5" /> Delete Cycle
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-red-700">
+                  This permanently deletes &quot;{detail.cycle.title}&quot; and every response under it. Type the cycle title to confirm:
+                </p>
+                <input
+                  value={deleteCycleConfirmText}
+                  onChange={(e) => setDeleteCycleConfirmText(e.target.value)}
+                  placeholder={detail.cycle.title}
+                  className="border border-red-300 rounded-md px-2.5 py-1.5 text-xs w-56"
+                />
+                <button
+                  onClick={deleteCycle}
+                  disabled={deletingCycle || deleteCycleConfirmText !== detail.cycle.title}
+                  className="flex items-center gap-1.5 text-xs font-medium text-white bg-red-600 rounded-lg px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deletingCycle ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Confirm Delete
+                </button>
+                <button onClick={() => { setConfirmDeleteCycle(false); setDeleteCycleConfirmText('') }} className="text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+              </div>
+            )}
           </div>
         )}
 
