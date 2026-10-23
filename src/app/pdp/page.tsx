@@ -22,7 +22,7 @@ interface Cycle {
 }
 
 interface Validation { id: string; managerName: string | null; respondedAt: string | null; answers: string | null }
-interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[] }
+interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; lineManagerNames: string[] }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
@@ -814,6 +814,7 @@ export default function PDPPage() {
                             <th className="py-1.5 pr-3">Staff</th>
                             <th className="py-1.5 pr-3">BU</th>
                             <th className="py-1.5 pr-3 text-center">Sent / Filled</th>
+                            <th className="py-1.5 pr-3">Line Manager(s)</th>
                             <th className="py-1.5 pr-3">Manager Validation(s)</th>
                             <th className="py-1.5"></th>
                           </tr>
@@ -850,6 +851,9 @@ export default function PDPPage() {
                                 )}
                               </td>
                               <td className="py-1.5 pr-3 text-slate-500">
+                                {s.lineManagerNames.length === 0 ? <span className="text-amber-600" title="No line manager found on the current roster for this person">None on file</span> : s.lineManagerNames.join(', ')}
+                              </td>
+                              <td className="py-1.5 pr-3 text-slate-500">
                                 {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: `).map((label, i) => (
                                   <span key={i}>
                                     {label}
@@ -876,7 +880,7 @@ export default function PDPPage() {
                             )
                           })}
                           {filteredStaffSurveys.length === 0 && (
-                            <tr><td colSpan={6} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
+                            <tr><td colSpan={7} className="py-4 text-center text-slate-400">No one launched yet.</td></tr>
                           )}
                         </tbody>
                       </table>

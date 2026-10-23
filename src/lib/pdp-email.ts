@@ -88,6 +88,8 @@ During your review, please pay particular attention to the following:
   <li><strong>Appropriate intervention:</strong> Consider whether the need is best addressed through formal training, digital learning, practical assignments, coaching, knowledge sharing, or other development methods.</li>
 </ul>
 
+For each development need, you will also be asked to rate {{staffName}}'s current proficiency before the training takes place. This baseline rating is used to measure the impact of the training once it has been delivered, so please give it as accurate a rating as possible.
+
 <strong>Validation Deadline:</strong> {{deadline}}
 
 You'll be able to review what {{staffName}} selected, edit it if needed, and submit the agreed version — {{staffName}} will receive a copy of what you submit.

@@ -43,23 +43,25 @@ export function firstPageIssue(questions: PDPQuestionLike[], values: Record<stri
 
 // Shared across every submit route (staff self-fill, manager validation, manager team-fill
 // per-member save) so the same rules apply everywhere a PDPFormAnswers object is accepted.
-// Validates required fields, maxSelect caps, and the repeating 'development_needs' section
-// (at least one need, each one fully answered, never more than the section's maxRepeats).
+// Validates required fields, maxSelect caps, and any repeating section (maxRepeats > 1 — not
+// just 'development_needs' by name, so a second repeating section like 'manager_need_review',
+// which shares the same developmentNeeds array slot-for-slot with the respondent's own needs,
+// gets the same at-least-one/never-more-than-maxRepeats/per-index rules for free).
 // Returns an error string, or null when valid.
 export function validatePDPFormAnswers(formAnswers: PDPFormAnswers, sections: PDPSectionLike[]): string | null {
   for (const section of sections) {
     if (!section.enabled) continue
 
-    if (section.key === 'development_needs') {
+    if (section.maxRepeats > 1) {
       const needs = formAnswers.developmentNeeds || []
-      if (needs.length === 0) return 'At least one Development Need is required.'
-      if (needs.length > section.maxRepeats) return `At most ${section.maxRepeats} Development Need(s) can be added — ${needs.length} were added.`
+      if (needs.length === 0) return `At least one "${section.title}" entry is required.`
+      if (needs.length > section.maxRepeats) return `At most ${section.maxRepeats} "${section.title}" entries can be added — ${needs.length} were added.`
       for (let i = 0; i < needs.length; i++) {
         for (const q of section.questions) {
-          if (q.required && isEmpty(needs[i][q.id])) return `Development Need ${i + 1}: "${q.label}" is required.`
+          if (q.required && isEmpty(needs[i][q.id])) return `${section.title} ${i + 1}: "${q.label}" is required.`
           if (q.type === 'multiselect' && q.maxSelect != null) {
             const v = needs[i][q.id]
-            if (Array.isArray(v) && v.length > q.maxSelect) return `Development Need ${i + 1}: "${q.label}" allows at most ${q.maxSelect} selection(s).`
+            if (Array.isArray(v) && v.length > q.maxSelect) return `${section.title} ${i + 1}: "${q.label}" allows at most ${q.maxSelect} selection(s).`
           }
         }
       }

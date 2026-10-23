@@ -38,7 +38,7 @@ function OtherTextField({ value, onChange }: { value: string; onChange: (text: s
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder="Please specify"
-      className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm mt-2"
+      className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-[18px] mt-2"
     />
   )
 }
@@ -58,16 +58,16 @@ export function PDPSectionRenderer({
     <div className="space-y-4">
       {questions.map((q) => (
         <div key={q.id}>
-          <label className="block text-xs font-medium text-slate-600 mb-1">
+          <label className="block text-[15px] font-medium text-slate-600 mb-1">
             {q.label}{q.required && <span className="text-red-500"> *</span>}
           </label>
-          {q.description && <p className="text-[11px] text-slate-400 mb-1.5">{q.description}</p>}
+          {q.description && <p className="text-[14px] text-slate-400 mb-1.5">{q.description}</p>}
 
           {q.type === 'text' && (
             <input
               value={(values[q.id] as string) ?? ''}
               onChange={(e) => onChange(q.id, e.target.value)}
-              className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
+              className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-[18px]"
             />
           )}
           {q.type === 'textarea' && (
@@ -75,7 +75,7 @@ export function PDPSectionRenderer({
               value={(values[q.id] as string) ?? ''}
               onChange={(e) => onChange(q.id, e.target.value)}
               rows={3}
-              className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
+              className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-[18px]"
             />
           )}
           {q.type === 'select' && q.searchable && (() => {
@@ -96,7 +96,7 @@ export function PDPSectionRenderer({
                 <select
                   value={other ? OTHER_LABEL : raw}
                   onChange={(e) => onChange(q.id, e.target.value === OTHER_LABEL ? OTHER_LABEL : e.target.value)}
-                  className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-md px-2.5 py-2 text-[18px]"
                 >
                   <option value="">Select…</option>
                   {(q.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
@@ -130,7 +130,7 @@ export function PDPSectionRenderer({
                     const checked = o === OTHER_LABEL ? !!otherEntry : current.includes(o)
                     const atLimit = q.maxSelect != null && current.length >= q.maxSelect && !checked
                     return (
-                      <label key={o} className={`flex items-center gap-1.5 text-xs border rounded-full px-2.5 py-1 ${atLimit ? 'text-slate-300 border-slate-100' : 'text-slate-600 border-slate-200'}`}>
+                      <label key={o} className={`flex items-center gap-1.5 text-[15px] border rounded-full px-2.5 py-1 ${atLimit ? 'text-slate-300 border-slate-100' : 'text-slate-600 border-slate-200'}`}>
                         <input
                           type="checkbox"
                           checked={checked}
@@ -149,7 +149,7 @@ export function PDPSectionRenderer({
                   })}
                 </div>
                 {otherEntry && <OtherTextField value={otherFreeText(otherEntry)} onChange={(text) => onChange(q.id, current.map((v) => (isOtherValue(v) ? withOtherText(text) : v)))} />}
-                {q.maxSelect != null && <p className="text-[11px] text-slate-400 mt-1">{current.length} / {q.maxSelect} selected</p>}
+                {q.maxSelect != null && <p className="text-[14px] text-slate-400 mt-1">{current.length} / {q.maxSelect} selected</p>}
               </div>
             )
           })()}
@@ -160,7 +160,7 @@ export function PDPSectionRenderer({
                   key={n}
                   type="button"
                   onClick={() => onChange(q.id, String(n))}
-                  className={`w-8 h-8 rounded-full text-xs font-medium border ${String(n) === values[q.id] ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                  className={`w-8 h-8 rounded-full text-[15px] font-medium border ${String(n) === values[q.id] ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
                 >
                   {n}
                 </button>
@@ -174,7 +174,7 @@ export function PDPSectionRenderer({
                   key={o}
                   type="button"
                   onClick={() => onChange(q.id, o)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${values[q.id] === o ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                  className={`px-3 py-1.5 rounded-md text-[15px] font-medium border ${values[q.id] === o ? 'bg-navy-600 text-white border-navy-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
                 >
                   {o}
                 </button>

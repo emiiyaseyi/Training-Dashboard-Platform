@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, 
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
+import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -133,7 +134,7 @@ export default function PDPManagerTeamPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-        <p className="text-sm text-slate-600">{error || 'This link is invalid.'}</p>
+        <p className="text-[18px] text-slate-600">{error || 'This link is invalid.'}</p>
       </div>
     </div>
   )
@@ -142,8 +143,8 @@ export default function PDPManagerTeamPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-slate-400 mx-auto mb-3" />
-        <p className="text-sm font-medium text-slate-800 mb-1">This link has been disabled</p>
-        <p className="text-sm text-slate-600">{ctx.disabledMessage}</p>
+        <p className="text-[18px] font-medium text-slate-800 mb-1">This link has been disabled</p>
+        <p className="text-[18px] text-slate-600">{ctx.disabledMessage}</p>
       </div>
     </div>
   )
@@ -152,7 +153,7 @@ export default function PDPManagerTeamPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
-        <p className="text-sm font-medium text-slate-800">You&apos;ve completed Development Plans for your whole team. Thank you.</p>
+        <p className="text-[18px] font-medium text-slate-800">You&apos;ve completed Development Plans for your whole team. Thank you.</p>
       </div>
     </div>
   )
@@ -198,28 +199,28 @@ export default function PDPManagerTeamPage() {
     return (
       <div className="min-h-screen bg-slate-50 py-8 px-4">
         <div className="max-w-xl mx-auto">
-          <h1 className="text-lg font-bold text-slate-900">{ctx.cycleTitle}</h1>
-          <p className="text-sm text-slate-500 mt-0.5 mb-5">
+          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}</h1>
+          <p className="text-[18px] text-slate-500 mt-0.5 mb-5">
             Hi {ctx.managerName.split(' ')[0]} — please confirm your team before filling in each person&apos;s Development Plan.
             Decline anyone who shouldn&apos;t be here, or add someone missing. You&apos;ll then fill one page per person.
           </p>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-slate-800">Your team ({pending.length})</p>
-              <button onClick={acceptAll} className="text-xs font-medium text-navy-700 hover:underline">Accept all</button>
+              <p className="text-[18px] font-semibold text-slate-800">Your team ({pending.length})</p>
+              <button onClick={acceptAll} className="text-[15px] font-medium text-navy-700 hover:underline">Accept all</button>
             </div>
-            {pending.length === 0 && <p className="text-xs text-slate-400">No one found reporting to you on the current roster — add people below.</p>}
+            {pending.length === 0 && <p className="text-[15px] text-slate-400">No one found reporting to you on the current roster — add people below.</p>}
             <div className="space-y-1.5">
               {pending.map((m) => {
                 const isDeclined = decided[m.id] === 'declined'
                 return (
                   <div key={m.id} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border ${isDeclined ? 'border-slate-200 bg-slate-50 opacity-50' : 'border-slate-200'}`}>
                     <div>
-                      <p className="text-sm text-slate-800">{m.staffName}</p>
-                      <p className="text-[11px] text-slate-400">{m.staffId} · {m.businessUnit}{m.role ? ` · ${m.role}` : ''}</p>
+                      <p className="text-[18px] text-slate-800">{m.staffName}</p>
+                      <p className="text-[14px] text-slate-400">{m.staffId} · {m.businessUnit}{m.role ? ` · ${m.role}` : ''}</p>
                     </div>
-                    <button onClick={() => toggleDecline(m.id)} className={`text-xs font-medium ${isDeclined ? 'text-navy-600' : 'text-red-500'} hover:underline shrink-0`}>
+                    <button onClick={() => toggleDecline(m.id)} className={`text-[15px] font-medium ${isDeclined ? 'text-navy-600' : 'text-red-500'} hover:underline shrink-0`}>
                       {isDeclined ? 'Re-add' : 'Decline'}
                     </button>
                   </div>
@@ -229,21 +230,21 @@ export default function PDPManagerTeamPage() {
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 mb-5">
-            <p className="text-sm font-semibold text-slate-800 mb-2">Add someone missing</p>
+            <p className="text-[18px] font-semibold text-slate-800 mb-2">Add someone missing</p>
             <div className="relative mb-2">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 value={addQuery}
                 onChange={(e) => setAddQuery(e.target.value)}
                 placeholder="Search by name or Staff ID…"
-                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-[18px]"
               />
               {addResults.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {addResults.map((r) => (
-                    <button key={r.staffId} onClick={() => addPerson(r)} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2">
+                    <button key={r.staffId} onClick={() => addPerson(r)} className="w-full text-left px-3 py-2 text-[18px] hover:bg-slate-50 flex items-center justify-between gap-2">
                       <span>{r.name}</span>
-                      <span className="text-xs text-slate-400">{r.staffId}</span>
+                      <span className="text-[15px] text-slate-400">{r.staffId}</span>
                     </button>
                   ))}
                 </div>
@@ -251,7 +252,7 @@ export default function PDPManagerTeamPage() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {addedPending.map((p) => (
-                <span key={p.staffId} className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+                <span key={p.staffId} className="inline-flex items-center gap-1.5 text-[15px] bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
                   {p.name}
                   <button onClick={() => removeAddedPending(p.staffId)}><X className="w-3 h-3" /></button>
                 </span>
@@ -262,7 +263,7 @@ export default function PDPManagerTeamPage() {
           <button
             onClick={confirmRoster}
             disabled={confirming}
-            className="flex items-center gap-1.5 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 text-[18px] font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700 disabled:opacity-50"
           >
             {confirming && <Loader2 className="w-4 h-4 animate-spin" />}
             Confirm and Continue
@@ -277,7 +278,7 @@ export default function PDPManagerTeamPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
-        <p className="text-sm font-medium text-slate-800">You&apos;ve completed Development Plans for your whole team. Thank you.</p>
+        <p className="text-[18px] font-medium text-slate-800">You&apos;ve completed Development Plans for your whole team. Thank you.</p>
       </div>
     </div>
   )
@@ -286,6 +287,8 @@ export default function PDPManagerTeamPage() {
 
   const current = pages[page]
   const needsSection = ctx.sections.find((s) => s.key === 'development_needs')
+  const areaQuestionId = needsSection?.questions.find((q) => q.type === 'select')?.id
+  const memberTrainingHistory2026 = currentMember.prefill?.trainingHistory2026 || []
   const confirmationSection = ctx.sections.find((s) => s.key === 'confirmation')
   const confirmationQuestion = confirmationSection?.questions.find((q) => q.type === 'yesno')
   const confirmationBlocked = !!confirmationQuestion && form.answers[confirmationQuestion.id] === 'No'
@@ -312,8 +315,16 @@ export default function PDPManagerTeamPage() {
     if (!current || current.type === 'intro') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const issue = firstPageIssue(current.section.questions, values)
-    setPageError(issue || '')
-    return !issue
+    if (issue) { setPageError(issue); return false }
+    if (current.type === 'need' && areaQuestionId) {
+      const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, memberTrainingHistory2026)
+      if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
+        setPageError('This need was already covered by a 2026 Learning Intervention — please select a reason for repeating it.')
+        return false
+      }
+    }
+    setPageError('')
+    return true
   }
 
   const goNext = () => {
@@ -346,13 +357,13 @@ export default function PDPManagerTeamPage() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-xl mx-auto">
-        <p className="text-xs text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
-        <h1 className="text-lg font-bold text-slate-900">{currentMember.staffName}</h1>
+        <p className="text-[15px] text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
+        <h1 className="text-[23px] font-bold text-slate-900">{currentMember.staffName}</h1>
 
         <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-3">
           <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((page + 1) / pages.length) * 100}%` }} />
         </div>
-        <p className="text-[11px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
+        <p className="text-[14px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           {current?.type === 'intro' && (
@@ -368,8 +379,8 @@ export default function PDPManagerTeamPage() {
 
           {current?.type === 'section' && (
             <div>
-              <h2 className="text-sm font-semibold text-slate-800 mb-1">{current.section.title}</h2>
-              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              <h2 className="text-[18px] font-semibold text-slate-800 mb-1">{current.section.title}</h2>
+              {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer questions={current.section.questions} values={form.answers} onChange={setAnswer} />
             </div>
           )}
@@ -377,21 +388,32 @@ export default function PDPManagerTeamPage() {
           {current?.type === 'need' && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <h2 className="text-sm font-semibold text-slate-800">Development Need {current.index + 1}</h2>
+                <h2 className="text-[18px] font-semibold text-slate-800">Development Need {current.index + 1}</h2>
                 {form.developmentNeeds.length > 1 && (
-                  <button onClick={() => removeNeed(current.index)} className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1">
+                  <button onClick={() => removeNeed(current.index)} className="text-[15px] text-slate-400 hover:text-red-600 flex items-center gap-1">
                     <Trash2 className="w-3.5 h-3.5" /> Remove
                   </button>
                 )}
               </div>
-              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer
                 questions={current.section.questions}
                 values={form.developmentNeeds[current.index] || {}}
                 onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
               />
+              {areaQuestionId && (() => {
+                const need = form.developmentNeeds[current.index] || {}
+                const repeatMatch = findRepeatedCapability(need[areaQuestionId] as string | undefined, memberTrainingHistory2026)
+                return repeatMatch ? (
+                  <RepeatInterventionCheck
+                    match={repeatMatch}
+                    reason={(need[REPEAT_REASON_KEY] as string) || ''}
+                    onChange={(r) => setNeedAnswer(current.index, REPEAT_REASON_KEY, r)}
+                  />
+                ) : null
+              })()}
               {current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
-                <button onClick={addNeed} className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline mt-4">
+                <button onClick={addNeed} className="flex items-center gap-1.5 text-[15px] font-medium text-navy-700 hover:underline mt-4">
                   <Plus className="w-3.5 h-3.5" /> Add another Development Need
                 </button>
               )}
@@ -399,21 +421,21 @@ export default function PDPManagerTeamPage() {
           )}
         </div>
 
-        {pageError && <p className="text-xs text-red-600 mt-3">{pageError}</p>}
-        {saveError && <p className="text-xs text-red-600 mt-3">{saveError}</p>}
+        {pageError && <p className="text-[15px] text-red-600 mt-3">{pageError}</p>}
+        {saveError && <p className="text-[15px] text-red-600 mt-3">{saveError}</p>}
 
         <div className="flex items-center justify-between mt-4">
           <button
             onClick={() => { setPageError(''); setPage((p) => Math.max(0, p - 1)) }}
             disabled={page === 0}
-            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 disabled:opacity-30"
+            className="flex items-center gap-1 text-[18px] text-slate-500 hover:text-slate-800 disabled:opacity-30"
           >
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
           {page < pages.length - 1 ? (
             <button
               onClick={goNext}
-              className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
+              className="flex items-center gap-1 text-[18px] font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -422,7 +444,7 @@ export default function PDPManagerTeamPage() {
               onClick={saveAndNext}
               disabled={saving || confirmationBlocked}
               title={confirmationBlocked ? 'Select "Yes" on the confirmation question to continue' : undefined}
-              className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-[18px] font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {memberIndex === activeMembers.length - 1 ? 'Finish' : 'Save & Next Person'}

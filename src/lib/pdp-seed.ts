@@ -212,7 +212,26 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
           'Other',
         ],
       },
-      { label: 'Expected measure of success', type: 'textarea', required: true },
+      {
+        label: 'Expected measure of success',
+        description: 'Select every way this will be measured.',
+        type: 'multiselect',
+        searchable: true,
+        required: true,
+        options: [
+          'Percentage increase',
+          'Number/volume increase',
+          'Time or turnaround reduction',
+          'Error or defect reduction',
+          'Quality or accuracy score improvement',
+          'Certification or qualification obtained',
+          'Observed behaviour or competence change',
+          'Revenue or sales increase',
+          'Customer or client satisfaction score improvement',
+          'Completion of an assigned project or task',
+          'Other',
+        ],
+      },
     ],
   },
   {
@@ -227,17 +246,19 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
     title: 'Line Manager Validation',
     description: "To be completed by the line manager. Confirms the relevance of the development need — it does not constitute final approval of training expenditure.",
     questions: [
-      { label: "Are the identified needs relevant to the employee's role?", type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Do they support team and business priorities?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Is the need supported by sufficient evidence?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
-      { label: 'Is the proposed development method appropriate?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No', 'Alternative recommended'] },
-      { label: 'Is the expected workplace improvement clear?', type: 'select', required: true, searchable: true, options: ['Yes', 'Partly', 'No'] },
       {
-        label: "Manager's Priority Assessment",
+        label: "Do the identified development needs accurately reflect the employee's role, available evidence, and team/business priorities?",
         type: 'select',
         required: true,
         searchable: true,
-        options: ['High priority for 2027', 'Medium priority for 2027', 'Low priority for 2027', 'Defer to a future period', 'Not recommended'],
+        options: ['Yes', 'Partly', 'No'],
+      },
+      {
+        label: 'Is the proposed development approach appropriate, with a clear expected workplace improvement?',
+        type: 'select',
+        required: true,
+        searchable: true,
+        options: ['Yes', 'Partly', 'No', 'Alternative recommended'],
       },
       { label: "Manager's Comments", type: 'textarea', required: false },
       {
@@ -248,6 +269,33 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         options: ['Approved for submission to L&D', 'Approved with amendments', 'Further discussion required'],
       },
       { label: "I have reviewed the employee's PDP against role and business requirements.", type: 'yesno', required: true },
+    ],
+  },
+  // Only ever rendered on the Track A validate page, one block per Development Need (same
+  // maxRepeats as 'development_needs' so they line up 1:1) — kept as its own section rather than
+  // folded into 'manager_validation' so each judgement sits next to the specific need it's about
+  // instead of in one flat block at the end. The baseline rating exists specifically so Post-
+  // Training impact checks later in 2027 have something to benchmark against — captured here,
+  // before the training happens, not asked for the first time afterward.
+  {
+    key: 'manager_need_review',
+    title: 'Per-Need Manager Assessment',
+    description: 'Completed by the line manager for each Development Need above.',
+    maxRepeats: 3,
+    questions: [
+      {
+        label: "Manager's Priority Assessment",
+        type: 'select',
+        required: true,
+        searchable: true,
+        options: ['High priority for 2027', 'Medium priority for 2027', 'Low priority for 2027', 'Defer to a future period', 'Not recommended'],
+      },
+      {
+        label: "Employee's Current Proficiency (baseline, before training)",
+        description: '1 = No proficiency, 5 = Expert. Used as the baseline to benchmark against after the training is delivered.',
+        type: 'rating',
+        required: true,
+      },
     ],
   },
 ]

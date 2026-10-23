@@ -25,7 +25,7 @@ export function SearchableSelect({
   return (
     <div className="relative">
       {value ? (
-        <div className="flex items-center justify-between border border-slate-300 rounded-md px-2.5 py-2 text-sm bg-white">
+        <div className="flex items-center justify-between border border-slate-300 rounded-md px-2.5 py-2 text-[18px] bg-white">
           <span>{value}</span>
           <button type="button" onClick={() => onChange('')} className="text-slate-400 hover:text-red-600 shrink-0 ml-2">
             <X className="w-3.5 h-3.5" />
@@ -41,7 +41,7 @@ export function SearchableSelect({
               onFocus={() => setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 150)}
               placeholder={placeholder}
-              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-md text-sm"
+              className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-md text-[18px]"
             />
           </div>
           {open && filtered.length > 0 && (
@@ -51,7 +51,7 @@ export function SearchableSelect({
                   key={o}
                   type="button"
                   onMouseDown={() => { onChange(o); setQuery('') }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-[18px] hover:bg-slate-50"
                 >
                   {o}
                 </button>
@@ -89,7 +89,7 @@ export function SearchableMultiSelect({
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {value.map((v) => (
-            <span key={v} className="inline-flex items-center gap-1.5 text-xs bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
+            <span key={v} className="inline-flex items-center gap-1.5 text-[15px] bg-navy-50 text-navy-700 rounded-full pl-2.5 pr-1.5 py-1">
               {v}
               <button type="button" onClick={() => onChange(value.filter((x) => x !== v))}><X className="w-3 h-3" /></button>
             </span>
@@ -105,7 +105,7 @@ export function SearchableMultiSelect({
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder={placeholder}
-            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-md text-sm"
+            className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-md text-[18px]"
           />
           {open && filtered.length > 0 && (
             <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
@@ -114,7 +114,7 @@ export function SearchableMultiSelect({
                   key={o}
                   type="button"
                   onMouseDown={() => { onChange([...value, o]); setQuery('') }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 text-[18px] hover:bg-slate-50 flex items-center justify-between"
                 >
                   <span>{o}</span>
                   <Check className="w-3.5 h-3.5 text-transparent" />
@@ -124,7 +124,7 @@ export function SearchableMultiSelect({
           )}
         </div>
       )}
-      {maxSelect != null && <p className="text-[11px] text-slate-400 mt-1">{value.length} / {maxSelect} selected</p>}
+      {maxSelect != null && <p className="text-[14px] text-slate-400 mt-1">{value.length} / {maxSelect} selected</p>}
     </div>
   )
 }

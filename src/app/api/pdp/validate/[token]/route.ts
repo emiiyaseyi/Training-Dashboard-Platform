@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     const staffAnswers = validation.staffSurvey.answers ? (JSON.parse(validation.staffSurvey.answers) as PDPFormAnswers) : null
     const cycle = validation.staffSurvey.cycle
     const respondentSections = await resolveRespondentSections(cycle.id)
-    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation'] })
+    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation', 'manager_need_review'] })
 
     return NextResponse.json({
       valid: true,
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const body = (await req.json()) as { answers: PDPFormAnswers; editedAnswers: PDPFormAnswers }
     const cycle = validation.staffSurvey.cycle
-    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation'] })
+    const validationSections = await resolvePDPSections(cycle.id, { onlyKeys: ['manager_validation', 'manager_need_review'] })
     const validationError = validatePDPFormAnswers(body.answers, validationSections)
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 

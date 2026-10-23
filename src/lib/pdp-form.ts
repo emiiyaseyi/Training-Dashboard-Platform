@@ -65,8 +65,9 @@ export async function resolvePDPSections(cycleId: string, opts: { onlyKeys?: str
 }
 
 // Sections relevant to a respondent filling the form themselves (both tracks) — everything
-// except 'manager_validation', which only ever appears on the separate validate page.
+// except 'manager_validation' and 'manager_need_review', which only ever appear on the separate
+// validate page.
 export async function resolveRespondentSections(cycleId: string): Promise<PDPFormSection[]> {
   const all = await resolvePDPSections(cycleId)
-  return all.filter((s) => s.key !== 'manager_validation')
+  return all.filter((s) => s.key !== 'manager_validation' && s.key !== 'manager_need_review')
 }

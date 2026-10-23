@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight, Plus, 
 import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
+import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -102,7 +103,7 @@ export default function PDPStaffSurveyPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-        <p className="text-sm text-slate-600">{error || 'This link is invalid.'}</p>
+        <p className="text-[18px] text-slate-600">{error || 'This link is invalid.'}</p>
       </div>
     </div>
   )
@@ -111,14 +112,15 @@ export default function PDPStaffSurveyPage() {
     <div className="flex items-center justify-center min-h-screen p-6">
       <div className="max-w-md text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-3" />
-        <p className="text-sm font-medium text-slate-800">Thank you, {ctx.staffName.split(' ')[0]} — your Personal Development Plan has been submitted.</p>
-        <p className="text-xs text-slate-500 mt-2">Your line manager will be asked to review it.</p>
+        <p className="text-[18px] font-medium text-slate-800">Thank you, {ctx.staffName.split(' ')[0]} — your Personal Development Plan has been submitted.</p>
+        <p className="text-[15px] text-slate-500 mt-2">Your line manager will be asked to review it.</p>
       </div>
     </div>
   )
 
   const current = pages[page]
   const needsSection = ctx.sections.find((s) => s.key === 'development_needs')
+  const areaQuestionId = needsSection?.questions.find((q) => q.type === 'select')?.id
   // The confirmation section's yesno question only accepts "Yes" to actually submit — selecting
   // "No" means the respondent is telling us their plan isn't ready, so Submit gets disabled rather
   // than silently accepting a "No" as if it meant the same as leaving it blank.
@@ -154,8 +156,16 @@ export default function PDPStaffSurveyPage() {
     if (!current || current.type === 'intro') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const issue = firstPageIssue(current.section.questions, values)
-    setPageError(issue || '')
-    return !issue
+    if (issue) { setPageError(issue); return false }
+    if (current.type === 'need' && areaQuestionId) {
+      const repeatMatch = findRepeatedCapability(values[areaQuestionId] as string | undefined, ctx.prefill.trainingHistory2026)
+      if (repeatMatch && !repeatReasonSatisfied(values[REPEAT_REASON_KEY] as string | undefined)) {
+        setPageError('This need was already covered by a 2026 Learning Intervention — please select a reason for repeating it.')
+        return false
+      }
+    }
+    setPageError('')
+    return true
   }
 
   const goNext = () => {
@@ -188,13 +198,13 @@ export default function PDPStaffSurveyPage() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-xl mx-auto">
         <div className="mb-4">
-          <h1 className="text-lg font-bold text-slate-900">{ctx.cycleTitle}</h1>
+          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}</h1>
         </div>
 
         <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1">
           <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((page + 1) / pages.length) * 100}%` }} />
         </div>
-        <p className="text-[11px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
+        <p className="text-[14px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           {current?.type === 'intro' && (
@@ -209,8 +219,8 @@ export default function PDPStaffSurveyPage() {
 
           {current?.type === 'section' && (
             <div>
-              <h2 className="text-sm font-semibold text-slate-800 mb-1">{current.section.title}</h2>
-              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              <h2 className="text-[18px] font-semibold text-slate-800 mb-1">{current.section.title}</h2>
+              {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer questions={current.section.questions} values={form.answers} onChange={setAnswer} />
             </div>
           )}
@@ -218,21 +228,32 @@ export default function PDPStaffSurveyPage() {
           {current?.type === 'need' && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <h2 className="text-sm font-semibold text-slate-800">Development Need {current.index + 1}</h2>
+                <h2 className="text-[18px] font-semibold text-slate-800">Development Need {current.index + 1}</h2>
                 {form.developmentNeeds.length > 1 && (
-                  <button onClick={() => removeNeed(current.index)} className="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1">
+                  <button onClick={() => removeNeed(current.index)} className="text-[15px] text-slate-400 hover:text-red-600 flex items-center gap-1">
                     <Trash2 className="w-3.5 h-3.5" /> Remove
                   </button>
                 )}
               </div>
-              {current.section.description && <p className="text-xs text-slate-500 mb-4">{current.section.description}</p>}
+              {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer
                 questions={current.section.questions}
                 values={form.developmentNeeds[current.index] || {}}
                 onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
               />
+              {areaQuestionId && (() => {
+                const need = form.developmentNeeds[current.index] || {}
+                const repeatMatch = findRepeatedCapability(need[areaQuestionId] as string | undefined, ctx.prefill.trainingHistory2026)
+                return repeatMatch ? (
+                  <RepeatInterventionCheck
+                    match={repeatMatch}
+                    reason={(need[REPEAT_REASON_KEY] as string) || ''}
+                    onChange={(r) => setNeedAnswer(current.index, REPEAT_REASON_KEY, r)}
+                  />
+                ) : null
+              })()}
               {current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
-                <button onClick={addNeed} className="flex items-center gap-1.5 text-xs font-medium text-navy-700 hover:underline mt-4">
+                <button onClick={addNeed} className="flex items-center gap-1.5 text-[15px] font-medium text-navy-700 hover:underline mt-4">
                   <Plus className="w-3.5 h-3.5" /> Add another Development Need
                 </button>
               )}
@@ -240,21 +261,21 @@ export default function PDPStaffSurveyPage() {
           )}
         </div>
 
-        {pageError && <p className="text-xs text-red-600 mt-3">{pageError}</p>}
-        {submitError && <p className="text-xs text-red-600 mt-3">{submitError}</p>}
+        {pageError && <p className="text-[15px] text-red-600 mt-3">{pageError}</p>}
+        {submitError && <p className="text-[15px] text-red-600 mt-3">{submitError}</p>}
 
         <div className="flex items-center justify-between mt-4">
           <button
             onClick={() => { setPageError(''); setPage((p) => Math.max(0, p - 1)) }}
             disabled={page === 0}
-            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 disabled:opacity-30"
+            className="flex items-center gap-1 text-[18px] text-slate-500 hover:text-slate-800 disabled:opacity-30"
           >
             <ChevronLeft className="w-4 h-4" /> Back
           </button>
           {page < pages.length - 1 ? (
             <button
               onClick={goNext}
-              className="flex items-center gap-1 text-sm font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
+              className="flex items-center gap-1 text-[18px] font-medium text-white bg-navy-600 rounded-lg px-4 py-2 hover:bg-navy-700"
             >
               Next <ChevronRight className="w-4 h-4" />
             </button>
@@ -263,7 +284,7 @@ export default function PDPStaffSurveyPage() {
               onClick={submit}
               disabled={submitting || confirmationBlocked}
               title={confirmationBlocked ? 'Select "Yes" on the confirmation question to submit' : undefined}
-              className="flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-[18px] font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               Submit
