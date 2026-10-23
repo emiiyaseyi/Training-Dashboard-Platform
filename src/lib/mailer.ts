@@ -102,14 +102,19 @@ export function parseCcList(raw: string | null | undefined): string[] {
 
 // Every email builder across the app (survey-email.ts, custom-survey-email.ts, pdp-email.ts,
 // schedule-change-email.ts, …) hands buildMessage a bare HTML fragment — no <!DOCTYPE>, no <html>/
-// <body>. Sent as-is, several webmail clients (Outlook/OWA's Word rendering engine especially)
-// don't reliably wrap that fragment's text at all: instead of breaking onto new lines, a long
-// paragraph runs past the reading pane's right edge and is clipped there, reading as "truncated"
-// even though the full text was sent — nothing was actually cut from the message. Wrapping every
-// outgoing email in a real HTML document, with explicit word-wrap/overflow-wrap and Tahoma 12px
-// set on <body>, is what makes clients wrap instead of clip. This is the one choke point every
-// send passes through, so the fix applies everywhere at once rather than needing to be copied
-// into each individual email-builder file.
+// <body>. Sent as-is, several webmail clients don't reliably wrap that fragment's text: instead of
+// breaking onto new lines, a long paragraph runs past the reading pane's right edge and is clipped
+// there, reading as "truncated" even though the full text was sent. Three distinct, well-documented
+// Outlook/OWA quirks combine to cause this, so all three are fixed here, at the one choke point
+// every send passes through (rather than copied into each individual email-builder file):
+//   1. Outlook desktop's rendering engine is Microsoft Word, which does not reliably respect
+//      max-width on a <div> — a <table> with an explicit width attribute is the one sizing
+//      mechanism Word actually honours, the standard "bulletproof" email layout pattern.
+//   2. Outlook.com / OWA (what the reported screenshot was) wraps the body in its own
+//      ".ExternalClass" scope, which can override inherited width/line-height unless those
+//      selectors are explicitly reset.
+//   3. Word's auto-hyphenation (mso-hyphenate) can insert hyphens mid-word in Outlook; turned off
+//      explicitly rather than left to find out the hard way.
 function wrapHtmlDocument(bodyHtml: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -117,15 +122,29 @@ function wrapHtmlDocument(bodyHtml: string): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-  body { margin: 0; padding: 0; font-family: Tahoma, Geneva, sans-serif; font-size: 12px; }
+  body { margin: 0; padding: 0; font-family: Tahoma, Geneva, sans-serif; font-size: 12px; mso-hyphenate: none; }
   table { border-collapse: collapse; }
   img { max-width: 100%; }
+  .ExternalClass, .ExternalClass p, .ExternalClass span, .ExternalClass font, .ExternalClass td, .ExternalClass div {
+    width: 100%;
+    line-height: 100%;
+  }
 </style>
 </head>
-<body style="margin:0;padding:16px;background:#ffffff;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;">
-<div style="max-width:600px;margin:0 auto;word-wrap:break-word;overflow-wrap:break-word;">
+<body style="margin:0;padding:0;background:#ffffff;word-wrap:break-word;overflow-wrap:break-word;white-space:normal;mso-hyphenate:none;">
+<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+<tr>
+<td align="center" style="padding:16px;">
+<table role="presentation" width="600" style="width:100%;max-width:600px;" border="0" cellspacing="0" cellpadding="0">
+<tr>
+<td style="font-family:Tahoma,Geneva,sans-serif;font-size:12px;word-wrap:break-word;overflow-wrap:break-word;mso-hyphenate:none;">
 ${bodyHtml}
-</div>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+</table>
 </body>
 </html>`
 }
