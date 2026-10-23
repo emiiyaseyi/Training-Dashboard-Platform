@@ -32,6 +32,20 @@ function withOtherText(text: string): string {
   return text.trim() ? `${OTHER_LABEL}: ${text.trim()}` : OTHER_LABEL
 }
 
+// A question stored as 'select' (single string answer) and later changed to 'multiselect' by an
+// admin (e.g. the Expected Improvement / How Demonstrated questions, converted mid-cycle) leaves
+// any answer saved BEFORE that change as a bare string in the database — rendering it through the
+// now-multiselect code path with a plain `?? []` (which only catches null/undefined, not "wrong
+// type but still truthy") left `current` as that raw string, and `.find()`/`.map()` don't exist on
+// a string the way they do on an array, crashing the whole page. Wraps a legacy string answer into
+// a single-element array instead of discarding it, so the respondent's existing answer survives
+// the type change rather than silently vanishing.
+function asStringArray(v: string | string[] | undefined): string[] {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string' && v) return [v]
+  return []
+}
+
 function OtherTextField({ value, onChange }: { value: string; onChange: (text: string) => void }) {
   return (
     <input
@@ -106,7 +120,7 @@ export function PDPSectionRenderer({
             )
           })()}
           {q.type === 'multiselect' && q.searchable && (() => {
-            const current = (values[q.id] as string[]) ?? []
+            const current = asStringArray(values[q.id])
             const otherEntry = current.find(isOtherValue)
             const displayValue = current.map((v) => (isOtherValue(v) ? OTHER_LABEL : v))
             const handleChange = (next: string[]) => {
@@ -121,7 +135,7 @@ export function PDPSectionRenderer({
             )
           })()}
           {q.type === 'multiselect' && !q.searchable && (() => {
-            const current = (values[q.id] as string[]) ?? []
+            const current = asStringArray(values[q.id])
             const otherEntry = current.find(isOtherValue)
             return (
               <div>
