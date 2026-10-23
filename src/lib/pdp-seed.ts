@@ -77,7 +77,33 @@ function toolSection(opts: {
   }
 }
 
+// The 10 tool section titles, in the order they're offered on the gating question and in the
+// Training Priority wrap-up — kept here as the one list both reference, so adding/removing a tool
+// only ever means editing this array plus its toolSection() entry below.
+export const DIGITAL_SKILL_TOOL_TITLES = [
+  'Microsoft Word', 'Microsoft Excel', 'Microsoft PowerPoint', 'Microsoft Outlook', 'Microsoft Teams',
+  'Power BI', 'SQL', 'Power Automate / no-code workflow automation',
+  'AI Literacy, Prompt Engineering & Responsible AI', 'Virtual Advisory & Digital Prospecting',
+]
+
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
+  // Gates everything that follows — a respondent only sees the per-tool sections for what they
+  // pick here (see computeSelectedTools/isToolSectionVisible in pdp-wrapup.ts), so someone who
+  // never touches SQL never has to scroll past SQL questions.
+  {
+    key: 'digital_skill_tool_selection',
+    title: 'Which of these do you use, or expect to use, in your role?',
+    description: 'Tick everything that applies — you\'ll only be asked about the tools you select here. "AI" covers tools like ChatGPT/Copilot/Claude; "Virtual Advisory" covers remote client advisory and digital prospecting (web, SMS, email, etc.).',
+    questions: [
+      {
+        label: 'Tools you use or expect to use',
+        type: 'multiselect',
+        required: true,
+        searchable: false,
+        options: DIGITAL_SKILL_TOOL_TITLES,
+      },
+    ],
+  },
   // Section A — completed by whoever is filling the form (the employee self-rating on Track A, or
   // the line manager rating on their behalf on Track B). Mirrors the 2026 "Digital Skills
   // Self-Assessment" Custom Survey question-for-question (checklist wording transcribed verbatim

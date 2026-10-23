@@ -7,7 +7,7 @@ import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectio
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -63,6 +63,7 @@ export default function PDPFormPreviewPage() {
     if (!ctx) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
     for (const section of ctx.sections) {
+      if (!isToolSectionVisible(section, ctx.sections, answers)) continue
       if (section.key === 'development_needs') {
         const count = Math.max(1, developmentNeeds.length)
         for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
@@ -71,7 +72,7 @@ export default function PDPFormPreviewPage() {
       }
     }
     return out
-  }, [ctx, developmentNeeds])
+  }, [ctx, developmentNeeds, answers])
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 

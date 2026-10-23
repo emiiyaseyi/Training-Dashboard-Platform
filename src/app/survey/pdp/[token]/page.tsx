@@ -7,7 +7,7 @@ import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectio
 import { PDPIntroPage } from '@/components/pdp/PDPIntroPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -95,6 +95,7 @@ export default function PDPStaffSurveyPage() {
     if (!ctx || !form) return []
     const out: PageDescriptor[] = [{ type: 'intro' }]
     for (const section of ctx.sections) {
+      if (!isToolSectionVisible(section, ctx.sections, form.answers)) continue
       if (section.key === 'development_needs') {
         const count = Math.max(1, form.developmentNeeds.length)
         for (let i = 0; i < count; i++) out.push({ type: 'need', section, index: i })
