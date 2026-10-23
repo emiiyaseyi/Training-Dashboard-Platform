@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     expiryEnabled: settings?.expiryEnabled ?? true,
     expiryDays: settings?.expiryDays ?? 7,
     preReminderIntervalDays: settings?.preReminderIntervalDays ?? 7,
+    excludeDefaultCcOnReminders: settings?.excludeDefaultCcOnReminders ?? true,
   }
 
   const results: { scheduleId: string; trainingName: string; stage: SurveyStage; sent: number; skipped: number; reminder?: boolean }[] = []

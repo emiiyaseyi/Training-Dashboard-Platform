@@ -94,7 +94,12 @@ export default function PDPManagerTeamPage() {
   const currentMember = activeMembers[memberIndex]
 
   useEffect(() => {
-    if (currentMember) setForm(currentMember.answers ?? { answers: {}, developmentNeeds: [{}] })
+    // Same normalization as the other two tracks — a saved draft/submission that predates the
+    // current {answers, developmentNeeds} shape can come back with a missing developmentNeeds key.
+    if (currentMember) setForm({
+      answers: currentMember.answers?.answers ?? {},
+      developmentNeeds: Array.isArray(currentMember.answers?.developmentNeeds) ? currentMember.answers.developmentNeeds : [{}],
+    })
     setPage(0)
     setPageError('')
   }, [currentMember?.id]) // eslint-disable-line react-hooks/exhaustive-deps

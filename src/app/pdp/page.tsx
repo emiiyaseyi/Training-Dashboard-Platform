@@ -17,6 +17,10 @@ interface Cycle {
   status: string
   expiryDays: number
   requireManagerValidation: boolean
+  staffDeadline: string | null
+  validationDeadline: string | null
+  managerDeadline: string | null
+  excludeDefaultCcOnReminders: boolean
   launchedAt: string | null
   _count: { staffSurveys: number; managerSurveys: number; managerOverrides: number }
 }
@@ -173,6 +177,9 @@ export default function PDPPage() {
   const [showQuestions, setShowQuestions] = useState(false)
   const [showEmailTemplates, setShowEmailTemplates] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showReminderSettings, setShowReminderSettings] = useState(false)
+  const [reminderDraft, setReminderDraft] = useState<{ expiryDays: string; staffDeadline: string; validationDeadline: string; managerDeadline: string; excludeDefaultCcOnReminders: boolean } | null>(null)
+  const [savingReminderSettings, setSavingReminderSettings] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
@@ -216,6 +223,17 @@ export default function PDPPage() {
   // loads — purely a convenience starting point; the admin can still flip it per launch, and
   // what's actually sent is whatever the checkbox shows when Launch Track A is clicked.
   useEffect(() => { if (detail) setStaffRequireValidation(detail.cycle.requireManagerValidation) }, [detail?.cycle.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!detail) return
+    const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : '')
+    setReminderDraft({
+      expiryDays: String(detail.cycle.expiryDays),
+      staffDeadline: toDateInput(detail.cycle.staffDeadline),
+      validationDeadline: toDateInput(detail.cycle.validationDeadline),
+      managerDeadline: toDateInput(detail.cycle.managerDeadline),
+      excludeDefaultCcOnReminders: detail.cycle.excludeDefaultCcOnReminders,
+    })
+  }, [detail?.cycle.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/business-units').then((r) => r.json()).then((d) => setBusinessUnits(Array.isArray(d) ? d : [])).catch(() => {})
@@ -413,6 +431,27 @@ export default function PDPPage() {
     }
   }
 
+  const saveReminderSettings = async () => {
+    if (!selectedId || !reminderDraft) return
+    setSavingReminderSettings(true)
+    try {
+      await fetch(`/api/admin/pdp/${selectedId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expiryDays: Number(reminderDraft.expiryDays) || 30,
+          staffDeadline: reminderDraft.staffDeadline || null,
+          validationDeadline: reminderDraft.validationDeadline || null,
+          managerDeadline: reminderDraft.managerDeadline || null,
+          excludeDefaultCcOnReminders: reminderDraft.excludeDefaultCcOnReminders,
+        }),
+      })
+      await loadDetail(selectedId)
+    } finally {
+      setSavingReminderSettings(false)
+    }
+  }
+
   const sendValidationEmails = async (ids: string[]) => {
     if (!selectedId || ids.length === 0) return
     if (!confirm(`Send/resend the manager validation email for ${ids.length} selected submitted plan(s)? Safe to use even if some already have it sent — those are skipped.`)) return
@@ -591,6 +630,56 @@ export default function PDPPage() {
                 <p className="text-sm font-bold text-slate-800">Stop after {detail.cycle.expiryDays}d unfilled</p>
               </div>
             </div>
+
+            {canAdmin && (
+              <div className="bg-white border border-slate-200 rounded-xl p-5">
+                <button onClick={() => setShowReminderSettings((v) => !v)} className="w-full flex items-center justify-between text-left">
+                  <p className="text-sm font-semibold text-slate-800">Reminders &amp; Deadlines</p>
+                  {showReminderSettings ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </button>
+                {showReminderSettings && reminderDraft && (
+                  <div className="mt-4 space-y-4">
+                    <label className="text-xs text-slate-500 block max-w-xs">
+                      Daily reminders stop after (days unfilled)
+                      <input
+                        type="number" min={1} value={reminderDraft.expiryDays}
+                        onChange={(e) => setReminderDraft({ ...reminderDraft, expiryDays: e.target.value })}
+                        className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1"
+                      />
+                      <span className="text-[11px] text-slate-400">Applies to all three tracks — reminders go out once a day (same cadence as Survey Automation) until the person responds or this many days have passed since their link was sent.</span>
+                    </label>
+                    <p className="text-[11px] text-slate-400">
+                      The dates below are shown in each track&apos;s email as the actual deadline. Leave any of them blank to fall back to a rolling &quot;sent date + the days above&quot; date instead of a fixed one.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                      <label className="text-xs text-slate-500">
+                        Self-Fill deadline (Track A)
+                        <input type="date" value={reminderDraft.staffDeadline} onChange={(e) => setReminderDraft({ ...reminderDraft, staffDeadline: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                      </label>
+                      <label className="text-xs text-slate-500">
+                        Line Manager Validation deadline
+                        <input type="date" value={reminderDraft.validationDeadline} onChange={(e) => setReminderDraft({ ...reminderDraft, validationDeadline: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                      </label>
+                      <label className="text-xs text-slate-500">
+                        Track B (Manager Team-Fill) deadline
+                        <input type="date" value={reminderDraft.managerDeadline} onChange={(e) => setReminderDraft({ ...reminderDraft, managerDeadline: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
+                      </label>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={reminderDraft.excludeDefaultCcOnReminders}
+                        onChange={(e) => setReminderDraft({ ...reminderDraft, excludeDefaultCcOnReminders: e.target.checked })}
+                      />
+                      Exclude the platform-wide Default Cc from reminder emails (off by default — reminders include it, same as the original send; same setting as Survey Automation&apos;s)
+                    </label>
+                    <button onClick={saveReminderSettings} disabled={savingReminderSettings} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                      {savingReminderSettings && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Save
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {canAdmin && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-5 space-y-3">

@@ -1017,6 +1017,19 @@ model PDPCycle {
   // review the form with staff directly instead. Track B never has this step (the manager IS
   // the line manager, already filling it) regardless of this setting.
   requireManagerValidation Boolean @default(true)
+  // Fixed calendar deadlines shown in each track's email (the {{deadline}} token) — admin-set, not
+  // the rolling "sent date + expiryDays" the token fell back to before these existed. Independent
+  // per track since Self-Fill, Line Manager Review, and Track B can each reasonably run to a
+  // different date. Null means "not set yet" — the rolling expiryDays-based date is still used as
+  // a fallback so nothing breaks for a cycle that hasn't set one.
+  staffDeadline      DateTime?
+  validationDeadline DateTime?
+  managerDeadline    DateTime?
+  // Mirrors SurveySettings.excludeDefaultCcOnReminders, admin-visible in this cycle's own
+  // Reminders & Deadlines panel rather than a shared global setting — defaults to false (Default
+  // Cc IS included on PDP reminders) since that's the behaviour already in place before this field
+  // existed; Survey Automation's equivalent toggle defaults the other way for its own reasons.
+  excludeDefaultCcOnReminders Boolean @default(false)
   launchedAt  DateTime?
   closedAt    DateTime?
   createdAt   DateTime @default(now())
@@ -1235,6 +1248,12 @@ model PDPManagerTeamMemberEntry {
   prefillSnapshot String?   // JSON
   answers         String?   // JSON
   submittedAt     DateTime?
+  // True when `answers` was prefilled from this person's own Track A self-fill submission rather
+  // than left blank for the manager to fill from scratch — lets the per-member page frame it as
+  // "review what they selected" instead of "fill their plan", and lets the manager-survey email
+  // report "N of M team members have completed their own plan and are awaiting your review"
+  // separately from "P team members you still need to fill in for".
+  needsReview     Boolean   @default(false)
 
   managerSurvey PDPManagerSurvey @relation(fields: [managerSurveyId], references: [id], onDelete: Cascade)
 

@@ -61,13 +61,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ cycl
 
   const { cycleId } = await params
   const body = await req.json().catch(() => ({}))
-  const data: { title?: string; status?: string; expiryDays?: number; requireManagerValidation?: boolean; closedAt?: Date } = {}
+  const data: {
+    title?: string; status?: string; expiryDays?: number; requireManagerValidation?: boolean; closedAt?: Date
+    staffDeadline?: Date | null; validationDeadline?: Date | null; managerDeadline?: Date | null
+    excludeDefaultCcOnReminders?: boolean
+  } = {}
   if (typeof body.title === 'string' && body.title.trim()) data.title = body.title.trim()
   if (Number.isFinite(Number(body.expiryDays)) && Number(body.expiryDays) > 0) data.expiryDays = Number(body.expiryDays)
   if (body.requireManagerValidation !== undefined) data.requireManagerValidation = !!body.requireManagerValidation
+  if (body.excludeDefaultCcOnReminders !== undefined) data.excludeDefaultCcOnReminders = !!body.excludeDefaultCcOnReminders
   if (body.status === 'closed') {
     data.status = 'closed'
     data.closedAt = new Date()
+  }
+  // Each deadline is independently settable/clearable — an empty string or null clears it back to
+  // "no fixed deadline, use the rolling expiryDays-based date" rather than being ignored.
+  for (const field of ['staffDeadline', 'validationDeadline', 'managerDeadline'] as const) {
+    if (!(field in body)) continue
+    data[field] = body[field] ? new Date(body[field]) : null
   }
 
   const cycle = await prisma.pDPCycle.update({ where: { id: cycleId }, data })

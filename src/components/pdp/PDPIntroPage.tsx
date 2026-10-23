@@ -7,7 +7,7 @@ interface TrainingHistoryItem { trainingName: string; capability: string | null;
 // Intervention this person attended, shown as reference so they see what's already been
 // addressed before picking new capabilities/needs in the sections that follow.
 export function PDPIntroPage({
-  staffName, staffId, businessUnit, department, role, lineManagerName, trainingHistory2026,
+  staffName, staffId, businessUnit, department, role, lineManagerName, trainingHistory2026: trainingHistory2026Prop,
 }: {
   staffName: string
   staffId?: string
@@ -17,6 +17,11 @@ export function PDPIntroPage({
   lineManagerName?: string | null
   trainingHistory2026: TrainingHistoryItem[]
 }) {
+  // A link generated before this field existed on PDPPrefillSnapshot has a stored prefillSnapshot
+  // JSON with no trainingHistory2026 key at all — defaulting here (rather than assuming callers
+  // always pass an array) keeps an older link from crashing instead of just showing "no training
+  // on file", which it doesn't actually know either way for a snapshot that old.
+  const trainingHistory2026 = Array.isArray(trainingHistory2026Prop) ? trainingHistory2026Prop : []
   return (
     <div className="space-y-4">
       <div>

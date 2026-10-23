@@ -61,7 +61,13 @@ export default function PDPStaffSurveyPage() {
       .then((data: Context & { error?: string }) => {
         if (data.error) { setError(data.error); return }
         setCtx(data)
-        setForm(data.answers ?? { answers: {}, developmentNeeds: [{}] })
+        // A saved draft that predates the current {answers, developmentNeeds} shape can come back
+        // with a missing/undefined developmentNeeds key — defaulting it here (not just when the
+        // whole `answers` object is null) keeps every .map()/.find() downstream from crashing.
+        setForm({
+          answers: data.answers?.answers ?? {},
+          developmentNeeds: Array.isArray(data.answers?.developmentNeeds) ? data.answers.developmentNeeds : [{}],
+        })
       })
       .catch(() => setError('Could not load this plan.'))
       .finally(() => setLoading(false))

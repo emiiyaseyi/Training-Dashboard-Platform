@@ -20,9 +20,15 @@ export interface PDPLaunchResult {
 const DAY_MS_LOCAL = 86400000
 // The deadline shown in the email body — expiryDays from whenever this particular send/resend
 // goes out, matching the "resending resets the expiry clock" behaviour already shown in the admin
-// panel's tick tooltips.
+// panel's tick tooltips. Used only as a fallback when the cycle has no admin-set fixed deadline
+// for this track (see resolveTrackDeadline below) — a cycle that HAS set one shows that same fixed
+// date on every send/resend/reminder instead of a rolling one.
 function deadlineFromNow(expiryDays: number): Date {
   return new Date(Date.now() + expiryDays * DAY_MS_LOCAL)
+}
+
+function resolveTrackDeadline(fixed: Date | null, expiryDays: number): Date {
+  return fixed ?? deadlineFromNow(expiryDays)
 }
 
 // Track A — one PDPStaffSurvey per active staff member with a usable name, prefilled once (via
@@ -73,7 +79,7 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
       continue
     }
     const { subject, html } = renderPDPEmail('staffSurvey', template, {
-      firstName: firstNameOf(survey.staffName), cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+      firstName: firstNameOf(survey.staffName), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.staffDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html })
@@ -138,7 +144,7 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<{
       continue
     }
     const { subject, html } = renderPDPEmail('managerValidation', template, {
-      firstName: firstNameOf(manager.name), staffName: survey.staffName, cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+      firstName: firstNameOf(manager.name), staffName: survey.staffName, cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.validationDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`)
     try {
       await sendMail({ to: manager.email, subject, html })
@@ -210,7 +216,7 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
       continue
     }
     const { subject, html } = renderPDPEmail('managerTeam', template, {
-      firstName: firstNameOf(survey.managerName), cycleTitle: cycle.title, deadline: formatDeadline(deadlineFromNow(cycle.expiryDays)),
+      firstName: firstNameOf(survey.managerName), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.managerDeadline, cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html })
@@ -253,10 +259,10 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const template = await getTemplate(s.cycleId, 'staffSurvey')
     const { subject, html } = renderPDPEmail('staffSurvey', template, {
-      firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(deadlineFromNow(s.cycle.expiryDays)),
+      firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(resolveTrackDeadline(s.cycle.staffDeadline, s.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp/${s.surveyToken}`, true)
     try {
-      await sendMail({ to: s.email!, subject, html })
+      await sendMail({ to: s.email!, subject, html, skipDefaultCc: s.cycle.excludeDefaultCcOnReminders })
       await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }
@@ -273,10 +279,10 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     const template = await getTemplate(v.staffSurvey.cycleId, 'managerValidation')
     const { subject, html } = renderPDPEmail('managerValidation', template, {
       firstName: firstNameOf(v.managerName || 'there'), staffName: v.staffSurvey.staffName, cycleTitle: v.staffSurvey.cycle.title,
-      deadline: formatDeadline(deadlineFromNow(v.staffSurvey.cycle.expiryDays)),
+      deadline: formatDeadline(resolveTrackDeadline(v.staffSurvey.cycle.validationDeadline, v.staffSurvey.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, true)
     try {
-      await sendMail({ to: v.email!, subject, html })
+      await sendMail({ to: v.email!, subject, html, skipDefaultCc: v.staffSurvey.cycle.excludeDefaultCcOnReminders })
       await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }
@@ -292,10 +298,10 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     if (last.toISOString().slice(0, 10) === todayKey) continue
     const template = await getTemplate(m.cycleId, 'managerTeam')
     const { subject, html } = renderPDPEmail('managerTeam', template, {
-      firstName: firstNameOf(m.managerName), cycleTitle: m.cycle.title, deadline: formatDeadline(deadlineFromNow(m.cycle.expiryDays)),
+      firstName: firstNameOf(m.managerName), cycleTitle: m.cycle.title, deadline: formatDeadline(resolveTrackDeadline(m.cycle.managerDeadline, m.cycle.expiryDays)),
     }, `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, true)
     try {
-      await sendMail({ to: m.email!, subject, html })
+      await sendMail({ to: m.email!, subject, html, skipDefaultCc: m.cycle.excludeDefaultCcOnReminders })
       await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date() } })
       sent++
     } catch { /* left for the next run */ }

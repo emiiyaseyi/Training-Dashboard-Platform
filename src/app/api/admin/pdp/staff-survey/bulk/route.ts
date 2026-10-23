@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       if (!s.email) { skipped.push({ name: s.staffName, reason: 'No email address on file.' }); continue }
       const template = await resolvePDPEmailTemplate(s.cycleId, 'staffSurvey')
       const { subject, html } = renderPDPEmail('staffSurvey', template, {
-        firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(new Date(Date.now() + s.cycle.expiryDays * 86400000)),
+        firstName: firstNameOf(s.staffName), cycleTitle: s.cycle.title, deadline: formatDeadline(s.cycle.staffDeadline ?? new Date(Date.now() + s.cycle.expiryDays * 86400000)),
       }, `${baseUrl}/survey/pdp/${s.surveyToken}`)
       try {
         await sendMail({ to: s.email, subject, html })

@@ -23,6 +23,7 @@ export async function POST(_req: NextRequest) {
     const reminderSettings = {
       expiryEnabled: settings?.expiryEnabled ?? true,
       expiryDays: settings?.expiryDays ?? 7,
+      excludeDefaultCcOnReminders: settings?.excludeDefaultCcOnReminders ?? true,
     }
 
     let sent = 0

@@ -116,6 +116,11 @@ export async function sendSurveyStage(
     where: { id: scheduleId },
     include: { attendees: attendeeIds ? { where: { id: { in: attendeeIds } } } : true },
   })
+  // Was previously read nowhere — the admin's "Exclude Default Cc on reminders" toggle (Admin ->
+  // Survey Automation Settings) had no effect; every resend/reminder always excluded Default Cc
+  // regardless of what the toggle showed. Now actually drives shouldSkipDefaultCc below.
+  const surveySettings = await prisma.surveySettings.findFirst()
+  const excludeDefaultCcOnReminders = surveySettings?.excludeDefaultCcOnReminders ?? true
 
   if (!schedule) throw new Error('Training schedule not found.')
   if (stage === 'pre' && schedule.sourcedFromHistoricalData) {
@@ -171,7 +176,7 @@ export async function sendSurveyStage(
       // skipDefaultCcOverride additionally lets an admin exclude it from a bulk FIRST send too
       // (e.g. a large batch of participants at once, to avoid clogging that inbox) via an
       // explicit checkbox on the "Send [stage] to all" button.
-      const shouldSkipDefaultCc = !!attendeeBefore[sentField] || skipDefaultCcOverride
+      const shouldSkipDefaultCc = (!!attendeeBefore[sentField] && excludeDefaultCcOnReminders) || skipDefaultCcOverride
       const dropLineManagerCc = skipLineManagerCc && recipientRole !== 'manager'
       const cc = [...(ccAddress && !dropLineManagerCc ? [ccAddress] : []), ...scheduleCcFor(schedule, attendee)]
       const { subject, html } = buildSurveyEmail({
@@ -261,7 +266,7 @@ const DAY_MS = 86400000
 export async function sendSurveyReminders(
   schedule: TrainingSchedule & { attendees: TrainingScheduleAttendee[] },
   stage: SurveyStage,
-  settings: { expiryEnabled: boolean; expiryDays: number; preReminderIntervalDays?: number },
+  settings: { expiryEnabled: boolean; expiryDays: number; preReminderIntervalDays?: number; excludeDefaultCcOnReminders?: boolean },
   // Set by the admin's manual "Send Reminders to Everyone Outstanding" button — a deliberate,
   // one-off nudge that should reach EVERYONE still unresponded right now, including people the
   // daily sweep has stopped nudging because their survey expired, and regardless of whether
@@ -362,10 +367,11 @@ export async function sendSurveyReminders(
       })
       try {
         // A reminder is, by definition, a resend — sentField is already set, that's the whole
-        // reason they're due one. Never Cc's the platform-wide Default Cc, full stop, the same as
-        // every other resend path (sendSurveyStage) — not conditional on a settings toggle that
-        // can be switched off (by accident or otherwise) and silently start copying it again.
-        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: true })
+        // reason they're due one. Whether that still Cc's the platform-wide Default Cc is the
+        // admin's own call (Admin -> Survey Automation Settings -> "Exclude Default Cc on
+        // reminders"), same toggle sendSurveyStage's resend path now respects too — defaults to
+        // excluding it (true) if the setting is missing, matching the prior hardcoded behaviour.
+        await mailer.send({ to: toAddress, cc, subject, html, skipDefaultCc: settings.excludeDefaultCcOnReminders ?? true })
         const nowTs = new Date()
         await prisma.trainingScheduleAttendee.update({
           where: { id: attendee.id },

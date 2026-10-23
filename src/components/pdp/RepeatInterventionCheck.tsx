@@ -12,8 +12,8 @@ export interface TrainingHistoryItem { trainingName: string; capability: string 
 // respondent can move on, rather than silently letting a duplicate request through. Reused
 // identically on Track A, Track B, and the manager validate page (anywhere a need's area can be
 // set or changed), so the rule is consistent everywhere capabilities get picked.
-export function findRepeatedCapability(area: string | undefined, trainingHistory2026: TrainingHistoryItem[]): TrainingHistoryItem | null {
-  if (!area) return null
+export function findRepeatedCapability(area: string | undefined, trainingHistory2026: TrainingHistoryItem[] | undefined): TrainingHistoryItem | null {
+  if (!area || !Array.isArray(trainingHistory2026)) return null
   const match = trainingHistory2026.find((t) => t.capability && t.capability.toLowerCase() === area.toLowerCase())
   return match || null
 }

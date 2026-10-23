@@ -135,13 +135,21 @@ export default function PDPManagerValidatePage() {
       .then((data: Context & { error?: string }) => {
         if (data.error) { setError(data.error); return }
         setCtx(data)
-        const edited = data.editedAnswers ?? data.staffAnswers ?? { answers: {}, developmentNeeds: [] }
+        // Normalizes both to the current {answers, developmentNeeds} shape regardless of what's
+        // actually in the stored JSON — a link whose answers predate a schema change (or who never
+        // submitted developmentNeeds at all) can otherwise come back with a missing/undefined key
+        // here, which crashes every .map()/.find() downstream that assumes an array.
+        const normalize = (a: Partial<Answers> | null | undefined): Answers => ({
+          answers: a?.answers ?? {},
+          developmentNeeds: Array.isArray(a?.developmentNeeds) ? a!.developmentNeeds : [],
+        })
+        const edited = normalize(data.editedAnswers ?? data.staffAnswers)
         setEditedForm(edited)
         // form.developmentNeeds holds the manager's OWN per-need assessment (manager_need_review),
         // kept the same length/index as the respondent's needs so they always line up 1:1 — not the
         // respondent's own need fields, which live in editedForm instead.
-        const savedForm = data.answers ?? { answers: {}, developmentNeeds: [] }
-        const needReviewNeeds = edited.developmentNeeds.map((_: unknown, i: number) => savedForm.developmentNeeds[i] || {})
+        const savedForm = normalize(data.answers)
+        const needReviewNeeds = edited.developmentNeeds.map((_, i) => savedForm.developmentNeeds[i] || {})
         setForm({ answers: savedForm.answers, developmentNeeds: needReviewNeeds })
       })
       .catch(() => setError('Could not load this review.'))
