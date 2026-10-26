@@ -167,7 +167,6 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
       'Apply simple, purposeful animations/transitions',
       'Present confidently using the deck as a visual aid',
       'Link live Excel data into a deck (linked charts/tables that update)',
-      'Apply a master template to keep a consistent theme throughout a deck',
       'Reuse content from another presentation without breaking formatting',
       'Export/share a deck as a PDF or video',
     ],
