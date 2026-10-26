@@ -26,8 +26,8 @@ interface Cycle {
 }
 
 interface Validation { id: string; managerName: string | null; respondedAt: string | null; answers: string | null }
-interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; lineManagerNames: string[]; rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file' }
-interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; submittedAt: string | null; answers: string | null }
+interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; requireManagerValidation: boolean; lineManagerNames: string[]; rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file' }
+interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; needsReview: boolean; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
 interface Section { id: string; key: string; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
@@ -648,8 +648,23 @@ export default function PDPPage() {
 
   const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
   const selfTotal = detail?.staffSurveys.length ?? 0
-  const validationsSubmitted = detail?.staffSurveys.reduce((s, x) => s + x.validations.filter((v) => v.respondedAt).length, 0) ?? 0
-  const validationsTotal = detail?.staffSurveys.reduce((s, x) => s + x.validations.length, 0) ?? 0
+  // Counts whichever manager-review mechanism actually applies per person, not just the old
+  // one-link-per-person PDPManagerValidation flow — new submissions go through the one-link-
+  // per-manager flow instead (a PDPManagerTeamMemberEntry with needsReview: true), which never
+  // creates a PDPManagerValidation row at all, so counting only those row left this permanently
+  // stuck at 0 once that became the default path. One row per STAFF MEMBER who needs review (not
+  // per manager-relationship), matching what the admin actually expects to see here.
+  const reviewCompleteStaffIds = new Set(
+    (detail?.managerSurveys ?? [])
+      .flatMap((m) => m.teamMembers)
+      .filter((t) => t.needsReview && t.submittedAt)
+      .map((t) => t.staffId),
+  )
+  const needsValidationSurveys = detail?.staffSurveys.filter((s) => s.requireManagerValidation) ?? []
+  const validationsTotal = needsValidationSurveys.length
+  const validationsSubmitted = needsValidationSurveys.filter(
+    (s) => s.validations.some((v) => v.respondedAt) || reviewCompleteStaffIds.has(s.staffId),
+  ).length
   const teamMembersSubmitted = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.submittedAt).length, 0) ?? 0
   const teamMembersTotal = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added').length, 0) ?? 0
   const teamMembersPendingRoster = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'pending').length, 0) ?? 0

@@ -235,12 +235,14 @@ export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<
     const existingEntry = await prisma.pDPManagerTeamMemberEntry.findUnique({
       where: { managerSurveyId_staffId: { managerSurveyId: managerSurvey.id, staffId: survey.staffId } },
     })
+    let addedNewWork = false
     if (existingEntry) {
       if (!existingEntry.submittedAt) {
         await prisma.pDPManagerTeamMemberEntry.update({
           where: { id: existingEntry.id },
           data: { answers: survey.answers, needsReview: true },
         })
+        addedNewWork = true
       }
     } else {
       await prisma.pDPManagerTeamMemberEntry.create({
@@ -256,13 +258,25 @@ export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<
           needsReview: true,
         },
       })
+      addedNewWork = true
     }
 
-    // Only ever emails on a brand-new link — an existing, already-sent manager link is updated
-    // silently here and picked up next time the manager opens it (or on the next day's reminder,
-    // same as any other outstanding link), rather than emailing again on every single team
-    // member's submission.
-    if (isNewManagerSurvey && canSend && template && manager?.email) {
+    // A manager who already finished reviewing their whole team (managerSurvey.respondedAt set)
+    // gets silently skipped by both the "only emails on a brand-new link" rule below AND the daily
+    // reminder sweep (which only ever looks at respondedAt: null) the moment a LATER team member
+    // submits and needs their review — nothing would ever tell them. Reopening the survey here
+    // (and treating it the same as a brand-new link for the purposes of emailing right now, not
+    // waiting on tomorrow's reminder) closes that gap.
+    const reopened = addedNewWork && !isNewManagerSurvey && managerSurvey.respondedAt !== null
+    if (reopened) {
+      managerSurvey = await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { respondedAt: null } })
+    }
+
+    // Emails on a brand-new link, or when reopening one the manager had already finished — any
+    // other existing, still-outstanding manager link is updated silently here and picked up next
+    // time the manager opens it (or on the next day's reminder), rather than emailing again on
+    // every single team member's submission.
+    if ((isNewManagerSurvey || reopened) && canSend && template && manager?.email) {
       const { subject, html } = renderPDPEmail('managerTeam', template, {
         firstName: firstNameOf(manager.name), cycleTitle: cycle.title, deadline: formatDeadline(resolveTrackDeadline(cycle.managerDeadline, cycle.expiryDays)),
       }, `${baseUrl}/survey/pdp-manager/${managerSurvey.surveyToken}`)
