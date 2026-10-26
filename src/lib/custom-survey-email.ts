@@ -11,7 +11,6 @@ const P = (html: string, extraStyle = '') => `<p style="margin:0 0 14px 0;line-h
 const SURVEY_BUTTON_GREEN = '#1E7145'
 const BUTTON = (href: string, label: string) => `
   ${P(`<a href="${href}" style="display:inline-block;background:${SURVEY_BUTTON_GREEN};color:#ffffff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;${FONT}">${label}</a>`)}
-  ${P(`If the button doesn't work, copy this link into your browser:<br/>${href}`, 'color:#6B7280;')}
 `
 const SIGNOFF = P('Best Regards,<br/>Meristem Learning &amp; Development Team')
 
