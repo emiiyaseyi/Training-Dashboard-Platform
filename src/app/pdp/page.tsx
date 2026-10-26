@@ -648,17 +648,23 @@ export default function PDPPage() {
 
   const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
   const selfTotal = detail?.staffSurveys.length ?? 0
-  // Counts whichever manager-review mechanism actually applies per person, not just the old
+  // Whichever manager-review mechanism actually applies per person, not just the old
   // one-link-per-person PDPManagerValidation flow — new submissions go through the one-link-
   // per-manager flow instead (a PDPManagerTeamMemberEntry with needsReview: true), which never
-  // creates a PDPManagerValidation row at all, so counting only those row left this permanently
-  // stuck at 0 once that became the default path. One row per STAFF MEMBER who needs review (not
-  // per manager-relationship), matching what the admin actually expects to see here.
+  // creates a PDPManagerValidation row at all. Used both for the stats above and for the Response
+  // Report's "Manager Validation(s)" column, which previously only ever read s.validations and so
+  // showed "—" forever for anyone reviewed through the new flow, even once actually completed.
+  const needsReviewEntriesByStaffId = new Map<string, { managerName: string; submittedAt: string | null }[]>()
+  for (const m of detail?.managerSurveys ?? []) {
+    for (const t of m.teamMembers) {
+      if (!t.needsReview) continue
+      const arr = needsReviewEntriesByStaffId.get(t.staffId) ?? []
+      arr.push({ managerName: m.managerName, submittedAt: t.submittedAt })
+      needsReviewEntriesByStaffId.set(t.staffId, arr)
+    }
+  }
   const reviewCompleteStaffIds = new Set(
-    (detail?.managerSurveys ?? [])
-      .flatMap((m) => m.teamMembers)
-      .filter((t) => t.needsReview && t.submittedAt)
-      .map((t) => t.staffId),
+    [...needsReviewEntriesByStaffId.entries()].filter(([, entries]) => entries.some((e) => e.submittedAt)).map(([staffId]) => staffId),
   )
   const needsValidationSurveys = detail?.staffSurveys.filter((s) => s.requireManagerValidation) ?? []
   const validationsTotal = needsValidationSurveys.length
@@ -1144,13 +1150,18 @@ export default function PDPPage() {
                                 )}
                               </td>
                               <td className="py-1.5 pr-3 text-slate-500">
-                                {s.validations.length === 0 ? '—' : s.validations.map((v) => `${v.managerName || 'Manager'}: `).map((label, i) => (
-                                  <span key={i}>
-                                    {label}
-                                    <span className={s.validations[i].respondedAt ? 'text-emerald-600 font-medium' : 'text-amber-600'}>{s.validations[i].respondedAt ? '✓' : 'pending'}</span>
-                                    {i < s.validations.length - 1 ? ', ' : ''}
-                                  </span>
-                                ))}
+                                {(() => {
+                                  const oldFlow = s.validations.map((v) => ({ managerName: v.managerName || 'Manager', done: !!v.respondedAt }))
+                                  const newFlow = (needsReviewEntriesByStaffId.get(s.staffId) ?? []).map((e) => ({ managerName: e.managerName, done: !!e.submittedAt }))
+                                  const rows = [...oldFlow, ...newFlow]
+                                  if (rows.length === 0) return '—'
+                                  return rows.map((r, i) => (
+                                    <span key={i}>
+                                      {r.managerName}: <span className={r.done ? 'text-emerald-600 font-medium' : 'text-amber-600'}>{r.done ? '✓' : 'pending'}</span>
+                                      {i < rows.length - 1 ? ', ' : ''}
+                                    </span>
+                                  ))
+                                })()}
                               </td>
                               <td className="py-1.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
