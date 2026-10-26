@@ -1,3 +1,5 @@
+import { TOOL_SECTION_KEYS } from './pdp-wrapup'
+
 export interface PDPFormAnswers {
   // Every non-repeating section's answers, keyed by PDPQuestion.id.
   answers: Record<string, string | string[]>
@@ -37,6 +39,30 @@ function isVisible(q: PDPQuestionLike, values: Record<string, string | string[]>
   return values[q.showIfQuestionId] === q.showIfEquals
 }
 
+function asStringArray(v: string | string[] | undefined): string[] {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string' && v) return [v]
+  return []
+}
+
+const TOOL_GATE_KEY = 'digital_skill_tool_selection'
+
+// A tool section the respondent never selected on the gating question ("Which of these do you
+// use, or expect to use…") was never shown to them client-side — none of its questions were ever
+// answerable. Without this check, server-side validation still demanded every tool section's
+// required fields regardless of the gate, which made Submit permanently fail for anyone who
+// deselected a tool (the exact bug this fixes). Mirrors isToolSectionVisible in pdp-wrapup.ts, but
+// kept local since that one's typed against the client PDPQuestion shape, not PDPQuestionLike.
+// A cycle seeded before the gate existed has no gate section at all — every tool section stays
+// visible then, matching the client's own fallback.
+function isSectionVisibleForGate(section: PDPSectionLike, allSections: PDPSectionLike[], answers: Record<string, string | string[]>): boolean {
+  if (!TOOL_SECTION_KEYS.includes(section.key)) return true
+  const gate = allSections.find((s) => s.key === TOOL_GATE_KEY)
+  const gateQuestion = gate?.questions[0]
+  if (!gateQuestion) return true
+  return asStringArray(answers[gateQuestion.id]).includes(section.title)
+}
+
 // Client-side, single-page check used by the public pages to block "Next"/"Submit" before the
 // request even goes out — the same required/maxSelect rules validatePDPFormAnswers enforces
 // server-side, scoped to just the questions on the page currently showing. Returns the first
@@ -63,6 +89,7 @@ export function firstPageIssue(questions: PDPQuestionLike[], values: Record<stri
 export function validatePDPFormAnswers(formAnswers: PDPFormAnswers, sections: PDPSectionLike[]): string | null {
   for (const section of sections) {
     if (!section.enabled) continue
+    if (!isSectionVisibleForGate(section, sections, formAnswers.answers)) continue
 
     if (section.maxRepeats > 1) {
       const needs = formAnswers.developmentNeeds || []
