@@ -230,7 +230,7 @@ export default function PDPStaffSurveyPage() {
         <div className="w-full bg-slate-200 rounded-full h-1.5 mb-1">
           <div className="bg-navy-600 h-1.5 rounded-full transition-all" style={{ width: `${((page + 1) / pages.length) * 100}%` }} />
         </div>
-        <p className="text-[14px] text-slate-400 mb-4">Page {page + 1} of {pages.length}</p>
+        <p className="text-[14px] text-slate-400 mb-4">{Math.round(((page + 1) / pages.length) * 100)}% complete</p>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           {current?.type === 'intro' && (
