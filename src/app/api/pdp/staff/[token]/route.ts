@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { rateLimit } from '@/lib/rate-limit'
 import { notifyManagerOfTeamUpdate, ensureTeamMemberViewToken } from '@/lib/pdp-send'
@@ -106,8 +106,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // member's own submit hang, and a failure there is still visible/recoverable from the admin
     // panel. Reads the snapshot captured when THIS survey was launched, not the cycle's current
     // setting (which may have changed since) — see PDPStaffSurvey.requireManagerValidation.
+    // after() keeps the serverless function alive until this finishes, AFTER the response has gone
+    // out — a bare un-awaited promise here is frozen or killed on Vercel as soon as the response
+    // returns, which is why the manager was never notified. The daily sweep also catches any that slip.
     if (survey.requireManagerValidation) {
-      notifyManagerOfTeamUpdate(survey.id).catch((err) => console.error('[pdp/staff submit] manager notify failed', err))
+      after(() => notifyManagerOfTeamUpdate(survey.id).catch((err) => console.error('[pdp/staff submit] manager notify failed', err)))
     }
 
     return NextResponse.json({ success: true })

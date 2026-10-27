@@ -290,6 +290,32 @@ export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<
   }
 }
 
+// Catch-up for submitted plans whose manager was never notified (the on-submit trigger didn't
+// complete, or the manager link predates a setting change): any submitted Track A plan that
+// requires manager review and has no entry yet on its manager's team page gets notifyManagerOfTeamUpdate
+// run for it. Safe to repeat — that function only emails on a brand-new (or reopened) manager link.
+// Runs from the daily reminder sweep and from the admin "Send Validation Emails" button.
+export async function notifyPendingManagerTeams(onlyIds?: string[]): Promise<{ checked: number; notified: number }> {
+  const submitted = await prisma.pDPStaffSurvey.findMany({
+    where: { respondedAt: { not: null }, answers: { not: null }, requireManagerValidation: true, ...(onlyIds ? { id: { in: onlyIds } } : {}) },
+    select: { id: true, staffId: true, cycleId: true },
+  })
+  let notified = 0
+  for (const s of submitted) {
+    if (!onlyIds) {
+      const entry = await prisma.pDPManagerTeamMemberEntry.findFirst({ where: { staffId: s.staffId, managerSurvey: { cycleId: s.cycleId } }, select: { id: true } })
+      if (entry) continue
+    }
+    try {
+      await notifyManagerOfTeamUpdate(s.id)
+      notified++
+    } catch (err) {
+      console.error('[notifyPendingManagerTeams]', s.id, err)
+    }
+  }
+  return { checked: submitted.length, notified }
+}
+
 // Track B — one PDPManagerSurvey per distinct manager, with one PDPManagerTeamMemberEntry per
 // direct report found via getTeamMembersForManager (status "pending" until the manager accepts/
 // declines them on the roster-review page). No staff self-fill prerequisite.
@@ -380,6 +406,8 @@ const DAY_MS = 86400000
 // notifyManagerOfTeamUpdate functions above, where it's read directly from the cycle.
 export async function sendPDPReminders(): Promise<{ sent: number }> {
   if (!(await hasSmtpCredentials())) return { sent: 0 }
+  // First, anyone who submitted but whose line manager was never notified (see notifyPendingManagerTeams).
+  await notifyPendingManagerTeams().catch((err) => console.error('[sendPDPReminders] manager catch-up failed', err))
   const now = Date.now()
   const todayKey = new Date().toISOString().slice(0, 10)
   let sent = 0
