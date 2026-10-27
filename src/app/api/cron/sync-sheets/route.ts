@@ -18,6 +18,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
 
+  // Scheduled sheet sync is retired: the platform is the source of truth and only writes to the
+  // sheet. Manual Sync Now / Preview in Admin -> Live Data Source still work.
+  if (process.env.ENABLE_SHEET_SYNC_CRON !== 'true') {
+    return NextResponse.json({ skipped: true, reason: 'Scheduled sheet sync is disabled.' })
+  }
+
   const config = await prisma.googleSheetsConfig.findFirst()
   if (!config?.autoSyncEnabled || !config.spreadsheetUrl) {
     return NextResponse.json({ skipped: true, reason: 'Auto-sync not enabled or no spreadsheet configured.' })

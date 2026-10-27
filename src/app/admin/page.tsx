@@ -18,6 +18,7 @@ import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
 import { StaffDataQuality } from '@/components/admin/StaffDataQuality'
 import { SmtpSettingsPanel } from '@/components/admin/SmtpSettingsPanel'
 import { SurveyTimingSettingsPanel } from '@/components/admin/SurveyTimingSettingsPanel'
+import { RosterImportPanel } from '@/components/admin/RosterImportPanel'
 import { SecuritySettingsPanel } from '@/components/admin/SecuritySettingsPanel'
 
 interface BU {
@@ -64,6 +65,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'staff-data-quality', label: 'Staff Data Quality', tab: 'data-quality' },
   { id: 'user-access', label: 'User Access', tab: 'people' },
   { id: 'talent-member-roster', label: 'Talent Member Roster', tab: 'people' },
+  { id: 'roster-import', label: 'Import Staff List from Google Sheet', tab: 'people' },
   { id: 'talent-member-exemptions', label: 'Talent Member Exemptions', tab: 'people' },
   { id: 'survey-automation', label: 'Survey Automation', tab: 'communication' },
   { id: 'survey-timing-settings', label: 'Survey Email Timing & Reminders (days before start, reminders, expiry)', tab: 'communication' },
@@ -743,6 +745,10 @@ export default function AdminPage() {
         {/* ── Tab: People & Talent ── */}
         {tab === 'people' && (
           <div className="space-y-8">
+            <div id="roster-import" className={sectionWrapClass('roster-import')}>
+              <RosterImportPanel />
+            </div>
+
             <div id="user-access" className={sectionWrapClass('user-access')}>
               <Link
                 href="/admin/users"
