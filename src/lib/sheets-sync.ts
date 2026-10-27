@@ -396,11 +396,10 @@ function jobsFor(config: {
     { type: 'subscription', sheetName: config.subscriptionSheetName, label: 'Subscriptions' },
     { type: 'kss', sheetName: config.kssSheetName, label: 'KSS' },
   ]
-  // Roster is opt-in (no default tab name) — omitted entirely from the job list rather than
-  // shown as a permanent "No tab name configured" error for admins who manage it by upload only.
-  if (config.rosterSheetName?.trim()) {
-    jobs.push({ type: 'roster', sheetName: config.rosterSheetName, label: 'Staff Roster' })
-  }
+  // The staff roster is no longer synced from the sheet: it lives in the database and is brought in
+  // only by the on-demand "Import Staff List" (Admin -> People & Talent). Reading the tab here would
+  // overwrite what is managed in the platform.
+  void config.rosterSheetName
   return jobs
 }
 
