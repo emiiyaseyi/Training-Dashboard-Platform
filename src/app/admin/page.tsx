@@ -18,6 +18,7 @@ import { DataQualityAudit } from '@/components/admin/DataQualityAudit'
 import { StaffDataQuality } from '@/components/admin/StaffDataQuality'
 import { SmtpSettingsPanel } from '@/components/admin/SmtpSettingsPanel'
 import { SurveyTimingSettingsPanel } from '@/components/admin/SurveyTimingSettingsPanel'
+import { SurveyAutomationSection } from '@/components/admin/SurveyAutomationSection'
 import { RosterImportPanel } from '@/components/admin/RosterImportPanel'
 import { SecuritySettingsPanel } from '@/components/admin/SecuritySettingsPanel'
 
@@ -781,21 +782,7 @@ export default function AdminPage() {
         {tab === 'communication' && (
           <div className="space-y-8">
             <div id="survey-automation" className={sectionWrapClass('survey-automation')}>
-              <Link
-                href="/admin/surveys"
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start gap-3">
-                  <Mail className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Survey Automation</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Training schedules, survey questions, and pre/post-training survey email triggers.
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
-              </Link>
+              <SurveyAutomationSection />
             </div>
 
             <div id="survey-timing-settings" className={sectionWrapClass('survey-timing-settings')}>
