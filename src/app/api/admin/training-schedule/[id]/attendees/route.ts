@@ -37,6 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const alreadyAdded: string[] = []
     const inactive: string[] = []
     const createdAttendees: TrainingScheduleAttendee[] = []
+    const buByStaffId = new Map<string, string>()
 
     for (const raw of identifiers) {
       const identifier = raw.trim()
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           },
         })
         added.push(staff.name)
+        if (staff.businessUnit) buByStaffId.set(staff.staffId, staff.businessUnit)
         createdAttendees.push(attendee)
         if (!staff.email) noEmail.push(staff.name)
       } catch (err) {
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // an existing Training Data row, so mirroring them again would create a duplicate.
     let trainingRecordError: string | undefined
     if (!schedule.sourcedFromHistoricalData && createdAttendees.length > 0) {
-      const results = await mirrorAttendeesToTrainingData(createdAttendees, schedule)
+      const results = await mirrorAttendeesToTrainingData(createdAttendees, schedule, buByStaffId)
       await Promise.all(
         createdAttendees.map((attendee) => {
           const result = results.get(attendee.id)
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
               staffName: a.staffName,
               staffId: a.staffId,
               training: schedule.trainingName,
-              businessUnit: normalizeBUName(schedule.businessUnit),
+              businessUnit: normalizeBUName(buByStaffId.get(a.staffId) || schedule.businessUnit),
               month: MONTHS[schedule.startDate.getMonth()],
               year: new Date().getFullYear(),
               cost: schedule.costPerAttendee ?? 0,

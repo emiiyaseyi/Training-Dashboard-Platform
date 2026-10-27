@@ -9,13 +9,15 @@ export interface TrainingDataMirrorResult {
   message: string
 }
 
-function attendeeMirrorFields(attendee: TrainingScheduleAttendee, schedule: TrainingSchedule): MirrorField[] {
+// buByStaffId: each attendee's own roster Business Unit; the schedule's single BU is only the fallback
+// (a schedule can mix people from several BUs).
+function attendeeMirrorFields(attendee: TrainingScheduleAttendee, schedule: TrainingSchedule, buByStaffId?: Map<string, string>): MirrorField[] {
   const month = MONTHS[schedule.startDate.getMonth()]
   return [
     { label: 'Staff ID', candidates: ['staffno', 'employeeid', 'employeeno'], value: attendee.staffId },
     { label: 'Name', candidates: ['staffname', 'employeename', 'fullname'], value: attendee.staffName },
     { label: 'Training', candidates: ['trainingname', 'trainingtitle', 'course', 'programme'], value: schedule.trainingName },
-    { label: 'Business Units', candidates: ['businessunit', 'department', 'unit', 'bu'], value: schedule.businessUnit },
+    { label: 'Business Units', candidates: ['businessunit', 'department', 'unit', 'bu'], value: buByStaffId?.get(attendee.staffId) || schedule.businessUnit },
     { label: 'Month', candidates: ['period', 'trainingmonth'], value: month },
     { label: 'Cost', candidates: ['amount', 'fee', 'trainingcost', 'spend'], value: schedule.costPerAttendee ?? 0 },
     { label: 'Learning Hours', candidates: ['hoursoflearning', 'learningduration', 'traininghours', 'durationhours'], value: schedule.hours ?? 0 },
@@ -34,7 +36,8 @@ function attendeeMirrorFields(attendee: TrainingScheduleAttendee, schedule: Trai
 // version) so the caller can persist success/failure per-row exactly as before.
 export async function mirrorAttendeesToTrainingData(
   attendees: TrainingScheduleAttendee[],
-  schedule: TrainingSchedule
+  schedule: TrainingSchedule,
+  buByStaffId?: Map<string, string>
 ): Promise<Map<string, TrainingDataMirrorResult>> {
   const results = new Map<string, TrainingDataMirrorResult>()
   if (attendees.length === 0) return results
@@ -49,7 +52,7 @@ export async function mirrorAttendeesToTrainingData(
   try {
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
     const sheetName = config.trainingSheetName
-    await appendMirrorRows(connection.spreadsheetId, sheetName, connection.accessToken, attendees.map((a) => attendeeMirrorFields(a, schedule)))
+    await appendMirrorRows(connection.spreadsheetId, sheetName, connection.accessToken, attendees.map((a) => attendeeMirrorFields(a, schedule, buByStaffId)))
     const result = { attempted: true, success: true, message: `Synced to "${sheetName}".` }
     attendees.forEach((a) => results.set(a.id, result))
   } catch (err) {

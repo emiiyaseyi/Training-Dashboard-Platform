@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users, RefreshCw } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Trash2, Save, Loader2, X, Pencil, AlertTriangle, Plus, Calendar, Download, Upload, Users, RefreshCw, Send } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { NairaSign } from '@/components/ui/NairaSign'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -149,12 +149,20 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     preEnabled: true, post1Enabled: true, post2Enabled: true,
     additionalCc: '', additionalCcMode: 'all' as 'all' | 'individual',
   })
-  const [surveyDaysAfter, setSurveyDaysAfter] = useState({ preDaysBefore: 7, post1DaysAfter: 1, post2DaysAfter: 30 })
+  const [surveyDaysAfter, setSurveyDaysAfter] = useState({ preDaysBefore: 30, post1DaysAfter: 1, post2DaysAfter: 30 })
   // Whether to include the platform-wide default Cc on a stage's first send, if creating this
   // schedule triggers an immediate send because a stage is already due (see createSchedule below).
   const [newTrainingIncludeDefaultCc, setNewTrainingIncludeDefaultCc] = useState(true)
   const [newTrainingIncludeLineManagerCc, setNewTrainingIncludeLineManagerCc] = useState(true)
   const [createSendProgress, setCreateSendProgress] = useState<string | null>(null)
+  // "Specific session dates" mode — a training that runs between Start and End but only meets on
+  // certain days (e.g. every Tuesday and Thursday). The list is posted as sessionDates, which the
+  // Pre-Training email already prints as the schedule.
+  const [useMultipleSessions, setUseMultipleSessions] = useState(false)
+  const [sessionDates, setSessionDates] = useState<{ date: string; startTime: string; endTime: string }[]>([])
+  const [sessionWeekdays, setSessionWeekdays] = useState<number[]>([])
+  const [sessionDefaultStart, setSessionDefaultStart] = useState('')
+  const [sessionDefaultEnd, setSessionDefaultEnd] = useState('')
   // Only used when additionalCcMode === 'individual' — who (beyond the automatic line-manager Cc
   // and the platform-wide default Cc) each specific attendee should also Cc, picked from the same
   // roster search as the attendee picker itself.
@@ -311,7 +319,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     fetch('/api/capabilities').then((r) => r.json()).then((d) => setCapabilities(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/vendors').then((r) => r.json()).then((d) => setVendors(Array.isArray(d) ? d : [])).catch(() => {})
     fetch('/api/admin/survey-settings').then((r) => r.json()).then((d) => setSurveyDaysAfter({
-      preDaysBefore: d.preDaysBefore ?? 7, post1DaysAfter: d.post1DaysAfter ?? 1, post2DaysAfter: d.post2DaysAfter ?? 30,
+      preDaysBefore: d.preDaysBefore ?? 30, post1DaysAfter: d.post1DaysAfter ?? 1, post2DaysAfter: d.post2DaysAfter ?? 30,
     })).catch(() => {})
   }, [])
 
@@ -339,7 +347,32 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setNewTrainingIncludeDefaultCc(true)
     setNewTrainingIncludeLineManagerCc(true)
     setCreateSendProgress(null)
+    setUseMultipleSessions(false)
+    setSessionDates([])
+    setSessionWeekdays([])
+    setSessionDefaultStart('')
+    setSessionDefaultEnd('')
   }
+
+  // Fills the session list with every selected weekday between Start and End (inclusive).
+  const generateWeekdaySessions = () => {
+    if (!newTraining.startDate || !newTraining.endDate || sessionWeekdays.length === 0) return
+    const out: { date: string; startTime: string; endTime: string }[] = []
+    const cur = new Date(`${newTraining.startDate}T00:00:00`)
+    const end = new Date(`${newTraining.endDate}T00:00:00`)
+    while (cur <= end) {
+      if (sessionWeekdays.includes(cur.getDay())) {
+        const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+        out.push({ date: iso, startTime: sessionDefaultStart, endTime: sessionDefaultEnd })
+      }
+      cur.setDate(cur.getDate() + 1)
+    }
+    setSessionDates(out)
+  }
+
+  const validSessions = sessionDates.filter((s) => s.date)
+  const hasValidDates = useMultipleSessions ? validSessions.length > 0 : !!(newTraining.startDate && newTraining.endDate)
+  const attendeeBUs = Array.from(new Set(pendingAttendees.map((p) => p.businessUnit).filter(Boolean)))
 
   // First attendee picked sets the Business Unit automatically, same convention as Survey
   // Automation's own form — still editable via the dropdown in case a training intentionally
@@ -443,8 +476,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
     setBulkText('')
   }
 
-  const createSchedule = async () => {
-    if (!newTraining.trainingName.trim() || !newTraining.businessUnit || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0) return
+  // sendNow: send the Pre-Training email straight away, ignoring the "N days before start" window.
+  const createSchedule = async (sendNow = false) => {
+    if (!newTraining.trainingName.trim() || !newTraining.businessUnit || !hasValidDates || pendingAttendees.length === 0) return
     setCreatingSchedule(true)
     setCreateError('')
     try {
@@ -454,7 +488,9 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
         body: JSON.stringify({
           trainingName: newTraining.trainingName.trim(),
           businessUnit: newTraining.businessUnit,
-          startDate: newTraining.startDate, endDate: newTraining.endDate,
+          startDate: useMultipleSessions ? validSessions[0]?.date : newTraining.startDate,
+          endDate: useMultipleSessions ? validSessions[validSessions.length - 1]?.date : newTraining.endDate,
+          sessionDates: useMultipleSessions ? validSessions : [],
           hours: newTraining.hours ? Number(newTraining.hours) : undefined,
           costPerAttendee: newTraining.costPerAttendee ? Number(newTraining.costPerAttendee) : undefined,
           trainingType: newTraining.trainingType || undefined,
@@ -508,12 +544,14 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
       // ISN'T due yet is untouched here; the cron picks it up once it actually becomes due. Sent
       // in small batches (not one request for the whole list) so a large participant list shows
       // live progress instead of one long hang, and never risks the server's request timeout.
-      const daysUntilStart = (new Date(newTraining.startDate).getTime() - Date.now()) / 86400000
-      const daysSinceEnd = (Date.now() - new Date(newTraining.endDate).getTime()) / 86400000
+      const effStart = useMultipleSessions ? validSessions[0]?.date : newTraining.startDate
+      const effEnd = useMultipleSessions ? validSessions[validSessions.length - 1]?.date : newTraining.endDate
+      const daysUntilStart = (new Date(effStart).getTime() - Date.now()) / 86400000
+      const daysSinceEnd = (Date.now() - new Date(effEnd).getTime()) / 86400000
       const sendOptions = { skipDefaultCc: !newTrainingIncludeDefaultCc, skipLineManagerCc: !newTrainingIncludeLineManagerCc }
       const attendeeIds: string[] = (createdAttendees || []).map((a: { id: string }) => a.id)
       const dueStages: ('pre' | 'post1' | 'post2')[] = []
-      if (newTraining.preEnabled && daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3) dueStages.push('pre')
+      if (newTraining.preEnabled && (sendNow || (daysUntilStart <= surveyDaysAfter.preDaysBefore && daysUntilStart >= -3))) dueStages.push('pre')
       if (newTraining.post1Enabled && daysSinceEnd >= surveyDaysAfter.post1DaysAfter) dueStages.push('post1')
       if (newTraining.post2Enabled && daysSinceEnd >= surveyDaysAfter.post2DaysAfter) dueStages.push('post2')
 
@@ -1641,6 +1679,11 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
               {businessUnits.map((bu) => <option key={bu.id} value={bu.name}>{bu.name}</option>)}
             </select>
           </div>
+          {attendeeBUs.length > 1 && (
+            <p className="text-[11px] text-slate-500">
+              Attendees come from {attendeeBUs.length} business units ({attendeeBUs.join(', ')}). The dropdown is only the schedule&apos;s main unit — each attendee&apos;s own record is saved under their own business unit from the staff roster.
+            </p>
+          )}
 
           <div className="relative">
             <label className="block text-xs font-medium text-slate-600 mb-1.5">Attendees — search by name, email, or Staff ID (add as many as are going)</label>
@@ -1740,6 +1783,51 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
               Hours
               <input type="number" value={newTraining.hours} onChange={(e) => setNewTraining({ ...newTraining, hours: e.target.value })} className="w-full border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1" />
             </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={useMultipleSessions}
+                onChange={(e) => {
+                  setUseMultipleSessions(e.target.checked)
+                  if (e.target.checked && sessionDates.length === 0) setSessionDates([{ date: '', startTime: '', endTime: '' }])
+                }}
+              />
+              Training only meets on specific days (e.g. every Tuesday &amp; Thursday) — list the session dates
+            </label>
+            {useMultipleSessions && (
+              <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-white">
+                <p className="text-[11px] text-slate-500">
+                  Quick fill: set Start and End date above, pick the weekdays, then Generate (or add dates manually below). The first and last session become the training's start and end.
+                  These dates, with times, are listed in the Pre-Training email so participants know exactly when to attend.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                    <label key={d} className="flex items-center gap-1 text-xs text-slate-600">
+                      <input type="checkbox" checked={sessionWeekdays.includes(i)} onChange={(e) => setSessionWeekdays(e.target.checked ? [...sessionWeekdays, i] : sessionWeekdays.filter((x) => x !== i))} />
+                      {d}
+                    </label>
+                  ))}
+                  <input type="time" value={sessionDefaultStart} onChange={(e) => setSessionDefaultStart(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs" />
+                  <span className="text-xs text-slate-400">to</span>
+                  <input type="time" value={sessionDefaultEnd} onChange={(e) => setSessionDefaultEnd(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs" />
+                  <button type="button" onClick={generateWeekdaySessions} disabled={!newTraining.startDate || !newTraining.endDate || sessionWeekdays.length === 0} className="text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+                    Generate dates
+                  </button>
+                </div>
+                {sessionDates.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input type="date" value={s.date} onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, date: e.target.value } : row)))} className="border border-slate-300 rounded-md px-2 py-1 text-xs" />
+                    <input type="time" value={s.startTime} onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, startTime: e.target.value } : row)))} className="border border-slate-300 rounded-md px-2 py-1 text-xs" />
+                    <input type="time" value={s.endTime} onChange={(e) => setSessionDates(sessionDates.map((row, idx) => (idx === i ? { ...row, endTime: e.target.value } : row)))} className="border border-slate-300 rounded-md px-2 py-1 text-xs" />
+                    <button type="button" onClick={() => setSessionDates(sessionDates.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setSessionDates([...sessionDates, { date: '', startTime: '', endTime: '' }])} className="text-xs text-navy-600 hover:underline">+ Add a date</button>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label className="text-xs text-slate-500">
@@ -2023,12 +2111,21 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
           {createError && <p className="text-xs text-red-600">{createError}</p>}
           <div className="flex items-center gap-2">
             <button
-              onClick={createSchedule}
-              disabled={creatingSchedule || !newTraining.trainingName.trim() || !newTraining.businessUnit || !newTraining.startDate || !newTraining.endDate || pendingAttendees.length === 0}
+              onClick={() => createSchedule(false)}
+              disabled={creatingSchedule || !newTraining.trainingName.trim() || !newTraining.businessUnit || !hasValidDates || pendingAttendees.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {creatingSchedule ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               Create Schedule
+            </button>
+            <button
+              onClick={() => createSchedule(true)}
+              disabled={creatingSchedule || !newTraining.preEnabled || !newTraining.trainingName.trim() || !newTraining.businessUnit || !hasValidDates || pendingAttendees.length === 0}
+              title={newTraining.preEnabled ? 'Create the schedule and send the Pre-Training email right now, without waiting for the days-before window' : 'Pre-Training survey is switched off for this schedule'}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Send className="w-3.5 h-3.5" />
+              Create Schedule &amp; Send Now
             </button>
             <button onClick={resetNewTrainingForm} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
           </div>
