@@ -66,6 +66,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'talent-member-roster', label: 'Talent Member Roster', tab: 'people' },
   { id: 'talent-member-exemptions', label: 'Talent Member Exemptions', tab: 'people' },
   { id: 'survey-automation', label: 'Survey Automation', tab: 'communication' },
+  { id: 'survey-timing-settings', label: 'Survey Email Timing & Reminders (days before start, reminders, expiry)', tab: 'communication' },
   { id: 'smtp-settings', label: 'SMTP / Email Settings', tab: 'communication' },
   { id: 'security-settings', label: 'Security Settings', tab: 'communication' },
   { id: 'audit-log', label: 'Audit Trail', tab: 'communication' },
