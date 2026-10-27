@@ -1800,7 +1800,7 @@ export function TrainingRecordsTab({ initialEditRecordId, initialSearchQuery }: 
             {useMultipleSessions && (
               <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-white">
                 <p className="text-[11px] text-slate-500">
-                  Quick fill: set Start and End date above, pick the weekdays, then Generate (or add dates manually below). The first and last session become the training's start and end.
+                  Quick fill: set Start and End date above, pick the weekdays, then Generate (or add dates manually below). The first and last session become the training&apos;s start and end.
                   These dates, with times, are listed in the Pre-Training email so participants know exactly when to attend.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
