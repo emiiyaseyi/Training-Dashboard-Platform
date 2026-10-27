@@ -57,18 +57,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             sheetSync.reason = `Manager "${record.lineManagerStaffId}" not found in the roster or comprehensive list.`
           } else {
             const connection = await connectToSpreadsheet(config.spreadsheetUrl)
-            const result = await updateRowByKey(
-              connection.spreadsheetId,
-              config.comprehensiveStaffListSheetName,
-              connection.accessToken,
-              ['staffid', 'staffno', 'employeeid', 'employeeno', 'id'],
-              record.staffId,
-              [
-                { columnCandidates: ['linemanagerid', 'linemanagerstaffid'], value: manager.staffId },
-                { columnCandidates: ['linemanagername'], value: managerDisplayName(manager) },
-                { columnCandidates: ['linemanageremail'], value: manager.email || '' },
-              ]
-            )
+            const managerFields = [
+              { columnCandidates: ['linemanagerid', 'linemanagerstaffid'], value: manager.staffId },
+              { columnCandidates: ['linemanagername'], value: managerDisplayName(manager) },
+              { columnCandidates: ['linemanageremail'], value: manager.email || '' },
+            ]
+            const keyCandidates = ['staffid', 'staffno', 'employeeid', 'employeeno', 'id']
+            const result = await updateRowByKey(connection.spreadsheetId, config.comprehensiveStaffListSheetName, connection.accessToken, keyCandidates, record.staffId, managerFields)
+            // The scheduled Staff Roster sync re-imports its own tab and treats any difference from
+            // the database as a change — so if that tab still names the OLD manager, it would
+            // overwrite this edit on the next run. Write the same correction there too (best effort;
+            // a tab that has no matching row/columns just isn't touched).
+            const rosterTab = config.rosterSheetName?.trim()
+            if (rosterTab && rosterTab.toLowerCase() !== config.comprehensiveStaffListSheetName.trim().toLowerCase()) {
+              try {
+                await updateRowByKey(connection.spreadsheetId, rosterTab, connection.accessToken, keyCandidates, record.staffId, managerFields)
+              } catch (rosterErr) {
+                console.error('[admin/staff-quality/[id]] roster tab line manager write-back failed', rosterErr)
+              }
+            }
             if (!result.rowFound) {
               sheetSync.reason = `Staff ID "${record.staffId}" not found as a row in the "${config.comprehensiveStaffListSheetName}" tab.`
             } else if (result.missingColumns.length > 0) {
