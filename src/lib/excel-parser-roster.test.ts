@@ -56,6 +56,14 @@ describe('parseRosterExcel — staff list columns', () => {
     expect(rows[0].phone).toBe('08033247996')
   })
 
+  it('restores the leading zero a spreadsheet drops from a phone number, and reads international form', () => {
+    for (const [input, expected] of [['8033247996', '08033247996'], ['+2348033247996', '08033247996'], ['08033247996', '08033247996']]) {
+      const r2 = [...row]
+      r2[HEADERS.indexOf('Phone Number')] = input
+      expect(parseRosterExcel(buffer(r2)).rows[0].phone).toBe(expected)
+    }
+  })
+
   it('reads day-first dates as written (27/10/1988 and 05/12/2023 are not month-first)', () => {
     const { rows } = parseRosterExcel(buffer(row))
     expect(rows[0].dateOfBirth?.slice(0, 10)).toBe('1988-10-27')

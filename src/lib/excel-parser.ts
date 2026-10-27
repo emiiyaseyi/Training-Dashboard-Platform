@@ -473,6 +473,11 @@ function rosterText(val: unknown): string {
 function rosterPhone(val: unknown): string {
   const s = rosterText(val)
   if (/^-\d{8,11}$/.test(s)) return '0' + String(234 - Number(s))
+  // A sheet that stores the number as a number drops the leading zero (08033247996 -> 8033247996), and
+  // the international form (+2348033247996) is the same number — both become the local 11-digit form.
+  const digits = s.replace(/\D/g, '')
+  if (/^[789]\d{9}$/.test(digits)) return '0' + digits
+  if (/^234[789]\d{9}$/.test(digits)) return '0' + digits.slice(3)
   return s
 }
 
