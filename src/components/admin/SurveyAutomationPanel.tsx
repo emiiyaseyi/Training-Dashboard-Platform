@@ -1075,9 +1075,10 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       {/* Survey forms are native to the platform — no Google Form links needed. Submissions
           write to the database and optionally mirror into a tab on the spreadsheet already
           configured under Live Data Source. */}
+      <div id="survey-settings" className="scroll-mt-4">
       <SectionCard
         icon={Link2}
-        title="Survey Mirror Sheets"
+        title="Survey Settings — Send Timing, Reminders & Mirror Sheets"
         description="Forms are hosted in the platform — every submission is saved here. Set a tab name below to also mirror a copy into that tab (in the spreadsheet configured under Live Data Source). Leave blank to skip mirroring for that stage. Pre and Post-1 are filled by the employee; Post-2 by their line manager."
       >
         {loadingSettings ? (
@@ -1226,6 +1227,7 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
           </div>
         )}
       </SectionCard>
+      </div>
 
       {/* Training schedules */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5">
