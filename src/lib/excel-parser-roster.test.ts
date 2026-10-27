@@ -44,7 +44,7 @@ describe('parseRosterExcel — staff list columns', () => {
     expect(r.stateOfOrigin).toBe('Ogun')
     expect(r.geoPoliticalZone).toBe('South West')
     expect(r.personalEmail).toBe('a@gmail.com')
-    expect(r.phone).toBe('+234-8100000003')
+    expect(r.phone).toBe('08100000003') // international form -> local 11-digit form
   })
 
   it('turns "-" placeholders into empty values and repairs phone numbers a spreadsheet turned into a sum', () => {
