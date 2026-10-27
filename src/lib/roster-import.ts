@@ -29,6 +29,14 @@ export interface RosterImportPlan {
   error?: string
 }
 
+// Staff ID key for matching: punctuation/case ignored AND the number padded to 4 digits, so a sheet
+// that says MSBL-0110 matches a stored MSBL-110 (the same person) instead of becoming a duplicate.
+function normKey(id: string | null | undefined): string {
+  const k = normalizeStaffIdKey(id)
+  const m = k.match(/^([A-Z]+)(\d+)$/)
+  return m ? m[1] + m[2].padStart(4, '0') : k
+}
+
 type Existing = Awaited<ReturnType<typeof prisma.staffRosterRecord.findMany>>[number]
 
 const FIELD_LABELS: Record<string, string> = {
@@ -122,7 +130,7 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
   const issues: RosterImportIssue[] = []
   const byKey = new Map<string, RosterRow[]>()
   for (const r of rows) {
-    const key = normalizeStaffIdKey(r.staffId)
+    const key = normKey(r.staffId)
     if (!key) continue
     if (!byKey.has(key)) byKey.set(key, [])
     byKey.get(key)!.push(r)
@@ -130,7 +138,7 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
 
   const all = await prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' } })
   const latest = new Map<string, Existing>()
-  for (const r of all) latest.set(normalizeStaffIdKey(r.staffId), r)
+  for (const r of all) latest.set(normKey(r.staffId), r)
 
   const toCreate: RosterRow[] = []
   const toUpdate: Evaluated['toUpdate'] = []
@@ -153,7 +161,7 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
     let managerOk = true
     const mgr = row.lineManagerStaffId.trim()
     if (mgr) {
-      const mgrKey = normalizeStaffIdKey(mgr)
+      const mgrKey = normKey(mgr)
       if (mgrKey === key) { managerOk = false; issues.push({ staffId: row.staffId, name, problem: 'Line manager is the person themself — manager not imported.' }) }
       else if (!byKey.has(mgrKey) && !latest.has(mgrKey)) { managerOk = false; issues.push({ staffId: row.staffId, name, problem: `Line manager "${mgr}" is not a Staff ID in the sheet (is it a name instead of an ID?) — manager not imported.` }) }
     } else {
