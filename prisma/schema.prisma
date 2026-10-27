@@ -401,6 +401,19 @@ model StaffRosterRecord {
   role              String?
   department        String?
   employmentType    String? // "Full-Time" | "Part-Time" | "Intern" | "Contract" — set via the Employees page, not part of the original Excel upload columns
+  // Staff list profile fields — filled by the staff list import (Admin -> People & Talent)
+  dateOfBirth       DateTime?
+  payGroup          String?
+  staffCategory     String? // Front Office | Middle Office | Back Office | Not Applicable
+  location          String?
+  maritalStatus     String?
+  stateOfOrigin     String?
+  geoPoliticalZone  String?
+  religion          String?
+  sex               String?
+  endDate           DateTime?
+  personalEmail     String?
+  phone             String?
   active            Boolean   @default(true) // toggled via "Deactivate"/"Reactivate" on the Employees page — a leaver is deactivated, not deleted, so historical training/analytics referencing them stays intact
   employmentDate    DateTime?
   confirmed         Boolean   @default(true)

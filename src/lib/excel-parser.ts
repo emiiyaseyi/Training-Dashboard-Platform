@@ -73,6 +73,20 @@ export interface RosterRow {
   employmentDate: string | null // ISO date string, or null if unparseable
   confirmed: boolean
   active: boolean // false when the sheet's status column reads as exited/resigned/terminated
+  // Staff list profile fields (all optional — older sheets and uploads don't have them)
+  dateOfBirth?: string | null
+  endDate?: string | null
+  employmentType?: string
+  payGroup?: string
+  staffCategory?: string
+  location?: string
+  maritalStatus?: string
+  stateOfOrigin?: string
+  geoPoliticalZone?: string
+  religion?: string
+  sex?: string
+  personalEmail?: string
+  phone?: string
 }
 
 export interface ManagerReviewRow {
@@ -115,7 +129,13 @@ function toFloat(val: unknown): number {
 function parseExcelDate(val: unknown): string | null {
   if (val === '' || val === null || val === undefined) return null
   let d: Date
-  if (typeof val === 'number') {
+  const dm = typeof val === 'string' ? val.trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/) : null
+  if (dm) {
+    // Nigerian day-first format. new Date('27/10/1988') is invalid and new Date('05/12/2001') is read
+    // as May 12th, so day-first text is parsed explicitly.
+    d = new Date(Date.UTC(Number(dm[3]), Number(dm[2]) - 1, Number(dm[1])))
+    if (d.getUTCMonth() !== Number(dm[2]) - 1) return null
+  } else if (typeof val === 'number') {
     // Excel serial date epoch: Dec 30 1899
     const ms = Math.round((val - 25569) * 86400 * 1000)
     d = new Date(ms)
@@ -475,6 +495,19 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
     employmentStatus: findHeader(headers, ['employmentstatus', 'exitstatus', 'staffactivestatus', 'activestatus']),
     email:          findHeader(headers, ['email', 'emailaddress', 'staffemail', 'workemail']),
     lineManager:    findHeader(headers, ['linemanagerstaffid', 'linemanagerid', 'reportsto', 'managerstaffid', 'manager', 'linemanager', 'supervisor']),
+    dob:            findHeader(headers, ['dateofbirth', 'dob', 'birthdate']),
+    endDate:        findHeader(headers, ['enddate', 'exitdate', 'dateofexit']),
+    employmentType: findHeader(headers, ['typeofemployment', 'employmenttype']),
+    payGroup:       findHeader(headers, ['paygroup']),
+    staffCategory:  findHeader(headers, ['staffcategory']),
+    location:       findHeader(headers, ['location', 'locations']),
+    maritalStatus:  findHeader(headers, ['maritalstatus']),
+    stateOfOrigin:  findHeader(headers, ['stateoforigin']),
+    geoZone:        findHeader(headers, ['geopoliticalzone']),
+    religion:       findHeader(headers, ['religion']),
+    sex:            findHeader(headers, ['sex', 'gender']),
+    personalEmail:  findHeader(headers, ['personalemailaddress', 'personalemail']),
+    phone:          findHeader(headers, ['phonenumber', 'mobilephone', 'phone']),
   }
 
   if (!col.firstName) errors.push('Could not find a "First Name" column.')
@@ -509,6 +542,19 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
       employmentDate,
       confirmed:      parseConfirmed(r[col.confirmed ?? '']),
       active:         parseActiveFromStatus(r[col.employmentStatus ?? col.confirmed ?? '']),
+      dateOfBirth:    col.dob ? parseExcelDate(r[col.dob]) : null,
+      endDate:        col.endDate ? parseExcelDate(r[col.endDate]) : null,
+      employmentType: normalise(r[col.employmentType ?? ''] ?? ''),
+      payGroup:       normalise(r[col.payGroup ?? ''] ?? ''),
+      staffCategory:  normalise(r[col.staffCategory ?? ''] ?? ''),
+      location:       normalise(r[col.location ?? ''] ?? ''),
+      maritalStatus:  normalise(r[col.maritalStatus ?? ''] ?? ''),
+      stateOfOrigin:  normalise(r[col.stateOfOrigin ?? ''] ?? ''),
+      geoPoliticalZone: normalise(r[col.geoZone ?? ''] ?? ''),
+      religion:       normalise(r[col.religion ?? ''] ?? ''),
+      sex:            normalise(r[col.sex ?? ''] ?? ''),
+      personalEmail:  normalise(r[col.personalEmail ?? ''] ?? '').toLowerCase(),
+      phone:          normalise(r[col.phone ?? ''] ?? ''),
     })
   })
 

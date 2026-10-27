@@ -80,6 +80,25 @@ function diff(row: RosterRow, cur: Existing, managerOk: boolean): { data: Record
   if (row.employmentDate && row.employmentDate.slice(0, 10) !== iso(cur.employmentDate)) {
     set('employmentDate', new Date(row.employmentDate), cur.employmentDate, (v) => (v instanceof Date ? iso(v) : String(v ?? '')))
   }
+  const TEXT_FIELDS = [
+    ['employmentType', 'Type of employment'], ['payGroup', 'Pay group'], ['staffCategory', 'Staff category'], ['location', 'Location'],
+    ['maritalStatus', 'Marital status'], ['stateOfOrigin', 'State of origin'], ['geoPoliticalZone', 'Geo-political zone'],
+    ['religion', 'Religion'], ['sex', 'Sex'], ['personalEmail', 'Personal email'], ['phone', 'Phone'],
+  ] as const
+  for (const [field, label] of TEXT_FIELDS) {
+    const next = (row[field] || '').trim()
+    if (next && next !== (cur[field] || '')) {
+      FIELD_LABELS[field] = label
+      set(field, next, cur[field])
+    }
+  }
+  for (const [field, label] of [['dateOfBirth', 'Date of birth'], ['endDate', 'End date']] as const) {
+    const next = row[field]
+    if (next && next.slice(0, 10) !== iso(cur[field])) {
+      FIELD_LABELS[field] = label
+      set(field, new Date(next), cur[field], (v) => (v instanceof Date ? iso(v) : String(v ?? '')))
+    }
+  }
   set('confirmed', row.confirmed, cur.confirmed)
   set('active', row.active, cur.active)
   return { data, changes }
