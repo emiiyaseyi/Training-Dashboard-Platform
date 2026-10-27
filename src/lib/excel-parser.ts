@@ -462,6 +462,20 @@ export function parseKSSExcel(buffer: Buffer): ParseResult<KSSRow> {
 
 // ── Staff Roster (feeds only the "Yet to Attend Training" report) ───────────
 
+// Roster text cells that hold a placeholder instead of a value ("-", "N/A") are treated as empty.
+function rosterText(val: unknown): string {
+  const s = normalise(val)
+  return ['-', '--', '—', 'n/a', 'na', 'none', 'nil'].includes(s.toLowerCase()) ? '' : s
+}
+
+// A phone like "+234-08033247996" typed into a spreadsheet cell is read as the formula 234 - 8033247996
+// and shows as -8033247762. Undo that: the original digits are 234 minus the (negative) value.
+function rosterPhone(val: unknown): string {
+  const s = rosterText(val)
+  if (/^-\d{8,11}$/.test(s)) return '0' + String(234 - Number(s))
+  return s
+}
+
 export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
   const workbook = XLSX.read(buffer, { type: 'buffer' })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -532,7 +546,7 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
     rows.push({
       staffId:        staffId || `UNKNOWN_${i + 1}`,
       firstName,
-      middleName:     normalise(r[col.middleName ?? ''] ?? ''),
+      middleName:     rosterText(r[col.middleName ?? '']),
       lastName,
       email:              normalise(r[col.email ?? ''] ?? '').toLowerCase(),
       lineManagerStaffId: normalise(r[col.lineManager ?? ''] ?? '').toUpperCase(),
@@ -544,17 +558,17 @@ export function parseRosterExcel(buffer: Buffer): ParseResult<RosterRow> {
       active:         parseActiveFromStatus(r[col.employmentStatus ?? col.confirmed ?? '']),
       dateOfBirth:    col.dob ? parseExcelDate(r[col.dob]) : null,
       endDate:        col.endDate ? parseExcelDate(r[col.endDate]) : null,
-      employmentType: normalise(r[col.employmentType ?? ''] ?? ''),
-      payGroup:       normalise(r[col.payGroup ?? ''] ?? ''),
-      staffCategory:  normalise(r[col.staffCategory ?? ''] ?? ''),
-      location:       normalise(r[col.location ?? ''] ?? ''),
-      maritalStatus:  normalise(r[col.maritalStatus ?? ''] ?? ''),
-      stateOfOrigin:  normalise(r[col.stateOfOrigin ?? ''] ?? ''),
-      geoPoliticalZone: normalise(r[col.geoZone ?? ''] ?? ''),
-      religion:       normalise(r[col.religion ?? ''] ?? ''),
-      sex:            normalise(r[col.sex ?? ''] ?? ''),
-      personalEmail:  normalise(r[col.personalEmail ?? ''] ?? '').toLowerCase(),
-      phone:          normalise(r[col.phone ?? ''] ?? ''),
+      employmentType: rosterText(r[col.employmentType ?? '']),
+      payGroup:       rosterText(r[col.payGroup ?? '']),
+      staffCategory:  rosterText(r[col.staffCategory ?? '']),
+      location:       rosterText(r[col.location ?? '']),
+      maritalStatus:  rosterText(r[col.maritalStatus ?? '']),
+      stateOfOrigin:  rosterText(r[col.stateOfOrigin ?? '']),
+      geoPoliticalZone: rosterText(r[col.geoZone ?? '']),
+      religion:       rosterText(r[col.religion ?? '']),
+      sex:            rosterText(r[col.sex ?? '']),
+      personalEmail:  rosterText(r[col.personalEmail ?? '']).toLowerCase(),
+      phone:          rosterPhone(r[col.phone ?? '']),
     })
   })
 

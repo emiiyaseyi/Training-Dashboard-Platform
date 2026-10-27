@@ -47,6 +47,15 @@ describe('parseRosterExcel — staff list columns', () => {
     expect(r.phone).toBe('+234-8100000003')
   })
 
+  it('turns "-" placeholders into empty values and repairs phone numbers a spreadsheet turned into a sum', () => {
+    const r2 = [...row]
+    r2[HEADERS.indexOf('MIDDLE NAME')] = '-'
+    r2[HEADERS.indexOf('Phone Number')] = '-8033247762' // what "+234-08033247996" becomes when pasted into a cell
+    const { rows } = parseRosterExcel(buffer(r2))
+    expect(rows[0].middleName).toBe('')
+    expect(rows[0].phone).toBe('08033247996')
+  })
+
   it('reads day-first dates as written (27/10/1988 and 05/12/2023 are not month-first)', () => {
     const { rows } = parseRosterExcel(buffer(row))
     expect(rows[0].dateOfBirth?.slice(0, 10)).toBe('1988-10-27')

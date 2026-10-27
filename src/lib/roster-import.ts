@@ -119,13 +119,37 @@ interface Evaluated {
   notInSheetActive: { id: string; staffId: string; name: string }[]
 }
 
-async function evaluate(tabOverride?: string): Promise<Evaluated> {
+// Chosen by the admin in the preview: people to leave out of the import entirely, values typed in to
+// fix a missing email / line manager before importing, and people who are not in the sheet but must
+// stay active.
+export interface RosterImportOptions {
+  exclude?: string[]
+  overrides?: Record<string, { email?: string; lineManagerStaffId?: string }>
+  keepActive?: string[]
+}
+
+async function evaluate(tabOverride?: string, opts: RosterImportOptions = {}): Promise<Evaluated> {
   const empty: Evaluated = {
     plan: { sheetName: '', totalRows: 0, newStaff: 0, changedStaff: 0, unchangedStaff: 0, skippedStaff: 0, notInSheet: [], issues: [], sampleChanges: [] },
     toCreate: [], toUpdate: [], notInSheetActive: [],
   }
-  const { sheetName, rows, error } = await readSheetRows(tabOverride)
+  const { sheetName, rows: sheetRows, error } = await readSheetRows(tabOverride)
   if (error) return { ...empty, plan: { ...empty.plan, sheetName, error } }
+
+  const excludedKeys = new Set((opts.exclude || []).map((id) => normKey(id)))
+  const keepActiveKeys = new Set((opts.keepActive || []).map((id) => normKey(id)))
+  const overrides = new Map(Object.entries(opts.overrides || {}).map(([id, o]) => [normKey(id), o]))
+  const rows = sheetRows
+    .filter((r) => !excludedKeys.has(normKey(r.staffId)))
+    .map((r) => {
+      const o = overrides.get(normKey(r.staffId))
+      if (!o) return r
+      return {
+        ...r,
+        email: o.email?.trim() ? o.email.trim().toLowerCase() : r.email,
+        lineManagerStaffId: o.lineManagerStaffId?.trim() ? o.lineManagerStaffId.trim().toUpperCase() : r.lineManagerStaffId,
+      }
+    })
 
   const issues: RosterImportIssue[] = []
   const byKey = new Map<string, RosterRow[]>()
@@ -165,9 +189,11 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
       if (mgrKey === key) { managerOk = false; issues.push({ staffId: row.staffId, name, problem: 'Line manager is the person themself — manager not imported.' }) }
       else if (!byKey.has(mgrKey) && !latest.has(mgrKey)) { managerOk = false; issues.push({ staffId: row.staffId, name, problem: `Line manager "${mgr}" is not a Staff ID in the sheet (is it a name instead of an ID?) — manager not imported.` }) }
     } else {
-      issues.push({ staffId: row.staffId, name, problem: 'No line manager on this row.' })
+      // The top person (Group MD / CEO) legitimately has no line manager.
+      if (!/managing director|gmd|ceo/i.test(row.role)) issues.push({ staffId: row.staffId, name, problem: 'No line manager on this row.' })
     }
-    if (!row.email.trim()) issues.push({ staffId: row.staffId, name, problem: 'No email address.' })
+    // Meri-movers have no company email address — not a data problem.
+    if (!row.email.trim() && !/meri[\s-]*mover/i.test(row.role)) issues.push({ staffId: row.staffId, name, problem: 'No email address.' })
     if (!row.businessUnit.trim()) issues.push({ staffId: row.staffId, name, problem: 'No business unit.' })
 
     const cur = latest.get(key)
@@ -180,7 +206,7 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
 
   const notInSheetActive: Evaluated['notInSheetActive'] = []
   for (const [key, cur] of latest) {
-    if (!byKey.has(key) && cur.active) notInSheetActive.push({ id: cur.id, staffId: cur.staffId, name: fullName(cur) })
+    if (!byKey.has(key) && !excludedKeys.has(key) && !keepActiveKeys.has(key) && cur.active) notInSheetActive.push({ id: cur.id, staffId: cur.staffId, name: fullName(cur) })
   }
 
   return {
@@ -192,12 +218,12 @@ async function evaluate(tabOverride?: string): Promise<Evaluated> {
   }
 }
 
-export async function previewRosterImport(tab?: string): Promise<RosterImportPlan> {
-  return (await evaluate(tab)).plan
+export async function previewRosterImport(tab?: string, opts: RosterImportOptions = {}): Promise<RosterImportPlan> {
+  return (await evaluate(tab, opts)).plan
 }
 
-export async function applyRosterImport(tab?: string, deactivateMissing = false): Promise<RosterImportPlan & { applied: { created: number; updated: number; deactivated: number } }> {
-  const ev = await evaluate(tab)
+export async function applyRosterImport(tab?: string, deactivateMissing = false, opts: RosterImportOptions = {}): Promise<RosterImportPlan & { applied: { created: number; updated: number; deactivated: number } }> {
+  const ev = await evaluate(tab, opts)
   const none = { created: 0, updated: 0, deactivated: 0 }
   if (ev.plan.error) return { ...ev.plan, applied: none }
 
