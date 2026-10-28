@@ -66,6 +66,7 @@ export default function YetToAttendPage() {
             Role: s.role ?? '',
             Department: s.department ?? '',
             'Employment Date': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString() : '',
+            'Exit Date': s.exitDate ? new Date(s.exitDate).toLocaleDateString() : '',
           })),
         }],
         'yet_to_attend_training'
@@ -96,7 +97,7 @@ export default function YetToAttendPage() {
     <div className="flex flex-col">
       <PageHeader
         title="Yet to Attend Training"
-        subtitle="Confirmed staff on the roster with no training record in the selected period"
+        subtitle="Everyone employed during the selected period (except Meri Movers) with no training record"
         actions={
           <div className="flex items-center gap-2">
             <FilterBar availableYears={data.availableYears} value={filter} onChange={setFilter} />
@@ -117,9 +118,9 @@ export default function YetToAttendPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard
-                title="Confirmed Staff"
+                title="Total Staff in Period"
                 value={data.totalConfirmedStaff.toLocaleString()}
-                subtitle="On roster, excludes unconfirmed, exited, interns, and Meri Movers"
+                subtitle="Active staff plus anyone who left during the period; includes interns and unconfirmed; excludes Meri Movers"
                 icon={Users}
                 color="blue"
               />
@@ -148,21 +149,21 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Coverage"
                 value={`${data.overallCoverageRatio.toFixed(1)}%`}
-                subtitle="Share of confirmed staff trained"
+                subtitle="Share of staff in the period trained"
                 icon={UserCheck}
                 color="purple"
               />
               <KPICard
                 title="Yet to be Confirmed"
                 value={data.unconfirmedStaffCount.toLocaleString()}
-                subtitle="On roster, confirmation pending — excluded from the numbers above"
+                subtitle="Confirmation pending — included in the numbers above"
                 icon={Clock}
                 color="amber"
               />
               <KPICard
                 title="Interns"
                 value={data.internStaffCount.toLocaleString()}
-                subtitle="Intern, NYSC, or Graduate Intern — excluded from the numbers above"
+                subtitle="Intern, NYSC, or Graduate Intern — included in the numbers above"
                 icon={GraduationCap}
                 color="blue"
               />
@@ -180,7 +181,7 @@ export default function YetToAttendPage() {
                 title="Yet to Attend by Business Unit"
                 rows={data.byBU.map((b) => ({
                   'Business Unit': b.businessUnit,
-                  'Confirmed Staff': b.totalConfirmed,
+                  'Staff in Period': b.totalConfirmed,
                   Attended: b.attended,
                   'Coming Up': b.upcoming,
                   'Yet to Attend': b.yetToAttend,
@@ -248,9 +249,14 @@ export default function YetToAttendPage() {
                     header: 'Employment Date',
                     render: (r) => (r.employmentDate ? new Date(r.employmentDate as string).toLocaleDateString() : '—'),
                   },
+                  {
+                    key: 'exitDate',
+                    header: 'Exit Date',
+                    render: (r) => (r.exitDate ? new Date(r.exitDate as string).toLocaleDateString() : '—'),
+                  },
                 ]}
                 data={filteredList as unknown as Record<string, unknown>[]}
-                emptyMessage="No staff match the current filters — everyone confirmed has attended training in this period."
+                emptyMessage="No staff match the current filters — everyone has attended training in this period."
               />
             </div>
           </>

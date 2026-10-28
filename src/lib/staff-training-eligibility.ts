@@ -75,3 +75,38 @@ export function latestRosterSnapshot<T extends { staffId: string; createdAt: Dat
   for (const r of sorted) latestByStaffId.set(r.staffId, r)
   return [...latestByStaffId.values()]
 }
+
+// Yet to Attend Training's own pool — wider than the coverage rule above on purpose: everyone
+// except Meri Movers who was on the books at some point during the period viewed, whether or not
+// they're confirmed, an intern, or a late-in-the-year hire. "On the books" means hired on/before
+// the period's end and not exited before its start (exit = StaffRosterRecord.endDate). An "All
+// Time" view (no bounds) is just the people currently active.
+export interface PeriodBounds { start: Date | null; end: Date | null }
+
+export function periodBoundsForFilter(filter: PeriodFilter, monthIndex: (m: string) => number, now = new Date()): PeriodBounds {
+  const year = filter.year ?? now.getUTCFullYear()
+  if (filter.mode === 'all') return { start: null, end: null }
+  if (filter.mode === 'year') return { start: new Date(Date.UTC(year, 0, 1)), end: new Date(Date.UTC(year, 11, 31, 23, 59, 59)) }
+  if (filter.mode === 'ytd') return { start: new Date(Date.UTC(year, 0, 1)), end: now }
+  if (filter.mode === 'range' && filter.fromMonth && filter.toMonth) {
+    const a = monthIndex(filter.fromMonth)
+    const b = monthIndex(filter.toMonth)
+    const lo = Math.min(a, b)
+    const hi = Math.max(a, b)
+    return { start: new Date(Date.UTC(year, lo, 1)), end: new Date(Date.UTC(year, hi + 1, 0, 23, 59, 59)) }
+  }
+  return { start: null, end: null }
+}
+
+export function isInYetToAttendPool(
+  staff: Pick<StaffRosterRecord, 'active' | 'role' | 'employmentDate' | 'endDate'>,
+  bounds: PeriodBounds,
+): boolean {
+  if (isMeriMover(staff)) return false
+  if (bounds.end && staff.employmentDate && staff.employmentDate > bounds.end) return false // joined after the period
+  if (staff.active) return true
+  // Exited: only counts if they were still here at some point in the period. No recorded exit date
+  // means we can't say when they left, so they're left out rather than guessed at.
+  if (!bounds.start || !staff.endDate) return false
+  return staff.endDate >= bounds.start
+}

@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { MONTHS, type PeriodFilter } from '@/lib/filter-types'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 import { buildFullName } from '@/lib/staff-name'
-import { isEligibleForTrainingCoverage, isInternLike, isMeriMover, effectiveYearForCoverage } from '@/lib/staff-training-eligibility'
+import { isInYetToAttendPool, periodBoundsForFilter, isInternLike, isMeriMover } from '@/lib/staff-training-eligibility'
 
 // Kept intentionally separate from analytics.ts in its attendance logic — this report reads
 // TrainingRecord (and, for the same reason Talent Members unions two sources — see
@@ -32,6 +32,7 @@ export interface YetToAttendStaff {
   role: string | null
   department: string | null
   employmentDate: string | null
+  exitDate: string | null // set when this person left during/after the period — still counted, since they were employed in it
 }
 
 function fullName(r: { firstName: string; middleName: string | null; lastName: string }): string {
@@ -110,9 +111,11 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   // Movers get their own informational cards below instead, counted from the active roster
   // regardless of confirmation status, since "how many Meri Movers do we have" doesn't depend on
   // whether they happen to be confirmed.
-  const coverageYear = effectiveYearForCoverage(filter)
+  // Pool = everyone on the books during the period except Meri Movers (confirmed or not, interns
+  // and late-year hires included; leavers count if they were still here at some point in it).
+  const bounds = periodBoundsForFilter(filter, (m) => MONTHS.indexOf(m as (typeof MONTHS)[number]))
 
-  let roster = latestRoster.filter((r) => isEligibleForTrainingCoverage(r, coverageYear))
+  let roster = latestRoster.filter((r) => isInYetToAttendPool(r, bounds))
   if (buScope) roster = roster.filter((r) => buScope.includes(r.businessUnit))
 
   let scopedRoster = latestRoster.filter((r) => r.active)
@@ -179,6 +182,7 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
         role: staff.role,
         department: staff.department,
         employmentDate: staff.employmentDate ? staff.employmentDate.toISOString() : null,
+        exitDate: !staff.active && staff.endDate ? staff.endDate.toISOString() : null,
       })
     }
   }
