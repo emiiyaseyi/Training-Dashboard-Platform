@@ -1153,7 +1153,15 @@ export default function PDPPage() {
                                 {(() => {
                                   const oldFlow = s.validations.map((v) => ({ managerName: v.managerName || 'Manager', done: !!v.respondedAt }))
                                   const newFlow = (needsReviewEntriesByStaffId.get(s.staffId) ?? []).map((e) => ({ managerName: e.managerName, done: !!e.submittedAt }))
-                                  const rows = [...oldFlow, ...newFlow]
+                                  // The same manager can appear in both flows (an old per-person validation
+                                  // link plus the newer team-review entry) — show each manager once, done if either is.
+                                  const byManager = new Map<string, { managerName: string; done: boolean }>()
+                                  for (const r of [...oldFlow, ...newFlow]) {
+                                    const key = r.managerName.trim().toLowerCase()
+                                    const prev = byManager.get(key)
+                                    byManager.set(key, { managerName: r.managerName, done: !!prev?.done || r.done })
+                                  }
+                                  const rows = [...byManager.values()]
                                   if (rows.length === 0) return '—'
                                   return rows.map((r, i) => (
                                     <span key={i}>

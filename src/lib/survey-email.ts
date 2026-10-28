@@ -13,6 +13,21 @@ export function surveyRecipientRole(stage: SurveyStage): 'employee' | 'manager' 
   return stage === 'post2' ? 'manager' : 'employee'
 }
 
+// What to call the event in the email. A schedule whose Training Type is a Conference, Workshop,
+// Seminar or Summit is not "a training" to the attendee, so the copy uses that word instead
+// (matched anywhere in the type name, e.g. "External Conference"); everything else stays "training".
+const EVENT_NOUNS = ['conference', 'workshop', 'seminar', 'summit']
+export function eventNounOf(trainingType?: string | null): string {
+  const t = (trainingType ?? '').toLowerCase()
+  return EVENT_NOUNS.find((n) => t.includes(n)) ?? 'training'
+}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+export function stageLabelFor(stage: SurveyStage, trainingType?: string | null): string {
+  const n = cap(eventNounOf(trainingType))
+  return stage === 'pre' ? `Pre-${n} Survey` : stage === 'post1' ? `Post-${n} Survey` : `${n} Impact Survey`
+}
+
 function firstNameOf(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] || fullName
 }
@@ -80,11 +95,14 @@ export function buildSurveyEmail(input: {
 }): { subject: string; html: string } {
   const { stage, recipientName, employeeName, trainingName, formUrl, startDate, endDate, trainingType, trainingMode, location, meetingLink, isReminder, isHistorical, detailOnly, sessionDates } = input
   const firstName = firstNameOf(recipientName)
+  const noun = eventNounOf(trainingType)
+  const Noun = cap(noun)
+  const stageLabel = stageLabelFor(stage, trainingType)
   const subject = stage === 'pre' && detailOnly
-    ? `Reminder: Upcoming Training — ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
+    ? `Reminder: Upcoming ${Noun} — ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
     : stage === 'pre'
-      ? `${isReminder ? 'Reminder: ' : ''}Nomination for Training: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
-      : `${isReminder ? 'Reminder: ' : ''}${STAGE_LABELS[stage]}: ${trainingName}`
+      ? `${isReminder ? 'Reminder: ' : ''}Nomination for ${Noun}: ${trainingName}${startDate && endDate ? ` (${fmtDate(startDate)} to ${fmtDate(endDate)})` : ''}`
+      : `${isReminder ? 'Reminder: ' : ''}${stageLabel}: ${trainingName}`
 
   // No max-width here — a fixed narrow column made the text wrap well before reaching the edge of
   // the actual reading pane, which read as broken/premature wrapping rather than a deliberate
@@ -116,17 +134,18 @@ export function buildSurveyEmail(input: {
     // naturally with " training" appended, others ("Internal Training", "External Training")
     // already end in the word themselves, which would otherwise double up as "External Training
     // training". Only append the suffix when the name doesn't already end with it.
+    // A Conference/Workshop/Seminar/Summit type already says what it is, so no " training" suffix.
     const typeLine = trainingType
-      ? ` and it will be ${articleFor(trainingType)} ${trainingType}${/training$/i.test(trainingType.trim()) ? '' : ' training'}`
+      ? ` and it will be ${articleFor(trainingType)} ${trainingType}${noun !== 'training' || /training$/i.test(trainingType.trim()) ? '' : ' training'}`
       : ''
     const venueLine = trainingMode === 'hybrid' && (location || meetingLink)
-      ? P(`This is a hybrid training.${location ? ` In-person venue: <strong>${location}</strong>.` : ''}${meetingLink ? ` Join virtually here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.` : ''}`)
+      ? P(`This is a hybrid ${noun}.${location ? ` In-person venue: <strong>${location}</strong>.` : ''}${meetingLink ? ` Join virtually here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.` : ''}`)
       : trainingMode === 'physical' && location
-        ? P(`This training will hold in person at: <strong>${location}</strong>.`)
+        ? P(`This ${noun} will hold in person at: <strong>${location}</strong>.`)
         : trainingMode === 'virtual' && meetingLink
-          ? P(`This training will hold virtually — join here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+          ? P(`This ${noun} will hold virtually — join here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
           : trainingMode === 'platform' && meetingLink
-            ? P(`This training will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
+            ? P(`This ${noun} will be delivered via a learning platform — access it here: <a href="${meetingLink}" style="color:#1E7145;">${meetingLink}</a>.`)
             : ''
     if (detailOnly) {
       return {
@@ -136,7 +155,7 @@ export function buildSurveyEmail(input: {
           ${P(`This is a reminder that you are nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
           ${sessionListLine}
           ${venueLine}
-          ${P('You have already completed the pre-training survey for this programme — no further action is needed there.')}
+          ${P(`You have already completed the ${stageLabel.toLowerCase()} for this programme — no further action is needed there.`)}
           ${P('We look forward to your participation.')}
           ${SIGNOFF}
         `),
@@ -149,9 +168,9 @@ export function buildSurveyEmail(input: {
         ${P(`You have been nominated to attend the ${trainingName} programme ${scheduleLine}${typeLine}.`)}
         ${sessionListLine}
         ${venueLine}
-        ${P('As part of your preparation, kindly complete the pre-training survey using the link below:')}
-        ${BUTTON(formUrl, 'Pre-Training Survey')}
-        ${P('Kindly note that the training provider will communicate further details, including venue and time, in due course.')}
+        ${P(`As part of your preparation, kindly complete the ${stageLabel.toLowerCase()} using the link below:`)}
+        ${BUTTON(formUrl, stageLabel)}
+        ${P(`Kindly note that the ${noun === 'training' ? 'training provider' : 'organisers'} will communicate further details, including venue and time, in due course.`)}
         ${P('We trust this will be a valuable learning experience.')}
         ${SIGNOFF}
       `),
@@ -163,10 +182,10 @@ export function buildSurveyEmail(input: {
       subject,
       html: wrap(`
         ${P(`Dear ${firstName},`)}
-        ${P(`Thank you for participating in the ${trainingName} training${monthPhraseOf(startDate)}.`)}
-        ${P('As part of our learning evaluation process, kindly complete the post-training survey using the link below:')}
-        ${BUTTON(formUrl, 'Post-Training Survey')}
-        ${isHistorical ? P('If you have previously completed a post-training survey for this programme, please disregard this email.', 'color:#6B7280;') : ''}
+        ${P(`Thank you for participating in the ${trainingName} ${noun}${monthPhraseOf(startDate)}.`)}
+        ${P(`As part of our learning evaluation process, kindly complete the ${stageLabel.toLowerCase()} using the link below:`)}
+        ${BUTTON(formUrl, stageLabel)}
+        ${isHistorical ? P(`If you have previously completed a ${stageLabel.toLowerCase()} for this programme, please disregard this email.`, 'color:#6B7280;') : ''}
         ${P('Your feedback is important and will help us assess the impact of the programme and improve future learning initiatives.')}
         ${P('Thank you for your participation, and we look forward to receiving your feedback.')}
         ${SIGNOFF}
@@ -182,9 +201,9 @@ export function buildSurveyEmail(input: {
       ${isHistorical
         ? P(`${firstNameOf(employeeName)} attended the ${trainingName} programme${monthPhraseOf(startDate)}. Post-training impact reviews are now being tracked as part of our learning records, and we kindly request your input in completing this review.`)
         : P(`${firstNameOf(employeeName)} recently attended the ${trainingName} programme${monthPhraseOf(startDate)}.`)}
-      ${P('Kindly complete the Training Impact Survey using the link below to provide your assessment of the participant\'s application of the knowledge and skills gained from the training.')}
-      ${BUTTON(formUrl, 'Training Impact Survey')}
-      ${P('Your feedback will help us understand the value the training has delivered and identify areas for further development.')}
+      ${P(`Kindly complete the ${stageLabel} using the link below to provide your assessment of the participant's application of the knowledge and skills gained from the ${noun}.`)}
+      ${BUTTON(formUrl, stageLabel)}
+      ${P(`Your feedback will help us understand the value the ${noun} has delivered and identify areas for further development.`)}
       ${P('Thank you for your support.')}
       ${SIGNOFF}
     `),
