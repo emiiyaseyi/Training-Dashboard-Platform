@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine, Wrench, BellOff,
+  Link2, Loader2, Plus, ChevronDown, ChevronUp, Trash2, Send, Calendar, Search, X, Download, Upload, RefreshCw, PenLine, Wrench, BellOff, RotateCcw,
 } from 'lucide-react'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { SectionCard } from '@/components/ui/SectionCard'
@@ -797,6 +797,28 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
       }
     } finally {
       setStoppingReminderKey(null)
+    }
+  }
+
+  // Throws away a submitted stage and emails the person a fresh link to fill it again (they see a
+  // normal new survey, nothing about it being voided). The replacement answers take the old ones' place.
+  const [voidingKey, setVoidingKey] = useState<string | null>(null)
+  const voidAndRetrigger = async (scheduleId: string, attendeeId: string, stage: 'pre' | 'post1' | 'post2', staffName: string) => {
+    if (!confirm(`Void ${staffName}'s submitted ${STAGE_LABELS[stage]} and send them a fresh email to fill it again?\n\nTheir current answers are removed once the new email goes out, and the new submission replaces them. They will not see it labelled as void.`)) return
+    const key = `${scheduleId}:${stage}:${attendeeId}`
+    setVoidingKey(key)
+    try {
+      const res = await fetch(`/api/admin/training-schedule/${scheduleId}/attendees/${attendeeId}/void-resend`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stage }),
+      })
+      if (res.ok) {
+        await loadSchedules()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to void and re-trigger.')
+      }
+    } finally {
+      setVoidingKey(null)
     }
   }
 
@@ -2130,6 +2152,17 @@ export function SurveyAutomationPanel({ initialEditScheduleId }: { initialEditSc
                                                 <span className={TICK_STYLE[state]}>{TICK_SYMBOL[state]}</span>
                                               )}
                                             </button>
+                                            {state === 'filled' && (
+                                              <button
+                                                type="button"
+                                                onClick={() => voidAndRetrigger(s.id, a.id, stage, a.staffName)}
+                                                disabled={voidingKey === stopKey}
+                                                title={`Void ${a.staffName}'s ${STAGE_LABELS[stage]} and send them a fresh email to fill it again`}
+                                                className="text-slate-300 hover:text-blue-600 disabled:opacity-40"
+                                              >
+                                                {voidingKey === stopKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                                              </button>
+                                            )}
                                             {state !== 'unsent' && (
                                               <button
                                                 type="button"
