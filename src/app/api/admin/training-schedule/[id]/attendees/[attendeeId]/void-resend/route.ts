@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       await prisma.surveyResponse.delete({ where: { id: r.id } })
     }
-    await prisma.trainingScheduleAttendee.update({ where: { id: attendeeId }, data: { [RESPONDED_FIELD[stage]]: null } })
+    await prisma.trainingScheduleAttendee.update({ where: { id: attendeeId }, data: { [RESPONDED_FIELD[stage]]: null, voidedStages: [...new Set([...(attendee.voidedStages?.split(',') ?? []), stage])].filter(Boolean).join(',') } })
 
     return NextResponse.json({ success: true, voided: attendee.responses.length })
   } catch (err) {

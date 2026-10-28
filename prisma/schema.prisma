@@ -601,6 +601,10 @@ model TrainingScheduleAttendee {
   lineManagerEmail String?
   additionalCc     String? // comma/semicolon-separated email addresses Cc'd on this attendee's survey emails — only used when the schedule's additionalCcMode is "individual"; blank means just the global defaultCc for this person
 
+  // Comma-separated stages (pre,post1,post2) an admin voided for a refill — the next submission of that
+  // stage overwrites its earlier Google Sheet mirror row instead of appending a second one, then clears the stage.
+  voidedStages String?
+
   preSurveySentAt   DateTime?
   post1SurveySentAt DateTime?
   post2SurveySentAt DateTime?

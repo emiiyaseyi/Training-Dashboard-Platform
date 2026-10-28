@@ -583,6 +583,51 @@ export async function appendMirrorRow(
   await appendRowToSheet(spreadsheetId, sheetName, accessToken, row)
 }
 
+// Replaces an already-mirrored response in place instead of appending a second row — used when a
+// respondent refills a voided survey. The existing row is the LAST one whose `matchLabels` fields
+// (e.g. employee name + training) all equal the new values; each other field's value is then written
+// over its own column (same exact-then-substring header matching as appendMirrorRow). Returns false
+// when no such row exists so the caller can fall back to a normal append.
+export async function replaceMirrorRow(
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string,
+  fields: MirrorField[],
+  matchLabels: string[]
+): Promise<boolean> {
+  const rows = await fetchSheetValues(spreadsheetId, sheetName, accessToken)
+  if (rows.length < 2) return false
+  const normHeaders = rows[0].map(normaliseHeader)
+
+  const colFor = (f: MirrorField): number => {
+    const cands = [normaliseHeader(f.label), ...f.candidates.map(normaliseHeader)].filter(Boolean)
+    const exact = normHeaders.findIndex((h) => cands.some((c) => c === h))
+    if (exact >= 0) return exact
+    return normHeaders.findIndex((h) => cands.some((c) => c.length >= 4 && (h.includes(c) || c.includes(h))))
+  }
+
+  const keyFields = fields.filter((f) => matchLabels.includes(f.label))
+  if (keyFields.length !== matchLabels.length) return false
+  const keyCols = keyFields.map((f) => ({ col: colFor(f), value: normaliseHeader(String(f.value)) }))
+  if (keyCols.some((k) => k.col < 0)) return false
+
+  let rowIdx = -1
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (keyCols.every((k) => normaliseHeader(rows[i][k.col] || '') === k.value)) { rowIdx = i; break }
+  }
+  if (rowIdx === -1) return false
+  const sheetRowNumber = rowIdx + 1 // rows[] is 0-based including the header row
+
+  const written = new Set<number>()
+  for (const f of fields) {
+    const col = colFor(f)
+    if (col < 0 || written.has(col)) continue
+    written.add(col)
+    await updateSheetRange(spreadsheetId, sheetName, accessToken, `${sheetName}!${columnLetter(col)}${sheetRowNumber}`, [[f.value]])
+  }
+  return true
+}
+
 // Batch sibling of appendMirrorRow — for mirroring several rows that all share the same field
 // shape (e.g. every attendee just added to one training schedule) in one read-headers +
 // (at most one) extend-headers + one append, instead of repeating that whole sequence per row.

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { MONTHS } from '@/lib/filter-types'
-import { connectToSpreadsheet, appendMirrorRow, appendMirrorRows, type MirrorField } from '@/lib/google-sheets'
+import { connectToSpreadsheet, appendMirrorRow, appendMirrorRows, replaceMirrorRow, type MirrorField } from '@/lib/google-sheets'
 import type { SurveyStageKey } from '@/lib/survey-questions'
 import type { SurveyQuestion, TrainingSchedule, TrainingScheduleAttendee } from '@prisma/client'
 import { loadRosterDirectory, resolveStaff } from '@/lib/staff-directory'
@@ -99,6 +99,14 @@ function buildMirrorFields(
   ]
 }
 
+// Which mirrored fields identify "the same person's response to the same training" for each stage,
+// so a refilled survey can find the row it replaces.
+const MIRROR_KEY_LABELS: Record<SurveyStageKey, string[]> = {
+  pre: ['Employee Name', 'Training'],
+  post1: ['Employee Name', 'Training Title'],
+  post2: ['Staff ID', 'Training'],
+}
+
 // Mirrors one survey response into its configured Google Sheet tab (best-effort — a failure here
 // never blocks the submission itself, since the database write is the source of truth). Shared by
 // the submit route (mirrors immediately on submission) and the admin "Retry Sync" action (re-runs
@@ -109,7 +117,9 @@ export async function mirrorSurveyResponse(
   attendee: TrainingScheduleAttendee & { schedule: TrainingSchedule },
   answers: Record<string, string | string[]>,
   questions: SurveyQuestion[],
-  submittedAt: Date
+  submittedAt: Date,
+  // A refilled (voided) survey overwrites its earlier sheet row instead of adding a second one.
+  replaceExisting = false
 ): Promise<MirrorResult> {
   const settings = await prisma.surveySettings.findFirst()
   const config = await prisma.googleSheetsConfig.findFirst()
@@ -136,7 +146,9 @@ export async function mirrorSurveyResponse(
     const businessUnit = staff?.businessUnit || attendee.schedule.businessUnit
     const connection = await connectToSpreadsheet(config.spreadsheetUrl)
     const fields = buildMirrorFields(stageKey, attendee, answers, questions, submittedAt, role, businessUnit)
-    await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
+    const replaced = replaceExisting
+      && await replaceMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields, MIRROR_KEY_LABELS[stageKey])
+    if (!replaced) await appendMirrorRow(connection.spreadsheetId, sheetName, connection.accessToken, fields)
     await recordStatus(true, `Synced to "${sheetName}".`)
     return { attempted: true, success: true, message: `Synced to "${sheetName}".` }
   } catch (mirrorErr) {

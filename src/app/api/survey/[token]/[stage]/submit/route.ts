@@ -63,13 +63,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // the SurveyResponse row existed (so the admin's Responses tab correctly counted them) but
     // RESPONDED_FIELD stayed null, so sendSurveyReminders (which only checks that field, never
     // the SurveyResponse table) kept treating them as not-yet-responded and nudging them forever.
+    // A stage an admin voided for a refill: its sheet row is overwritten rather than a second one added.
+    const voidedList = (attendee.voidedStages ?? '').split(',').filter(Boolean)
+    const isRefill = voidedList.includes(stageKey)
     const response = await prisma.$transaction(async (tx) => {
       const created = await tx.surveyResponse.create({
         data: { attendeeId: attendee.id, stage: stageKey, answers: JSON.stringify(answers) },
       })
       await tx.trainingScheduleAttendee.update({
         where: { id: attendee.id },
-        data: { [RESPONDED_FIELD[stageKey]]: new Date() },
+        data: {
+          [RESPONDED_FIELD[stageKey]]: new Date(),
+          ...(isRefill ? { voidedStages: voidedList.filter((v) => v !== stageKey).join(',') || null } : {}),
+        },
       })
       return created
     })
@@ -84,7 +90,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         if (stageKey === 'post1' || stageKey === 'post2') {
           await upsertStructuredRecordForResponse(stageKey, attendee, answers, questions, response.id)
         }
-        const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions, response.submittedAt)
+        const mirrorResult = await mirrorSurveyResponse(stageKey, attendee, answers, questions, response.submittedAt, isRefill)
         if (mirrorResult.attempted) {
           await prisma.surveyResponse.update({
             where: { id: response.id },
