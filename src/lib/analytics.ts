@@ -3,7 +3,7 @@ import { MONTHS, type PeriodFilter } from './filter-types'
 import { normalizeStaffIdKey } from './staff-id'
 import { computeTalentMemberReport } from './talent-member'
 import { computeYetToAttend } from './roster-analytics'
-import { countEligibleStaff, effectiveYearForCoverage, latestRosterSnapshot, isEligibleForTrainingCoverage } from './staff-training-eligibility'
+import { latestRosterSnapshot, isInYetToAttendPool, periodBoundsForFilter } from './staff-training-eligibility'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -598,9 +598,8 @@ function classifyTraining(trainingType: string | null | undefined, typeMap: Map<
   return typeMap.get(trainingType.toLowerCase()) ?? 'formal'
 }
 
-// "Total Staff Coverage" eligibility (active, confirmed, non-intern, non-Meri-Mover, H2-hire
-// cutoff) now lives in staff-training-eligibility.ts, shared with Yet to Attend Training —
-// imported above as countEligibleStaff/effectiveYearForCoverage.
+// "Total Staff Coverage" pool (everyone employed in the period except Meri Movers) lives in
+// staff-training-eligibility.ts, shared with Yet to Attend Training.
 
 // eligibleStaffIds (normalized) scopes the numerator to the SAME population totalStaffCount
 // counts — previously staffTrained counted EVERYONE with a capability-tagged training record
@@ -671,7 +670,10 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
   const latestRoster = latestRosterSnapshot(rawRoster)
   const rosterRecords = scopeSet ? latestRoster.filter((r) => scopeSet.has(r.businessUnit)) : latestRoster
-  const coverageYear = effectiveYearForCoverage(filter)
+  // Same staff pool as Yet to Attend Training: everyone employed during the period except Meri
+  // Movers (leavers counted up to their exit date) — see isInYetToAttendPool.
+  const poolBounds = periodBoundsForFilter(filter, (m) => MONTHS.indexOf(m as (typeof MONTHS)[number]))
+  const poolRoster = rosterRecords.filter((r) => isInYetToAttendPool(r, poolBounds))
 
   const typeMap = buildTypeClassMap(trainingTypes)
 
@@ -746,9 +748,9 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const allUniqueIds = new Set([...uniqueTrainedIds, ...uniqueSubIds])
   const totalUniqueStaff = allUniqueIds.size
   const totalLearningInvestment = totalTrainingCost + totalOtherTrainingCost + totalSubscriptionCost
-  const totalStaffCount = countEligibleStaff(rosterRecords, null, coverageYear)
+  const totalStaffCount = poolRoster.length
   const eligibleStaffIds = new Set(
-    rosterRecords.filter((r) => isEligibleForTrainingCoverage(r, coverageYear)).map((r) => normalizeStaffIdKey(r.staffId))
+    poolRoster.map((r) => normalizeStaffIdKey(r.staffId))
   )
 
   // Same population on both sides of the ratio, reusing the exact numbers Yet to Attend already
