@@ -89,6 +89,9 @@ export async function POST() {
       if (!r.email?.trim() && staff.email) data.email = staff.email
 
       if (Object.keys(data).length === 0) {
+        // An exited employee's own record won't ever get the missing field (no email once they've
+        // left) — their training record is kept as history, so it isn't something to chase.
+        if (!staff.active) continue
         noNewDataRecords.push({
           id: r.id, staffId: r.staffId, staffName: r.staffName, training: r.training, missingFields,
           reason: `Matched ${staff.name} in the roster, but their own Employee record is missing that same field too — nothing to carry over. Fill it in on the Employees page instead.`,
