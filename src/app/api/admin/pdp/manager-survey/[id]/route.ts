@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { deleteManagerSurveys } from '@/lib/pdp-send'
 import { requirePermission } from '@/lib/session-guard'
 
 // Deletes a Track B manager link (and, via cascade, its team-member entries) — for undoing a
@@ -11,6 +11,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (gate instanceof NextResponse) return gate
 
   const { id } = await params
-  await prisma.pDPManagerSurvey.delete({ where: { id } })
+  await deleteManagerSurveys([id])
   return NextResponse.json({ success: true })
 }

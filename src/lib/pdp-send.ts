@@ -586,3 +586,15 @@ export async function sendPDPMemberFinalizedEmail(entryId: string): Promise<void
     console.error('[sendPDPMemberFinalizedEmail]', err)
   }
 }
+
+// Deleting a manager's review link must also clear that manager's legacy per-person validation
+// rows for the same cycle — those hang off the staff surveys (not the manager survey), so they
+// survived the delete and then showed up beside the fresh link as a second, stale "pending" entry.
+export async function deleteManagerSurveys(ids: string[]): Promise<number> {
+  const surveys = await prisma.pDPManagerSurvey.findMany({ where: { id: { in: ids } }, select: { cycleId: true, managerStaffId: true } })
+  for (const s of surveys) {
+    await prisma.pDPManagerValidation.deleteMany({ where: { managerStaffId: s.managerStaffId, staffSurvey: { cycleId: s.cycleId } } })
+  }
+  const result = await prisma.pDPManagerSurvey.deleteMany({ where: { id: { in: ids } } })
+  return result.count
+}

@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/session-guard'
 import { sendMail, hasSmtpCredentials } from '@/lib/mailer'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { firstNameOf, formatDeadline, renderPDPEmail } from '@/lib/pdp-email'
+import { deleteManagerSurveys } from '@/lib/pdp-send'
 import { resolvePDPEmailTemplate } from '@/lib/pdp-email-templates'
 
 interface BulkBody { action: 'delete' | 'resend'; ids: string[] }
@@ -19,8 +20,7 @@ export async function POST(req: NextRequest) {
   if (ids.length === 0) return NextResponse.json({ error: 'No rows selected.' }, { status: 400 })
 
   if (body.action === 'delete') {
-    const result = await prisma.pDPManagerSurvey.deleteMany({ where: { id: { in: ids } } })
-    return NextResponse.json({ deleted: result.count })
+    return NextResponse.json({ deleted: await deleteManagerSurveys(ids) })
   }
 
   if (body.action === 'resend') {
