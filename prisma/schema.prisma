@@ -1319,3 +1319,12 @@ model NewHireExperienceSurvey {
 
   @@index([staffId])
 }
+
+// Single-row settings: TA's own Cc list for the New Hire Experience Survey — deliberately NOT the
+// platform-wide SmtpSettings.defaultCc (the TA team wants their own recipients here, set once in
+// the admin panel, comma/semicolon-separated so it can hold more than one address), parsed with
+// mailer.ts's parseCcList the same way TrainingSchedule.additionalCc already is.
+model NewHireSurveySettings {
+  id       String  @id @default(cuid())
+  ccEmails String?
+}

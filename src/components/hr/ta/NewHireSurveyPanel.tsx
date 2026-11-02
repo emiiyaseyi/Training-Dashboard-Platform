@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, RefreshCw, Send, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Loader2, RefreshCw, Send, CheckCircle2, AlertTriangle, Save, BarChart2 } from 'lucide-react'
 
 interface Survey {
   id: string
@@ -13,6 +13,12 @@ interface Survey {
   scheduledFor: string
   sentAt: string | null
   respondedAt: string | null
+}
+
+interface Insights {
+  totals: { scheduled: number; sent: number; responded: number; responseRate: number }
+  distributions: { questionId: string; label: string; options: { option: string; count: number }[] }[]
+  freeText: { questionId: string; label: string; responses: { staffName: string; answer: string }[] }[]
 }
 
 function statusOf(s: Survey): { label: string; className: string } {
@@ -29,12 +35,17 @@ function statusOf(s: Survey): { label: string; className: string } {
 // its own every day.
 export function NewHireSurveyPanel() {
   const [surveys, setSurveys] = useState<Survey[] | null>(null)
+  const [insights, setInsights] = useState<Insights | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [syncNote, setSyncNote] = useState<string | null>(null)
   const [unmatched, setUnmatched] = useState<{ candidateName: string; role: string; hireDate: string }[]>([])
+  const [ccEmails, setCcEmails] = useState('')
+  const [savingCc, setSavingCc] = useState(false)
+  const [ccSaved, setCcSaved] = useState(false)
+  const [showInsights, setShowInsights] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -43,12 +54,34 @@ export function NewHireSurveyPanel() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Failed to load.')
         setSurveys(data.surveys)
+        setInsights(data.insights)
+        setCcEmails(data.ccEmails || '')
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load.'))
       .finally(() => setLoading(false))
   }
 
   useEffect(load, [])
+
+  const saveCc = async () => {
+    setSavingCc(true)
+    setCcSaved(false)
+    setError(null)
+    try {
+      const res = await fetch('/api/hr/admin/ta/new-hire-survey', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ccEmails }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save.')
+      setCcSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.')
+    } finally {
+      setSavingCc(false)
+    }
+  }
 
   const sync = async () => {
     setSyncing(true)
@@ -102,6 +135,31 @@ export function NewHireSurveyPanel() {
         </button>
       </div>
 
+      <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg p-3">
+        <p className="text-xs font-semibold text-slate-700 mb-1">Cc on every send &amp; reminder</p>
+        <p className="text-[11px] text-slate-500 mb-2">
+          Each new hire&apos;s line manager is always Cc&apos;d automatically. Add any other address(es) here (comma-separated) to Cc on top of that — the platform-wide Default Cc is never used for this survey.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={ccEmails}
+            onChange={(e) => { setCcEmails(e.target.value); setCcSaved(false) }}
+            placeholder="e.g. ta-lead@meristem.com, hrbp@meristem.com"
+            className="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-meristem-300"
+          />
+          <button
+            onClick={saveCc}
+            disabled={savingCc}
+            className="flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-meristem-200 text-meristem-700 hover:bg-meristem-50 disabled:opacity-60"
+          >
+            {savingCc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+            Save
+          </button>
+        </div>
+        {ccSaved && <p className="text-[11px] text-emerald-700 mt-1.5 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved.</p>}
+      </div>
+
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
       {syncNote && <p className="text-xs text-emerald-700 mb-3 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> {syncNote}</p>}
       {unmatched.length > 0 && (
@@ -112,6 +170,77 @@ export function NewHireSurveyPanel() {
               <li key={i}>{u.candidateName} — {u.role} (joined {u.hireDate}). Check they&apos;re on the staff list with a matching name.</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {insights && insights.totals.scheduled > 0 && (
+        <div className="mb-4">
+          <button
+            onClick={() => setShowInsights((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-meristem-700 hover:text-meristem-900 mb-2"
+          >
+            <BarChart2 className="w-3.5 h-3.5" />
+            {showInsights ? 'Hide' : 'Show'} insights ({insights.totals.responded}/{insights.totals.scheduled} responded — {insights.totals.responseRate}%)
+          </button>
+          {showInsights && (
+            <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-4">
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div>
+                  <p className="text-lg font-bold text-slate-800">{insights.totals.scheduled}</p>
+                  <p className="text-[11px] text-slate-500">Scheduled</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-slate-800">{insights.totals.sent}</p>
+                  <p className="text-[11px] text-slate-500">Sent</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-emerald-700">{insights.totals.responded}</p>
+                  <p className="text-[11px] text-slate-500">Responded</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-slate-800">{insights.totals.responseRate}%</p>
+                  <p className="text-[11px] text-slate-500">Response rate</p>
+                </div>
+              </div>
+
+              {insights.distributions.map((d) => {
+                const total = d.options.reduce((sum, o) => sum + o.count, 0)
+                return (
+                  <div key={d.questionId}>
+                    <p className="text-xs font-medium text-slate-700 mb-1.5">{d.label}</p>
+                    <div className="space-y-1">
+                      {d.options.map((o) => (
+                        <div key={o.option} className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-600 w-28 shrink-0 truncate" title={o.option}>{o.option}</span>
+                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-meristem-500" style={{ width: total > 0 ? `${(o.count / total) * 100}%` : '0%' }} />
+                          </div>
+                          <span className="text-[11px] text-slate-500 w-6 text-right">{o.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {insights.freeText.map((q) => (
+                <div key={q.questionId}>
+                  <p className="text-xs font-medium text-slate-700 mb-1.5">{q.label}</p>
+                  {q.responses.length === 0 ? (
+                    <p className="text-[11px] text-slate-400">No responses yet.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {q.responses.map((r, i) => (
+                        <li key={i} className="text-[11px] text-slate-600 bg-slate-50 rounded-lg p-2">
+                          <span className="font-medium text-slate-700">{r.staffName}:</span> {r.answer}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
