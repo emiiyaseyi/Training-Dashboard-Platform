@@ -39,6 +39,12 @@ function fullName(r: { firstName: string; middleName: string | null; lastName: s
   return buildFullName(r.firstName, r.middleName, r.lastName)
 }
 
+export interface JoinPeriodBreakdown {
+  key: string // sortable, e.g. "2026-03" or "2026-Q1"
+  label: string // display, e.g. "March 2026" or "Q1 2026"
+  count: number
+}
+
 export interface BUAttendanceBreakdown {
   businessUnit: string
   totalConfirmed: number
@@ -56,6 +62,13 @@ export interface YetToAttendReport {
   overallCoverageRatio: number
   byBU: BUAttendanceBreakdown[]
   list: YetToAttendStaff[]
+  // When the "yet to attend" staff joined — grouped by calendar month and by quarter, sorted
+  // chronologically, so L&D can see whether gaps cluster around particular hiring waves (e.g. a
+  // big onboarding cohort that hasn't yet gotten training). Staff with no Employment Date on file
+  // aren't included in either breakdown (nothing to group them by) — same silent-skip convention
+  // used everywhere else in this report for missing-data staff.
+  byJoinMonth: JoinPeriodBreakdown[]
+  byJoinQuarter: JoinPeriodBreakdown[]
   hasRosterData: boolean
   availableYears: number[]
   // Roster composition context, independent of attendance — surfaced as their own cards rather
@@ -187,6 +200,28 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     }
   }
 
+  const monthMap = new Map<string, JoinPeriodBreakdown>()
+  const quarterMap = new Map<string, JoinPeriodBreakdown>()
+  for (const s of list) {
+    if (!s.employmentDate) continue
+    const d = new Date(s.employmentDate)
+    const year = d.getFullYear()
+    const monthIdx = d.getMonth()
+
+    const monthKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}`
+    const monthEntry = monthMap.get(monthKey) ?? { key: monthKey, label: `${MONTHS[monthIdx]} ${year}`, count: 0 }
+    monthEntry.count++
+    monthMap.set(monthKey, monthEntry)
+
+    const quarter = Math.floor(monthIdx / 3) + 1
+    const quarterKey = `${year}-Q${quarter}`
+    const quarterEntry = quarterMap.get(quarterKey) ?? { key: quarterKey, label: `Q${quarter} ${year}`, count: 0 }
+    quarterEntry.count++
+    quarterMap.set(quarterKey, quarterEntry)
+  }
+  const byJoinMonth = [...monthMap.values()].sort((a, b) => a.key.localeCompare(b.key))
+  const byJoinQuarter = [...quarterMap.values()].sort((a, b) => a.key.localeCompare(b.key))
+
   const byBU: BUAttendanceBreakdown[] = [...buMap.entries()]
     .map(([businessUnit, v]) => ({
       businessUnit,
@@ -206,6 +241,8 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     overallCoverageRatio: roster.length > 0 ? (totalAttended / roster.length) * 100 : 0,
     byBU,
     list: list.sort((a, b) => a.businessUnit.localeCompare(b.businessUnit) || a.staffName.localeCompare(b.staffName)),
+    byJoinMonth,
+    byJoinQuarter,
     hasRosterData: allRoster.length > 0,
     availableYears,
     unconfirmedStaffCount,

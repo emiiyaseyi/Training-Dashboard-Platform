@@ -21,6 +21,7 @@ export default function YetToAttendPage() {
   const [filter, setFilter] = useState<PeriodFilter>({ mode: 'all' })
   const [search, setSearch] = useState('')
   const [buFilter, setBuFilter] = useState('ALL')
+  const [joinMonthFilter, setJoinMonthFilter] = useState('ALL')
   const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async (f: PeriodFilter) => {
@@ -41,15 +42,22 @@ export default function YetToAttendPage() {
 
   const buOptions = useMemo(() => (data ? data.byBU.map((b) => b.businessUnit) : []), [data])
 
+  const joinMonthKeyOf = (iso: string | null) => {
+    if (!iso) return null
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+
   const filteredList = useMemo(() => {
     if (!data) return []
     const q = search.trim().toLowerCase()
     return data.list.filter((s) => {
       if (buFilter !== 'ALL' && s.businessUnit !== buFilter) return false
+      if (joinMonthFilter !== 'ALL' && joinMonthKeyOf(s.employmentDate) !== joinMonthFilter) return false
       if (!q) return true
       return s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)
     })
-  }, [data, search, buFilter])
+  }, [data, search, buFilter, joinMonthFilter])
 
   const handleExport = async () => {
     if (!data) return
@@ -66,6 +74,7 @@ export default function YetToAttendPage() {
             Role: s.role ?? '',
             Department: s.department ?? '',
             'Employment Date': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString() : '',
+            'Join Month': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '',
             'Exit Date': s.exitDate ? new Date(s.exitDate).toLocaleDateString() : '',
           })),
         }],
@@ -199,6 +208,40 @@ export default function YetToAttendPage() {
               </ChartCard>
             )}
 
+            {data.byJoinMonth.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ChartCard
+                  title="Yet to Attend — by Join Month"
+                  rows={data.byJoinMonth.map((m) => ({ 'Join Month': m.label, 'Yet to Attend': m.count }))}
+                  filename="yet_to_attend_by_join_month"
+                >
+                  <BarChart
+                    labels={data.byJoinMonth.map((m) => m.label)}
+                    values={data.byJoinMonth.map((m) => m.count)}
+                    color="#2563EB"
+                    height={Math.max(280, data.byJoinMonth.length * 28)}
+                    horizontal
+                    showLabels
+                  />
+                </ChartCard>
+
+                <ChartCard
+                  title="Yet to Attend — by Join Quarter"
+                  rows={data.byJoinQuarter.map((q) => ({ 'Join Quarter': q.label, 'Yet to Attend': q.count }))}
+                  filename="yet_to_attend_by_join_quarter"
+                >
+                  <BarChart
+                    labels={data.byJoinQuarter.map((q) => q.label)}
+                    values={data.byJoinQuarter.map((q) => q.count)}
+                    color="#7C3AED"
+                    height={Math.max(280, data.byJoinQuarter.length * 36)}
+                    horizontal
+                    showLabels
+                  />
+                </ChartCard>
+              </div>
+            )}
+
             <div>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <h2 className="text-sm font-semibold text-slate-800">
@@ -224,6 +267,16 @@ export default function YetToAttendPage() {
                       <option key={bu} value={bu}>{bu}</option>
                     ))}
                   </select>
+                  <select
+                    value={joinMonthFilter}
+                    onChange={(e) => setJoinMonthFilter(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs"
+                  >
+                    <option value="ALL">All Join Months</option>
+                    {data.byJoinMonth.map((m) => (
+                      <option key={m.key} value={m.key}>{m.label}</option>
+                    ))}
+                  </select>
                   {canExport && (
                     <button
                       onClick={handleExport}
@@ -239,19 +292,26 @@ export default function YetToAttendPage() {
 
               <DataTable
                 columns={[
-                  { key: 'staffId', header: 'Staff ID' },
-                  { key: 'staffName', header: 'Name' },
-                  { key: 'businessUnit', header: 'Business Unit' },
+                  { key: 'staffId', header: 'Staff ID', sortable: true },
+                  { key: 'staffName', header: 'Name', sortable: true },
+                  { key: 'businessUnit', header: 'Business Unit', sortable: true },
                   { key: 'role', header: 'Role', render: (r) => (r.role as string) || '—' },
                   { key: 'department', header: 'Department', render: (r) => (r.department as string) || '—' },
                   {
                     key: 'employmentDate',
-                    header: 'Employment Date',
+                    header: 'Join Date',
+                    sortable: true,
                     render: (r) => (r.employmentDate ? new Date(r.employmentDate as string).toLocaleDateString() : '—'),
+                  },
+                  {
+                    key: 'employmentDate',
+                    header: 'Join Month',
+                    render: (r) => (r.employmentDate ? new Date(r.employmentDate as string).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—'),
                   },
                   {
                     key: 'exitDate',
                     header: 'Exit Date',
+                    sortable: true,
                     render: (r) => (r.exitDate ? new Date(r.exitDate as string).toLocaleDateString() : '—'),
                   },
                 ]}
