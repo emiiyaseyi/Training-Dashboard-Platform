@@ -7,6 +7,7 @@ import { ArrowLeft, ShieldAlert } from 'lucide-react'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { TaSheetConnectionCard } from '@/components/hr/ta/TaSheetConnectionCard'
 import { TaAdminSectionTable } from '@/components/hr/ta/TaAdminSectionTable'
+import { NewHireSurveyPanel } from '@/components/hr/ta/NewHireSurveyPanel'
 import { usePagePermission } from '@/lib/use-page-permission'
 
 const DATA_SECTIONS = [
@@ -74,6 +75,10 @@ export default function TalentAcquisitionAdminPage() {
         </div>
 
         <TaAdminSectionTable key={activeSection} slug={activeSection} label={DATA_SECTIONS.find((s) => s.slug === activeSection)!.label} />
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <NewHireSurveyPanel />
       </div>
     </div>
   )

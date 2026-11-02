@@ -5,6 +5,7 @@ import type { SurveyStage } from '@/lib/survey-email'
 import { sendCronFailureAlert } from '@/lib/cron-alert'
 import { sendCustomSurveyReminders } from '@/lib/custom-survey'
 import { sendPDPReminders } from '@/lib/pdp-send'
+import { syncNewHireExperienceSurveys, sendDueNewHireExperienceSurveys, sendNewHireExperienceSurveyReminders } from '@/lib/new-hire-survey'
 
 const DAY_MS = 86400000
 
@@ -120,17 +121,32 @@ export async function GET(req: NextRequest) {
     pdpError = err instanceof Error ? err.message : 'Failed to send PDP reminders.'
   }
 
+  // Fourth sweep: Talent Acquisition's New Hire Experience Survey — sync newly-accepted hires
+  // from the Hires sheet (matching each to a staff record), send any now-due (join date + 7
+  // days), then nudge anyone outstanding. Same wrap-and-report pattern as the PDP sweep above.
+  let newHireResult: { created: number; unmatched: number; sent: number; reminded: number } = { created: 0, unmatched: 0, sent: 0, reminded: 0 }
+  let newHireError: string | null = null
+  try {
+    const syncResult = await syncNewHireExperienceSurveys()
+    const sendResult = await sendDueNewHireExperienceSurveys()
+    const reminderResult = await sendNewHireExperienceSurveyReminders()
+    newHireResult = { created: syncResult.created, unmatched: syncResult.unmatched.length, sent: sendResult.sent, reminded: reminderResult.sent }
+  } catch (err) {
+    newHireError = err instanceof Error ? err.message : 'Failed to sync/send New Hire Experience Surveys.'
+  }
+
   await sendCronFailureAlert(
     'Survey send/reminder',
     [
       ...errors.map((e) => `Schedule ${e.scheduleId} (${e.stage}): ${e.message}`),
       ...customErrors.map((e) => `Custom Survey "${e.title}": ${e.message}`),
       ...(pdpError ? [`PDP reminders: ${pdpError}`] : []),
+      ...(newHireError ? [`New Hire Experience Survey: ${newHireError}`] : []),
     ]
   )
 
   return NextResponse.json({
-    success: errors.length === 0 && customErrors.length === 0 && !pdpError,
-    results, errors, customResults, customErrors, pdpResult, pdpError,
+    success: errors.length === 0 && customErrors.length === 0 && !pdpError && !newHireError,
+    results, errors, customResults, customErrors, pdpResult, pdpError, newHireResult, newHireError,
   })
 }

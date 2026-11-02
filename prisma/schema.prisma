@@ -1293,3 +1293,29 @@ model PDPManagerTeamMemberEntry {
 
   @@unique([managerSurveyId, staffId])
 }
+
+// Talent Acquisition's "New Hire Experience Survey" — one row per hire matched between the TA
+// Hires Google Sheet (sourceHireRowId = that sheet row's own "id" column, kept unique so a sync
+// never creates a second row for the same hire) and a StaffRosterRecord (by name, since the Hires
+// sheet has no staffId/email column of its own). scheduledFor is hireDate + 7 days, set once at
+// match time — the cron sweep (and the admin panel's "Send now" override) is what actually fires
+// the email once that date arrives, same token-link pattern as every other survey in this app.
+model NewHireExperienceSurvey {
+  id              String    @id @default(cuid())
+  staffId         String
+  staffName       String
+  email           String?
+  businessUnit    String?
+  role            String?
+  hireDate        DateTime
+  sourceHireRowId String    @unique
+  scheduledFor    DateTime
+  surveyToken     String    @unique @default(cuid())
+  answers         String?   // JSON
+  sentAt          DateTime?
+  respondedAt     DateTime?
+  reminderAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([staffId])
+}
