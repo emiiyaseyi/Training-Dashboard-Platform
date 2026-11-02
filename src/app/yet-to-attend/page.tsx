@@ -215,9 +215,11 @@ export default function YetToAttendPage() {
                   rows={data.byJoinMonth.map((m) => ({ 'Join Month': m.label, 'Yet to Attend': m.count }))}
                   filename="yet_to_attend_by_join_month"
                 >
+                  {/* Horizontal bars render the first array item at the bottom and the last at the
+                      top, so the Jan→Dec order is reversed here to read top-to-bottom as Jan→Dec. */}
                   <BarChart
-                    labels={data.byJoinMonth.map((m) => m.label)}
-                    values={data.byJoinMonth.map((m) => m.count)}
+                    labels={[...data.byJoinMonth].reverse().map((m) => m.label)}
+                    values={[...data.byJoinMonth].reverse().map((m) => m.count)}
                     color="#2563EB"
                     height={Math.max(280, data.byJoinMonth.length * 28)}
                     horizontal
@@ -231,8 +233,8 @@ export default function YetToAttendPage() {
                   filename="yet_to_attend_by_join_quarter"
                 >
                   <BarChart
-                    labels={data.byJoinQuarter.map((q) => q.label)}
-                    values={data.byJoinQuarter.map((q) => q.count)}
+                    labels={[...data.byJoinQuarter].reverse().map((q) => q.label)}
+                    values={[...data.byJoinQuarter].reverse().map((q) => q.count)}
                     color="#7C3AED"
                     height={Math.max(280, data.byJoinQuarter.length * 36)}
                     horizontal

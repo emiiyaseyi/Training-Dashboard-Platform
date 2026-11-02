@@ -200,24 +200,34 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
     }
   }
 
+  // Always the current calendar year, regardless of the page's own period filter — this
+  // breakdown answers "of this year's yet-to-attend cohort, when did they join," not "of
+  // whichever period is selected." Pre-seeded with every month/quarter of the year (in order)
+  // so the chart always reads Jan→Dec / Q1→Q4 even when some months have zero joiners.
+  const currentYear = new Date().getFullYear()
   const monthMap = new Map<string, JoinPeriodBreakdown>()
   const quarterMap = new Map<string, JoinPeriodBreakdown>()
+  for (let m = 0; m < 12; m++) {
+    const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`
+    monthMap.set(monthKey, { key: monthKey, label: `${MONTHS[m]} ${currentYear}`, count: 0 })
+  }
+  for (let q = 1; q <= 4; q++) {
+    const quarterKey = `${currentYear}-Q${q}`
+    quarterMap.set(quarterKey, { key: quarterKey, label: `Q${q} ${currentYear}`, count: 0 })
+  }
   for (const s of list) {
     if (!s.employmentDate) continue
     const d = new Date(s.employmentDate)
     const year = d.getFullYear()
+    if (year !== currentYear) continue
     const monthIdx = d.getMonth()
 
     const monthKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}`
-    const monthEntry = monthMap.get(monthKey) ?? { key: monthKey, label: `${MONTHS[monthIdx]} ${year}`, count: 0 }
-    monthEntry.count++
-    monthMap.set(monthKey, monthEntry)
+    monthMap.get(monthKey)!.count++
 
     const quarter = Math.floor(monthIdx / 3) + 1
     const quarterKey = `${year}-Q${quarter}`
-    const quarterEntry = quarterMap.get(quarterKey) ?? { key: quarterKey, label: `Q${quarter} ${year}`, count: 0 }
-    quarterEntry.count++
-    quarterMap.set(quarterKey, quarterEntry)
+    quarterMap.get(quarterKey)!.count++
   }
   const byJoinMonth = [...monthMap.values()].sort((a, b) => a.key.localeCompare(b.key))
   const byJoinQuarter = [...quarterMap.values()].sort((a, b) => a.key.localeCompare(b.key))
