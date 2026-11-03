@@ -1328,3 +1328,35 @@ model NewHireSurveySettings {
   id       String  @id @default(cuid())
   ccEmails String?
 }
+
+// Single-row settings for Talent Management's Celebrations (birthday / work anniversary) mail —
+// its own sender identity and Cc list, separate from the platform-wide SmtpSettings, same pattern
+// as NewHireSurveySettings above. fromAddress is a real per-send override of the envelope sender
+// (confirmed safe: hr@meristemng.com is a permitted alias on the configured SMTP mailbox), not
+// just a display name — see mailer.ts's buildMessage.
+model TMCelebrationSettings {
+  id                  String   @id @default(cuid())
+  senderName          String   @default("Human Resources")
+  fromAddress         String?  // defaults to hr@meristemng.com in code if unset
+  ccEmails            String?
+  birthdaySubject     String   @default("Talent Management Birthday Celebration!!!")
+  birthdayBody        String
+  anniversarySubject  String   @default("Happy Work Anniversary from the Talent Management Programme!")
+  anniversaryBody     String
+  updatedAt           DateTime @updatedAt
+}
+
+// One row per (person, celebration type, calendar year) actually sent — the daily sweep's
+// idempotency guard, so a cron re-run on the same day (or any retry) never double-sends, and a
+// year's celebration genuinely fires once even though the sweep re-evaluates everyone every day.
+model TMCelebrationSendLog {
+  id        String   @id @default(cuid())
+  staffId   String
+  staffName String
+  type      String   // "birthday" | "anniversary"
+  year      Int       // calendar year this send covers
+  sentAt    DateTime @default(now())
+
+  @@unique([staffId, type, year])
+  @@index([staffId])
+}

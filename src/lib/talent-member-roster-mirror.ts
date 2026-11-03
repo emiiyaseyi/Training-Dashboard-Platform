@@ -1,6 +1,7 @@
 import { connectToSpreadsheet, appendMirrorRow, updateRowByKey, type MirrorField } from '@/lib/google-sheets'
 import { prisma } from '@/lib/prisma'
 import { loadRosterDirectory, resolveStaffLooseAny } from '@/lib/staff-directory'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 import type { TalentMemberInfo } from '@prisma/client'
 
 export interface TalentMemberRosterMirrorResult {
@@ -111,4 +112,44 @@ export async function backfillRosterEntryFromDirectory(
     data: { staffId: match.staffId, name: match.name, email: match.email || null },
   })
   return { updated: true, entry: updated }
+}
+
+// Called right after an Employees-page edit (active/name/email) to that one person, so the TM
+// roster (and anything else keyed off it, like Celebrations) reflects it immediately instead of
+// waiting for someone to click "Refresh from Directory" — the whole point being that marking
+// someone exited/renaming them in ONE place (Admin -> Employees) is enough; no other admin page's
+// copy of them should need its own separate update. One-directional on `active`, same as the bulk
+// refresh action: flips to Exited when the roster now shows them inactive, but never flips Exited
+// back to Active on its own (an admin may have exited someone from the TM programme specifically,
+// independent of their employment status).
+export async function syncTalentMemberRosterForStaffId(staffId: string): Promise<void> {
+  const key = normalizeStaffIdKey(staffId)
+  if (!key) return
+
+  const [entries, directory] = await Promise.all([
+    prisma.talentMemberInfo.findMany(),
+    loadRosterDirectory(),
+  ])
+  const match = directory.get(key)
+  if (!match) return
+
+  for (const entry of entries) {
+    const resolved = resolveStaffLooseAny(entry, directory)
+    if (!resolved || normalizeStaffIdKey(resolved.staffId) !== key) continue
+
+    const statusFix = !match.active && entry.status !== 'Exited' ? 'Exited' : undefined
+    const changed = entry.staffId !== match.staffId || entry.name !== match.name || entry.email !== (match.email || null) || !!statusFix
+    if (!changed) continue
+
+    const updated = await prisma.talentMemberInfo.update({
+      where: { id: entry.id },
+      data: {
+        staffId: match.staffId,
+        name: match.name,
+        email: match.email || null,
+        ...(statusFix ? { status: statusFix } : {}),
+      },
+    })
+    if (entry.sheetSyncedAt) await mirrorRosterEntryToSheet(updated).catch(() => {})
+  }
 }

@@ -84,6 +84,11 @@ export interface SendMailInput {
   subject: string
   html: string
   fromName?: string
+  // Per-send envelope-sender override (e.g. "hr@meristemng.com" for Talent Management's
+  // Celebrations mail) — only safe when the configured SMTP mailbox is actually permitted to send
+  // as that address (a shared domain alias); otherwise falls back to the platform's configured
+  // fromAddress/username as before.
+  fromAddress?: string
   attachments?: { filename: string; content: Buffer }[]
   // Skips merging in SmtpSettings.defaultCc for this one send — used by the reminder sweep (see
   // SurveySettings.excludeDefaultCcOnReminders) so a daily nudge doesn't keep copying the
@@ -160,7 +165,7 @@ ${bodyHtml}
 }
 
 function buildMessage(settings: { fromAddress: string | null; fromName: string; defaultCc: string | null; username: string | null }, input: SendMailInput) {
-  const address = settings.fromAddress || settings.username || undefined
+  const address = input.fromAddress || settings.fromAddress || settings.username || undefined
   const name = input.fromName || settings.fromName
   const from = name && address ? `"${name}" <${address}>` : address
   // Applied here, not at each call site — this is the one choke point every email the platform

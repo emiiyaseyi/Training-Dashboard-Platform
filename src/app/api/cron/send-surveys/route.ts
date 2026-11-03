@@ -6,6 +6,7 @@ import { sendCronFailureAlert } from '@/lib/cron-alert'
 import { sendCustomSurveyReminders } from '@/lib/custom-survey'
 import { sendPDPReminders } from '@/lib/pdp-send'
 import { syncNewHireExperienceSurveys, sendDueNewHireExperienceSurveys, sendNewHireExperienceSurveyReminders } from '@/lib/new-hire-survey'
+import { sendDueTMCelebrationEmails } from '@/lib/tm-celebrations'
 
 const DAY_MS = 86400000
 
@@ -135,6 +136,19 @@ export async function GET(req: NextRequest) {
     newHireError = err instanceof Error ? err.message : 'Failed to sync/send New Hire Experience Surveys.'
   }
 
+  // Fifth sweep: Talent Management's Celebrations (birthday / work anniversary) mail — evaluates
+  // every active Talent Member daily; TMCelebrationSendLog's unique constraint is what actually
+  // keeps this idempotent, not the sweep's own cadence. Same wrap-and-report pattern as above.
+  let celebrationResult: { birthdaysSent: number; anniversariesSent: number } = { birthdaysSent: 0, anniversariesSent: 0 }
+  let celebrationError: string | null = null
+  try {
+    const result = await sendDueTMCelebrationEmails()
+    celebrationResult = { birthdaysSent: result.birthdaysSent, anniversariesSent: result.anniversariesSent }
+    if (result.errors.length > 0) celebrationError = result.errors.join('; ')
+  } catch (err) {
+    celebrationError = err instanceof Error ? err.message : 'Failed to send TM Celebrations mail.'
+  }
+
   await sendCronFailureAlert(
     'Survey send/reminder',
     [
@@ -142,11 +156,12 @@ export async function GET(req: NextRequest) {
       ...customErrors.map((e) => `Custom Survey "${e.title}": ${e.message}`),
       ...(pdpError ? [`PDP reminders: ${pdpError}`] : []),
       ...(newHireError ? [`New Hire Experience Survey: ${newHireError}`] : []),
+      ...(celebrationError ? [`TM Celebrations: ${celebrationError}`] : []),
     ]
   )
 
   return NextResponse.json({
-    success: errors.length === 0 && customErrors.length === 0 && !pdpError && !newHireError,
-    results, errors, customResults, customErrors, pdpResult, pdpError, newHireResult, newHireError,
+    success: errors.length === 0 && customErrors.length === 0 && !pdpError && !newHireError && !celebrationError,
+    results, errors, customResults, customErrors, pdpResult, pdpError, newHireResult, newHireError, celebrationResult, celebrationError,
   })
 }

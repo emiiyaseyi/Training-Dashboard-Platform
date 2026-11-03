@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { normalizeBUName } from '@/lib/bu-normalizer'
 import { invalidateComprehensiveStaffListCache } from '@/lib/staff-directory'
+import { syncTalentMemberRosterForStaffId } from '@/lib/talent-member-roster-mirror'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const gate = await requirePermission('admin-settings', 'admin')
@@ -34,6 +35,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     })
     invalidateComprehensiveStaffListCache() // this DB edit alone changes what loadRosterDirectory() returns, regardless of the sheet sync below
+
+    // Propagates this edit to every other admin page that keeps its own copy of this person
+    // (currently just the Talent Member roster's name/email/Exited-status) — so marking someone
+    // exited, or fixing their name, here is the only place an admin ever has to do it. Best-effort:
+    // never fails the Employees-page edit itself if this secondary sync has a problem.
+    if (active !== undefined || firstName !== undefined || middleName !== undefined || lastName !== undefined || email !== undefined) {
+      await syncTalentMemberRosterForStaffId(record.staffId).catch((err) => {
+        console.error('[admin/staff-quality/[id] PUT] TM roster sync failed', err)
+      })
+    }
 
     // The database is the source of truth for staff — edits are NOT written back to the sheet.
     const sheetSync = { attempted: false, success: false }

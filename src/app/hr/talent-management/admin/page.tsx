@@ -6,6 +6,7 @@ import { ArrowLeft, Users2, TrendingUp, Repeat, Award, Star, UploadCloud, Loader
 import { SectionCard } from '@/components/ui/SectionCard'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { usePagePermission } from '@/lib/use-page-permission'
+import { CelebrationsPanel } from '@/components/hr/tm/CelebrationsPanel'
 
 // ---------- shared bits ----------
 
@@ -830,6 +831,8 @@ export default function TalentManagementAdminPage() {
           }}
         />
       )}
+
+      <CelebrationsPanel />
 
       <RecordSection
         title="Talent Member Profiles"
