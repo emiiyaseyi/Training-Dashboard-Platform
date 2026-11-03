@@ -96,7 +96,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.isSuperAdmin = token.isSuperAdmin as boolean
         session.user.businessUnitScope = token.businessUnitScope as string
         session.user.mustChangePassword = token.mustChangePassword as boolean
-        session.user.permissions = token.permissions as Record<string, string>
+        // Read fresh from the DB on every session check, not the JWT's cached copy — otherwise an
+        // admin granting/changing someone's permission while they're already logged in has no
+        // effect until that person signs out and back in (confirmed case: two users granted admin
+        // on an HR unit didn't see the Admin button until told to re-login). permissions is the
+        // one piece of the token that changes from outside the owning user's own session (every
+        // other token field only ever changes via that user's own sign-in or self-service update),
+        // so it's the one worth a per-request lookup; isSuperAdmin/businessUnitScope etc. stay on
+        // the cheaper JWT-cached path above.
+        try {
+          const fresh = await prisma.user.findUnique({ where: { id: token.id as string }, include: { permissions: true } })
+          session.user.permissions = fresh ? Object.fromEntries(fresh.permissions.map((p) => [p.page, p.level])) : (token.permissions as Record<string, string>)
+        } catch {
+          session.user.permissions = token.permissions as Record<string, string>
+        }
       }
       return session
     },
