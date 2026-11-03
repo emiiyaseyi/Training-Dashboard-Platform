@@ -170,7 +170,7 @@ export default function TalentManagementPage() {
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <p className="text-sm font-bold text-slate-800 mb-3">Talent Pool Composition (by Tier)</p>
             {data && data.tierComposition.length > 0 && (
-              <PieChart labels={data.tierComposition.map((t) => t.tier)} values={data.tierComposition.map((t) => t.count)} height={220} />
+              <PieChart labels={data.tierComposition.map((t) => t.tier)} values={data.tierComposition.map((t) => t.count)} height={320} legendY={-0.22} />
             )}
           </div>
 
@@ -184,7 +184,7 @@ export default function TalentManagementPage() {
           <div className="bg-white border border-meristem-100 rounded-2xl p-5">
             <p className="text-sm font-bold text-slate-800 mb-3">Gender Composition</p>
             {data && data.genderComposition.length > 0 && (
-              <PieChart labels={data.genderComposition.map((g) => g.gender)} values={data.genderComposition.map((g) => g.count)} height={220} />
+              <PieChart labels={data.genderComposition.map((g) => g.gender)} values={data.genderComposition.map((g) => g.count)} height={320} legendY={-0.22} />
             )}
           </div>
         </div>
