@@ -161,7 +161,12 @@ export async function computeTalentMemberReport(filter: PeriodFilter): Promise<T
   if (tmTypeNames.size === 0) tmTypeNames.add('tm') // safety net if nothing's flagged yet at all
   const isTMTrainingType = (v: string | null) => {
     const n = normTM(v)
-    return tmTypeNames.has(n) || n.startsWith('talentmember')
+    // The bare "TM" abbreviation is always recognized, flagged or not — the taxonomy entry used to
+    // be literally named "TM" before being renamed in place to "Talent Member" (not re-created as a
+    // new entry), which orphaned every older record still saved under that old spelling the moment
+    // the rename happened (the "talentmember" prefix match below only catches renames within that
+    // word family, not an abbreviation like this one).
+    return tmTypeNames.has(n) || n.startsWith('talentmember') || n === 'tm'
   }
   const tmSchedules = allSchedules.filter((s) => isTMTrainingType(s.trainingType))
   const inSelectedPeriod = (month: string) => monthIndices === null || monthIndices.includes(MONTHS.indexOf(month as typeof MONTHS[number]))
