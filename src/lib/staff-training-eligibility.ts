@@ -77,10 +77,16 @@ export function latestRosterSnapshot<T extends { staffId: string; createdAt: Dat
 }
 
 // Yet to Attend Training's own pool — wider than the coverage rule above on purpose: everyone
-// except Meri Movers who was on the books at some point during the period viewed, whether or not
-// they're confirmed, an intern, or a late-in-the-year hire. "On the books" means hired on/before
-// the period's end and not exited before its start (exit = StaffRosterRecord.endDate). An "All
-// Time" view (no bounds) is just the people currently active.
+// except Meri Movers who is CURRENTLY active, whether or not they're confirmed, an intern, or a
+// late-in-the-year hire. This is also the pool Executive Overview and the BU reports use for
+// their "Total Staff in Period" figure (see analytics.ts) — a change here affects both.
+//
+// Exited staff are excluded entirely, not counted up to their exit date — an earlier version did
+// count them through their exit date (so someone who left without training still showed as a gap
+// for that period), but that meant anyone marked exited on the Staff Roster kept reappearing on
+// Yet to Attend indefinitely, which read as a bug rather than an intentional "they left
+// untrained" flag. Simpler and matches what "yet to attend" means day-to-day: current staff who
+// haven't been trained yet.
 export interface PeriodBounds { start: Date | null; end: Date | null }
 
 export function periodBoundsForFilter(filter: PeriodFilter, monthIndex: (m: string) => number, now = new Date()): PeriodBounds {
@@ -102,11 +108,8 @@ export function isInYetToAttendPool(
   staff: Pick<StaffRosterRecord, 'active' | 'role' | 'employmentDate' | 'endDate'>,
   bounds: PeriodBounds,
 ): boolean {
+  if (!staff.active) return false
   if (isMeriMover(staff)) return false
   if (bounds.end && staff.employmentDate && staff.employmentDate > bounds.end) return false // joined after the period
-  if (staff.active) return true
-  // Exited: only counts if they were still here at some point in the period. No recorded exit date
-  // means we can't say when they left, so they're left out rather than guessed at.
-  if (!bounds.start || !staff.endDate) return false
-  return staff.endDate >= bounds.start
+  return true
 }

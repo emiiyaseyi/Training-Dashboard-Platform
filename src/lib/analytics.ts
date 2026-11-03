@@ -670,8 +670,8 @@ export async function computeGroupAnalytics(filter: PeriodFilter = { mode: 'all'
   const allManagerReviews = scopeSet ? rawManagerReviews.filter((r) => scopeSet.has(r.businessUnit)) : rawManagerReviews
   const latestRoster = latestRosterSnapshot(rawRoster)
   const rosterRecords = scopeSet ? latestRoster.filter((r) => scopeSet.has(r.businessUnit)) : latestRoster
-  // Same staff pool as Yet to Attend Training: everyone employed during the period except Meri
-  // Movers (leavers counted up to their exit date) — see isInYetToAttendPool.
+  // Same staff pool as Yet to Attend Training: everyone currently active except Meri Movers (exited
+  // staff excluded entirely) — see isInYetToAttendPool.
   const poolBounds = periodBoundsForFilter(filter, (m) => MONTHS.indexOf(m as (typeof MONTHS)[number]))
   const poolRoster = rosterRecords.filter((r) => isInYetToAttendPool(r, poolBounds))
 

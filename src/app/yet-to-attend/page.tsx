@@ -75,7 +75,6 @@ export default function YetToAttendPage() {
             Department: s.department ?? '',
             'Employment Date': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString() : '',
             'Join Month': s.employmentDate ? new Date(s.employmentDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '',
-            'Exit Date': s.exitDate ? new Date(s.exitDate).toLocaleDateString() : '',
           })),
         }],
         'yet_to_attend_training'
@@ -129,7 +128,7 @@ export default function YetToAttendPage() {
               <KPICard
                 title="Total Staff in Period"
                 value={data.totalConfirmedStaff.toLocaleString()}
-                subtitle="Active staff plus anyone who left during the period; includes interns and unconfirmed; excludes Meri Movers"
+                subtitle="Currently active staff; includes interns and unconfirmed; excludes Meri Movers and anyone exited"
                 icon={Users}
                 color="blue"
               />
@@ -309,12 +308,6 @@ export default function YetToAttendPage() {
                     key: 'employmentDate',
                     header: 'Join Month',
                     render: (r) => (r.employmentDate ? new Date(r.employmentDate as string).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—'),
-                  },
-                  {
-                    key: 'exitDate',
-                    header: 'Exit Date',
-                    sortable: true,
-                    render: (r) => (r.exitDate ? new Date(r.exitDate as string).toLocaleDateString() : '—'),
                   },
                 ]}
                 data={filteredList as unknown as Record<string, unknown>[]}

@@ -32,7 +32,6 @@ export interface YetToAttendStaff {
   role: string | null
   department: string | null
   employmentDate: string | null
-  exitDate: string | null // set when this person left during/after the period — still counted, since they were employed in it
 }
 
 function fullName(r: { firstName: string; middleName: string | null; lastName: string }): string {
@@ -124,8 +123,8 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
   // Movers get their own informational cards below instead, counted from the active roster
   // regardless of confirmation status, since "how many Meri Movers do we have" doesn't depend on
   // whether they happen to be confirmed.
-  // Pool = everyone on the books during the period except Meri Movers (confirmed or not, interns
-  // and late-year hires included; leavers count if they were still here at some point in it).
+  // Pool = everyone currently active except Meri Movers (confirmed or not, interns and late-year
+  // hires included; exited staff are excluded entirely — see isInYetToAttendPool).
   const bounds = periodBoundsForFilter(filter, (m) => MONTHS.indexOf(m as (typeof MONTHS)[number]))
 
   let roster = latestRoster.filter((r) => isInYetToAttendPool(r, bounds))
@@ -195,7 +194,6 @@ export async function computeYetToAttend(filter: PeriodFilter, buScope?: string[
         role: staff.role,
         department: staff.department,
         employmentDate: staff.employmentDate ? staff.employmentDate.toISOString() : null,
-        exitDate: !staff.active && staff.endDate ? staff.endDate.toISOString() : null,
       })
     }
   }
