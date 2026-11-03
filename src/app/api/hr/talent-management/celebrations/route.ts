@@ -31,8 +31,10 @@ export async function PUT(req: NextRequest) {
     ccEmails: typeof body.ccEmails === 'string' ? body.ccEmails.trim() || null : null,
     birthdaySubject: body.birthdaySubject,
     birthdayBody: body.birthdayBody,
+    birthdayEnabled: body.birthdayEnabled !== false,
     anniversarySubject: body.anniversarySubject,
     anniversaryBody: body.anniversaryBody,
+    anniversaryEnabled: body.anniversaryEnabled !== false,
   })
   return NextResponse.json(updated)
 }

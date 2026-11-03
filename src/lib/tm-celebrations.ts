@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { sendMail, parseCcList } from '@/lib/mailer'
-import { loadRosterDirectory, resolveStaffLooseAny } from '@/lib/staff-directory'
+import { loadRosterDirectory, resolveStaff, resolveStaffLooseAny } from '@/lib/staff-directory'
 import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 // Talent Management's Celebrations mail — birthday and work-anniversary emails to active Talent
@@ -51,8 +51,10 @@ export interface CelebrationSettings {
   ccEmails: string | null
   birthdaySubject: string
   birthdayBody: string
+  birthdayEnabled: boolean
   anniversarySubject: string
   anniversaryBody: string
+  anniversaryEnabled: boolean
 }
 
 export async function getCelebrationSettings(): Promise<CelebrationSettings> {
@@ -76,8 +78,10 @@ export async function saveCelebrationSettings(data: {
   ccEmails: string | null
   birthdaySubject: string
   birthdayBody: string
+  birthdayEnabled: boolean
   anniversarySubject: string
   anniversaryBody: string
+  anniversaryEnabled: boolean
 }): Promise<CelebrationSettings> {
   const existing = await getCelebrationSettings()
   return prisma.tMCelebrationSettings.update({ where: { id: existing.id }, data })
@@ -174,9 +178,33 @@ async function buildAndSend(
   })
 }
 
+// If `to` is a real employee's email, the test uses their actual first name (and, for anniversary,
+// their actual years of service) instead of a generic placeholder — so what the admin sees in the
+// test is a true preview of what that person would actually receive, not just the template shape.
 export async function sendTestCelebrationEmail(type: CelebrationType, to: string): Promise<void> {
   const settings = await getCelebrationSettings()
-  const vars: Record<string, string> = type === 'birthday' ? { firstname: 'Test' } : { firstname: 'Test', years: '3' }
+  const directory = await loadRosterDirectory()
+  const match = resolveStaff(to, directory)
+
+  let vars: Record<string, string>
+  if (!match) {
+    vars = type === 'birthday' ? { firstname: 'Test' } : { firstname: 'Test', years: '3' }
+  } else {
+    const firstname = match.firstName || match.name.split(' ')[0] || match.name
+    if (type === 'birthday') {
+      vars = { firstname }
+    } else {
+      const key = normalizeStaffIdKey(match.staffId)
+      const [tmEntries, roster] = await Promise.all([
+        prisma.talentMemberInfo.findMany(),
+        prisma.staffRosterRecord.findFirst({ where: { staffId: match.staffId }, orderBy: { createdAt: 'desc' } }),
+      ])
+      const tmEntry = tmEntries.find((e) => normalizeStaffIdKey(resolveStaffLooseAny(e, directory)?.staffId || '') === key)
+      const anniversaryDate = tmEntry?.dojMeristem ?? roster?.employmentDate ?? null
+      const years = anniversaryDate ? Math.max(1, new Date().getUTCFullYear() - anniversaryDate.getUTCFullYear()) : 3
+      vars = { firstname, years: String(years) }
+    }
+  }
   await buildAndSend(settings, type, to, vars)
 }
 
@@ -202,7 +230,7 @@ export async function sendDueTMCelebrationEmails(): Promise<CelebrationSweepResu
   for (const c of candidates) {
     if (!c.email) continue
 
-    if (matchesMonthDay(c.dateOfBirth, month, day)) {
+    if (settings.birthdayEnabled && matchesMonthDay(c.dateOfBirth, month, day)) {
       try {
         // Claims the idempotency slot BEFORE sending — a unique-constraint failure here means
         // this person's birthday mail already went out this year (expected, silent), so the send
@@ -220,7 +248,7 @@ export async function sendDueTMCelebrationEmails(): Promise<CelebrationSweepResu
       }
     }
 
-    if (matchesMonthDay(c.anniversaryDate, month, day)) {
+    if (settings.anniversaryEnabled && matchesMonthDay(c.anniversaryDate, month, day)) {
       const years = year - (c.anniversaryDate as Date).getUTCFullYear()
       if (years > 0) {
         try {

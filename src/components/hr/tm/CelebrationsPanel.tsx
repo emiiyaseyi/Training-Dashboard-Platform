@@ -10,8 +10,21 @@ interface Settings {
   ccEmails: string | null
   birthdaySubject: string
   birthdayBody: string
+  birthdayEnabled: boolean
   anniversarySubject: string
   anniversaryBody: string
+  anniversaryEnabled: boolean
+}
+
+function PauseToggle({ enabled, onChange }: { enabled: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-1.5 text-[11px] font-medium cursor-pointer select-none">
+      <input type="checkbox" checked={!enabled} onChange={(e) => onChange(!e.target.checked)} className="w-3.5 h-3.5" />
+      <span className={enabled ? 'text-slate-500' : 'text-amber-700'}>
+        {enabled ? 'Pause this mail' : 'Paused — no automatic mail will go out'}
+      </span>
+    </label>
+  )
 }
 
 function TestSendRow({ type }: { type: 'birthday' | 'anniversary' }) {
@@ -145,7 +158,10 @@ export function CelebrationsPanel() {
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-slate-700 mb-2">Birthday mail</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-700">Birthday mail</p>
+                <PauseToggle enabled={settings.birthdayEnabled} onChange={(next) => setSettings({ ...settings, birthdayEnabled: next })} />
+              </div>
               <label className="block text-[11px] font-medium text-slate-500 mb-1">Subject</label>
               <input
                 value={settings.birthdaySubject}
@@ -165,7 +181,10 @@ export function CelebrationsPanel() {
             </div>
 
             <div>
-              <p className="text-xs font-semibold text-slate-700 mb-2">Work anniversary mail</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-700">Work anniversary mail</p>
+                <PauseToggle enabled={settings.anniversaryEnabled} onChange={(next) => setSettings({ ...settings, anniversaryEnabled: next })} />
+              </div>
               <label className="block text-[11px] font-medium text-slate-500 mb-1">Subject</label>
               <input
                 value={settings.anniversarySubject}

@@ -1341,8 +1341,10 @@ model TMCelebrationSettings {
   ccEmails            String?
   birthdaySubject     String   @default("Talent Management Birthday Celebration!!!")
   birthdayBody        String
+  birthdayEnabled     Boolean  @default(true) // pause switch — the daily sweep skips birthday mail entirely while false
   anniversarySubject  String   @default("Happy Work Anniversary from the Talent Management Programme!")
   anniversaryBody     String
+  anniversaryEnabled  Boolean  @default(true) // pause switch — the daily sweep skips anniversary mail entirely while false
   updatedAt           DateTime @updatedAt
 }
 
