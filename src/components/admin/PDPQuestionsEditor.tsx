@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Plus, Trash2, Pencil, X, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, Plus, Trash2, Pencil, X, Check, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react'
 
 interface Question {
   id: string
@@ -20,6 +20,7 @@ interface Question {
 interface Section {
   id: string
   key: string
+  order: number
   title: string
   description: string | null
   enabled: boolean
@@ -71,6 +72,46 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
       setReorderMessage(err instanceof Error ? err.message : 'Failed to reorder sections.')
     } finally {
       setReordering(false)
+    }
+  }
+
+  const [movingSectionId, setMovingSectionId] = useState<string | null>(null)
+  const [movingQId, setMovingQId] = useState<string | null>(null)
+
+  // Swaps this section with its neighbor one slot up/down, by swapping their stored `order`
+  // values — `sections` arrives from the parent already sorted by `order`, so the neighbor at
+  // index-1/index+1 in that array is exactly the one currently adjacent on screen.
+  const moveSection = async (index: number, direction: -1 | 1) => {
+    const neighborIndex = index + direction
+    if (neighborIndex < 0 || neighborIndex >= sections.length) return
+    const a = sections[index]
+    const b = sections[neighborIndex]
+    setMovingSectionId(a.id)
+    try {
+      await Promise.all([
+        fetch(`/api/admin/pdp/${cycle.id}/sections/${a.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: b.order }) }),
+        fetch(`/api/admin/pdp/${cycle.id}/sections/${b.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: a.order }) }),
+      ])
+      await onReload()
+    } finally {
+      setMovingSectionId(null)
+    }
+  }
+
+  const moveQuestion = async (section: Section, index: number, direction: -1 | 1) => {
+    const neighborIndex = index + direction
+    if (neighborIndex < 0 || neighborIndex >= section.questions.length) return
+    const a = section.questions[index]
+    const b = section.questions[neighborIndex]
+    setMovingQId(a.id)
+    try {
+      await Promise.all([
+        fetch(`/api/admin/pdp/${cycle.id}/sections/${section.id}/questions/${a.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: b.order }) }),
+        fetch(`/api/admin/pdp/${cycle.id}/sections/${section.id}/questions/${b.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order: a.order }) }),
+      ])
+      await onReload()
+    } finally {
+      setMovingQId(null)
     }
   }
 
@@ -249,7 +290,7 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
       )}
 
       <div className="space-y-2">
-        {sections.map((section) => (
+        {sections.map((section, sectionIndex) => (
           <div key={section.id} className={`border rounded-lg ${section.enabled ? 'border-slate-200' : 'border-slate-100 bg-slate-50 opacity-70'}`}>
             <div className="flex items-center justify-between gap-2 px-3 py-2">
               <button onClick={() => setExpandedId(expandedId === section.id ? null : section.id)} className="flex items-center gap-2 text-left flex-1">
@@ -258,6 +299,14 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
                 <span className="text-[11px] text-slate-400">{section.questions.length} question(s){section.maxRepeats > 1 ? ` · up to ${section.maxRepeats}x` : ''}</span>
               </button>
               <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-0.5">
+                  <button onClick={() => moveSection(sectionIndex, -1)} disabled={sectionIndex === 0 || movingSectionId === section.id} className="text-slate-400 hover:text-navy-600 disabled:opacity-30" title="Move section up">
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => moveSection(sectionIndex, 1)} disabled={sectionIndex === sections.length - 1 || movingSectionId === section.id} className="text-slate-400 hover:text-navy-600 disabled:opacity-30" title="Move section down">
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <label className="flex items-center gap-1 text-[11px] text-slate-500">
                   <input type="checkbox" checked={section.enabled} onChange={() => toggleSectionEnabled(section)} disabled={savingSectionId === section.id} />
                   Shown
@@ -272,7 +321,7 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
               <div className="border-t border-slate-100 px-3 py-3 space-y-2">
                 {section.description && <p className="text-[11px] text-slate-400">{section.description}</p>}
 
-                {section.questions.map((q) => (
+                {section.questions.map((q, qIndex) => (
                   <div key={q.id} className="border border-slate-200 rounded-lg px-3 py-2">
                     {editingQId === q.id ? (
                       <div className="space-y-2">
@@ -317,6 +366,14 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-0.5">
+                            <button onClick={() => moveQuestion(section, qIndex, -1)} disabled={qIndex === 0 || movingQId === q.id} className="text-slate-400 hover:text-navy-600 disabled:opacity-30" title="Move question up">
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => moveQuestion(section, qIndex, 1)} disabled={qIndex === section.questions.length - 1 || movingQId === q.id} className="text-slate-400 hover:text-navy-600 disabled:opacity-30" title="Move question down">
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                           <button onClick={() => startEdit(q)} className="text-slate-400 hover:text-navy-600"><Pencil className="w-3.5 h-3.5" /></button>
                           <button onClick={() => deleteQuestion(section.id, q.id)} disabled={savingQId === q.id} className="text-slate-400 hover:text-red-600">
                             {savingQId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}

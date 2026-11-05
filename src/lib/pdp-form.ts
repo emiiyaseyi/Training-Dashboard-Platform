@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { recommendedOrderIndex } from './pdp-seed'
 
 export interface PDPFormQuestion {
   id: string
@@ -43,7 +44,15 @@ export async function resolvePDPSections(cycleId: string, opts: { onlyKeys?: str
   ])
   const capabilityNames = capabilities.map((c) => c.name)
 
-  return sections.map((s) => ({
+  // Re-applies the canonical PDP-before-Digital-Skill-Assessment order at read time, rather than
+  // trusting each cycle's stored `order` field — a cycle seeded or hand-reordered before that
+  // canonical order existed (or drifted from it since) would otherwise keep rendering sections out
+  // of order to respondents until an admin remembered to click "Reset to recommended order".
+  // Stable sort preserves relative position among any custom admin-added sections (not in the
+  // recommended list), which this never reorders.
+  const ordered = [...sections].sort((a, b) => recommendedOrderIndex(a.key) - recommendedOrderIndex(b.key))
+
+  return ordered.map((s) => ({
     id: s.id,
     key: s.key,
     order: s.order,

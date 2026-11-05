@@ -30,7 +30,7 @@ interface StaffSurvey { id: string; staffId: string; staffName: string; business
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; needsReview: boolean; submittedAt: string | null; answers: string | null }
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
-interface Section { id: string; key: string; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
+interface Section { id: string; key: string; order: number; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
 interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[] }
 
 interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }

@@ -648,7 +648,7 @@ export const RECOMMENDED_SECTION_ORDER: string[] = [
   'confirmation', 'manager_validation', 'manager_need_review',
 ]
 
-function recommendedOrderIndex(key: string): number {
+export function recommendedOrderIndex(key: string): number {
   const i = RECOMMENDED_SECTION_ORDER.indexOf(key)
   return i === -1 ? RECOMMENDED_SECTION_ORDER.length : i
 }
