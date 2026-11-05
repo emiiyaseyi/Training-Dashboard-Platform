@@ -7,6 +7,7 @@ interface QuestionBreakdown {
   questionId: string
   label: string
   sectionTitle: string
+  sectionGroup: 'pdp' | 'digitalSkills'
   total: Record<string, number>
   byBusinessUnit: Record<string, Record<string, number>>
   byDepartment: Record<string, Record<string, number>>
@@ -67,6 +68,16 @@ function CountTable({ counts, max }: { counts: Record<string, number>; max: numb
 
 function renderValue(v: string | string[] | undefined): string {
   return v == null ? '—' : Array.isArray(v) ? (v.join(', ') || '—') : v
+}
+
+function groupBySection<T extends { sectionTitle: string }>(qs: T[]): [string, T[]][] {
+  const bySection = new Map<string, T[]>()
+  for (const q of qs) {
+    const arr = bySection.get(q.sectionTitle) ?? []
+    arr.push(q)
+    bySection.set(q.sectionTitle, arr)
+  }
+  return [...bySection.entries()]
 }
 
 function PersonRecap({ sections, answers }: { sections: Section[]; answers: Answers }) {
@@ -141,15 +152,12 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
     return data.groupOpportunities
   }, [data, scope, scopeValue])
 
-  const grouped = useMemo(() => {
-    const bySection = new Map<string, typeof scopedQuestions>()
-    for (const q of scopedQuestions) {
-      const arr = bySection.get(q.sectionTitle) ?? []
-      arr.push(q)
-      bySection.set(q.sectionTitle, arr)
-    }
-    return [...bySection.entries()]
-  }, [scopedQuestions])
+  // Split into the two parts of the form the admin wants analyzed independently — everything
+  // outside the Digital Skill Assessment's per-tool sections (Role Alignment, Capabilities,
+  // Development Needs, any custom section) vs. the Digital Skill Assessment itself — each grouped
+  // by section within its own half, same as before.
+  const groupedPdp = useMemo(() => groupBySection(scopedQuestions.filter((q) => q.sectionGroup === 'pdp')), [scopedQuestions])
+  const groupedDigitalSkills = useMemo(() => groupBySection(scopedQuestions.filter((q) => q.sectionGroup === 'digitalSkills')), [scopedQuestions])
 
   const filteredPeople = useMemo(() => {
     if (!data) return []
@@ -189,54 +197,77 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
             )}
           </div>
 
-          {capabilityDemandScoped && Object.keys(capabilityDemandScoped.counts).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-700 mb-1">Total Needs per Capability</p>
-              <p className="text-[11px] text-slate-400 mb-2">How many people have a need touching each of Meristem&apos;s strategic capabilities — Primary and Secondary combined, counted once per person.</p>
-              <CountTable counts={capabilityDemandScoped.counts} max={capabilityDemandScoped.max} />
-            </div>
-          )}
+          <div className="border border-slate-200 rounded-xl p-4 space-y-4">
+            <p className="text-sm font-bold text-slate-800">Personal Development Plan</p>
 
-          {scopedGroupOpportunities.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-700 mb-1">Group Training Opportunities</p>
-              <p className="text-[11px] text-slate-400 mb-2">Same need area, same Business Unit, 2+ people — candidates for a shared intervention instead of individual training.</p>
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="text-left text-slate-400 border-b border-slate-100">
-                    <th className="py-1 pr-2 font-medium">Need Area</th>
-                    <th className="py-1 pr-2 font-medium">Business Unit</th>
-                    <th className="py-1 pr-2 font-medium w-14 text-right">People</th>
-                    <th className="py-1 font-medium">Who</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scopedGroupOpportunities.map((g) => (
-                    <tr key={`${g.area}::${g.businessUnit}`} className="border-b border-slate-50 last:border-0">
-                      <td className="py-1 pr-2 text-slate-600">{g.area}</td>
-                      <td className="py-1 pr-2 text-slate-500">{g.businessUnit}</td>
-                      <td className="py-1 pr-2 text-slate-700 text-right font-medium">{g.count}</td>
-                      <td className="py-1 text-slate-400">{g.people.join(', ')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {grouped.map(([sectionTitle, questions]) => (
-            <div key={sectionTitle}>
-              <p className="text-xs font-semibold text-slate-700 mb-2">{sectionTitle}</p>
-              <div className="space-y-4">
-                {questions.map((q) => (
-                  <div key={q.questionId}>
-                    <p className="text-[11px] font-medium text-slate-500 mb-1">{q.label}</p>
-                    <CountTable counts={q.counts} max={q.max} />
-                  </div>
-                ))}
+            {capabilityDemandScoped && Object.keys(capabilityDemandScoped.counts).length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-700 mb-1">Total Needs per Capability</p>
+                <p className="text-[11px] text-slate-400 mb-2">How many people have a need touching each of Meristem&apos;s strategic capabilities — Primary and Secondary combined, counted once per person.</p>
+                <CountTable counts={capabilityDemandScoped.counts} max={capabilityDemandScoped.max} />
               </div>
+            )}
+
+            {scopedGroupOpportunities.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-700 mb-1">Group Training Opportunities</p>
+                <p className="text-[11px] text-slate-400 mb-2">Same need area, same Business Unit, 2+ people — candidates for a shared intervention instead of individual training.</p>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-slate-100">
+                      <th className="py-1 pr-2 font-medium">Need Area</th>
+                      <th className="py-1 pr-2 font-medium">Business Unit</th>
+                      <th className="py-1 pr-2 font-medium w-14 text-right">People</th>
+                      <th className="py-1 font-medium">Who</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scopedGroupOpportunities.map((g) => (
+                      <tr key={`${g.area}::${g.businessUnit}`} className="border-b border-slate-50 last:border-0">
+                        <td className="py-1 pr-2 text-slate-600">{g.area}</td>
+                        <td className="py-1 pr-2 text-slate-500">{g.businessUnit}</td>
+                        <td className="py-1 pr-2 text-slate-700 text-right font-medium">{g.count}</td>
+                        <td className="py-1 text-slate-400">{g.people.join(', ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {groupedPdp.map(([sectionTitle, questions]) => (
+              <div key={sectionTitle}>
+                <p className="text-xs font-semibold text-slate-700 mb-2">{sectionTitle}</p>
+                <div className="space-y-4">
+                  {questions.map((q) => (
+                    <div key={q.questionId}>
+                      <p className="text-[11px] font-medium text-slate-500 mb-1">{q.label}</p>
+                      <CountTable counts={q.counts} max={q.max} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {groupedDigitalSkills.length > 0 && (
+            <div className="border border-slate-200 rounded-xl p-4 space-y-4">
+              <p className="text-sm font-bold text-slate-800">Digital Skill Assessment</p>
+              {groupedDigitalSkills.map(([sectionTitle, questions]) => (
+                <div key={sectionTitle}>
+                  <p className="text-xs font-semibold text-slate-700 mb-2">{sectionTitle}</p>
+                  <div className="space-y-4">
+                    {questions.map((q) => (
+                      <div key={q.questionId}>
+                        <p className="text-[11px] font-medium text-slate-500 mb-1">{q.label}</p>
+                        <CountTable counts={q.counts} max={q.max} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </>
       )}
 

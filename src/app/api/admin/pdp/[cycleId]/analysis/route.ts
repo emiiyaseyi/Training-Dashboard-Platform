@@ -66,19 +66,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
   // questionId -> label (for questions worth counting: select/multiselect only — text/textarea
   // are free-form and not meaningfully countable, rating/yesno are low-cardinality enough to just
   // skip here too, keeping this focused on "what did people pick").
-  interface CountableQuestion { id: string; label: string; sectionTitle: string; isRepeating: boolean }
+  interface CountableQuestion { id: string; label: string; sectionTitle: string; sectionKey: string; isRepeating: boolean }
   const countable: CountableQuestion[] = []
   for (const section of sections) {
     if (section.key === 'manager_validation' || section.key === 'confirmation') continue
     for (const q of section.questions) {
-      if (q.type === 'select' || q.type === 'multiselect') countable.push({ id: q.id, label: q.label, sectionTitle: section.title, isRepeating: section.key === 'development_needs' })
+      if (q.type === 'select' || q.type === 'multiselect') countable.push({ id: q.id, label: q.label, sectionTitle: section.title, sectionKey: section.key, isRepeating: section.key === 'development_needs' })
     }
   }
 
   type CountMap = Record<string, number>
-  interface QuestionBreakdown { questionId: string; label: string; sectionTitle: string; total: CountMap; byBusinessUnit: Record<string, CountMap>; byDepartment: Record<string, CountMap> }
+  // sectionGroup splits the two parts of the form the admin wants analyzed independently: every
+  // 'digital_skill_*' section is the Digital Skill Assessment, everything else countable (Role
+  // Alignment, Capabilities, Development Needs, and any custom admin-added section) is the PDP
+  // proper. Used by the client to render them as two separate blocks, and by the Excel export
+  // below to put them on separate sheets.
+  interface QuestionBreakdown { questionId: string; label: string; sectionTitle: string; sectionGroup: 'pdp' | 'digitalSkills'; total: CountMap; byBusinessUnit: Record<string, CountMap>; byDepartment: Record<string, CountMap> }
+  const sectionGroupFor = (sectionKey: string): 'pdp' | 'digitalSkills' => (sectionKey.startsWith('digital_skill_') ? 'digitalSkills' : 'pdp')
   const breakdowns = new Map<string, QuestionBreakdown>()
-  for (const q of countable) breakdowns.set(q.id, { questionId: q.id, label: q.label, sectionTitle: q.sectionTitle, total: {}, byBusinessUnit: {}, byDepartment: {} })
+  for (const q of countable) breakdowns.set(q.id, { questionId: q.id, label: q.label, sectionTitle: q.sectionTitle, sectionGroup: sectionGroupFor(q.sectionKey), total: {}, byBusinessUnit: {}, byDepartment: {} })
 
   const bump = (map: CountMap, key: string) => { map[key] = (map[key] || 0) + 1 }
   const addValue = (bd: QuestionBreakdown, bu: string, dept: string | null, v: string | string[] | undefined) => {
@@ -114,7 +120,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
   // picking the same capability for both only counts once) rather than as two separate rankings a
   // reader has to mentally combine themselves.
   const capabilitiesSection = sections.find((s) => s.key === 'capabilities')
-  const capabilityDemand: QuestionBreakdown = { questionId: 'capabilityDemand', label: 'Capability Demand (Primary + Secondary combined)', sectionTitle: capabilitiesSection?.title || 'Capabilities', total: {}, byBusinessUnit: {}, byDepartment: {} }
+  const capabilityDemand: QuestionBreakdown = { questionId: 'capabilityDemand', label: 'Capability Demand (Primary + Secondary combined)', sectionTitle: capabilitiesSection?.title || 'Capabilities', sectionGroup: 'pdp', total: {}, byBusinessUnit: {}, byDepartment: {} }
   if (capabilitiesSection) {
     for (const plan of plans) {
       const picked = new Set<string>()

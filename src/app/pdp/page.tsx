@@ -799,7 +799,7 @@ export default function PDPPage() {
           <p className="text-sm text-slate-400">Loading cycle…</p>
         ) : detail && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Track A — Self-Fill</p>
                 <p className="text-2xl font-bold text-slate-800">{selfSubmitted} / {selfTotal}</p>
@@ -812,10 +812,6 @@ export default function PDPPage() {
                   {detail.managerSurveys.length} manager link(s) sent
                   {teamMembersPendingRoster > 0 && <> · {teamMembersPendingRoster} team member(s) awaiting their manager&apos;s roster confirmation (not counted above yet)</>}
                 </p>
-              </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
-                <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Reminders</p>
-                <p className="text-sm font-bold text-slate-800">Stop after {detail.cycle.expiryDays}d unfilled</p>
               </div>
             </div>
 

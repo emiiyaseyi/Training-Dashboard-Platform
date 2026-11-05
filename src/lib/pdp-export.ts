@@ -83,13 +83,33 @@ export async function exportPDPCycleExcel(
     for (const col of Object.keys(flat)) allColumns.add(col)
     return { ...r, flat }
   })
-  const columns = [...allColumns]
+
+  // Splits every exported column into the two parts of the form the admin wants analyzed
+  // independently: the Digital Skill Assessment's per-tool sections vs. everything else (Role
+  // Alignment, Capabilities, Development Needs, any custom section) — "PDP" proper. A
+  // "Need N — ..." column always belongs to development_needs (so always PDP); every other column
+  // is classified by looking up the section its title prefix came from.
+  const sectionGroupByTitle = new Map<string, 'pdp' | 'digitalSkills'>()
+  for (const s of sections) sectionGroupByTitle.set(s.title, s.key.startsWith('digital_skill_') ? 'digitalSkills' : 'pdp')
+  const groupForColumn = (col: string): 'pdp' | 'digitalSkills' => {
+    if (col.startsWith('Need ')) return 'pdp'
+    const title = col.split(' — ')[0]
+    return sectionGroupByTitle.get(title) ?? 'pdp'
+  }
+  const allColumnsOrdered = [...allColumns]
+  const pdpColumns = allColumnsOrdered.filter((c) => groupForColumn(c) === 'pdp')
+  const digitalSkillColumns = allColumnsOrdered.filter((c) => groupForColumn(c) === 'digitalSkills')
+  // PDP columns first, Digital Skill columns after, within sheets that keep both side by side
+  // (per-Business-Unit) — grouped rather than interleaved in original section order.
+  const orderedColumns = [...pdpColumns, ...digitalSkillColumns]
 
   // Per (staffId, column), which sources disagree — used for the DIFFERS summary count and to
-  // mark individual detail rows, without ever picking a "winning" value.
+  // mark individual detail rows, without ever picking a "winning" value. differsFor() scopes the
+  // check to just the columns on a given sheet, so a PDP-only sheet never flags a disagreement
+  // that only exists in the Digital Skill Assessment answers, and vice versa.
   const valuesByStaffColumn = new Map<string, Set<string>>()
   for (const r of flattenedBySourceRow) {
-    for (const col of columns) {
+    for (const col of orderedColumns) {
       const v = r.flat[col]
       if (!v) continue
       const key = `${r.staffId}::${col}`
@@ -101,22 +121,25 @@ export async function exportPDPCycleExcel(
   let differCount = 0
   for (const set of valuesByStaffColumn.values()) if (set.size > 1) differCount++
 
-  const detailRows: Record<string, unknown>[] = flattenedBySourceRow
-    .sort((a, b) => a.staffName.localeCompare(b.staffName) || a.source.localeCompare(b.source))
-    .map((r) => {
-      const row: Record<string, unknown> = { 'Staff ID': r.staffId, Name: r.staffName, 'Business Unit': r.businessUnit, Source: r.source }
-      let rowDiffers = false
-      for (const col of columns) {
-        row[col] = r.flat[col] || ''
-        const set = valuesByStaffColumn.get(`${r.staffId}::${col}`)
-        if (set && set.size > 1) rowDiffers = true
-      }
-      row['Flag'] = rowDiffers ? 'DIFFERS (see other sources for this person)' : ''
-      return row
-    })
+  const buildRow = (r: (typeof flattenedBySourceRow)[number], cols: string[]) => {
+    const row: Record<string, unknown> = { 'Staff ID': r.staffId, Name: r.staffName, 'Business Unit': r.businessUnit, Source: r.source }
+    let rowDiffers = false
+    for (const col of cols) {
+      row[col] = r.flat[col] || ''
+      const set = valuesByStaffColumn.get(`${r.staffId}::${col}`)
+      if (set && set.size > 1) rowDiffers = true
+    }
+    row['Flag'] = rowDiffers ? 'DIFFERS (see other sources for this person)' : ''
+    return row
+  }
+
+  const sortedRows = [...flattenedBySourceRow].sort((a, b) => a.staffName.localeCompare(b.staffName) || a.source.localeCompare(b.source))
+  const pdpDetailRows = sortedRows.map((r) => buildRow(r, pdpColumns))
+  const digitalSkillDetailRows = sortedRows.map((r) => buildRow(r, digitalSkillColumns))
+  const combinedDetailRows = sortedRows.map((r) => buildRow(r, orderedColumns))
 
   const byBU = new Map<string, Record<string, unknown>[]>()
-  for (const r of detailRows) {
+  for (const r of combinedDetailRows) {
     const bu = String(r['Business Unit'] || 'Unassigned')
     if (!byBU.has(bu)) byBU.set(bu, [])
     byBU.get(bu)!.push(r)
@@ -133,7 +156,12 @@ export async function exportPDPCycleExcel(
 
   const sheets: ExportSheet[] = [
     { name: 'Summary', rows: summaryRows },
-    { name: 'All', rows: detailRows },
+    { name: 'PDP - All', rows: pdpDetailRows },
+    { name: 'Digital Skills - All', rows: digitalSkillDetailRows },
+    // Per-Business-Unit sheets keep both halves side by side (PDP columns first, Digital Skill
+    // columns after) rather than doubling the sheet count per BU — some BU names already run
+    // close to Excel's 31-character sheet-name limit, and a " - PDP"/" - Digital Skills" suffix
+    // on every one of them risks two different BUs truncating to the same sheet name.
     ...[...byBU.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([bu, rows]) => ({ name: bu, rows })),
   ]
   await exportExcel(sheets, cycleTitle.replace(/[^a-z0-9]+/gi, '_'))
