@@ -9,7 +9,7 @@ import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
 import { PDPSkillGapSummary } from '@/components/pdp/PDPSkillGapSummary'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
-import { resolveWrapupSectionQuestions, isToolSectionVisible, isSectionAKey } from '@/lib/pdp-wrapup'
+import { resolveWrapupSectionQuestions, isToolSectionVisible, isDigitalSkillSectionKey } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -134,9 +134,9 @@ export default function PDPManagerTeamPage() {
     if (currentMember?.needsReview) out.push({ type: 'skill-gap-summary' })
     let insertedTrainingHistory = false
     for (const section of ctx.sections) {
-      if (currentMember?.needsReview && isSectionAKey(section.key)) continue
+      if (currentMember?.needsReview && isDigitalSkillSectionKey(section.key)) continue
       if (!isToolSectionVisible(section, ctx.sections, form.answers)) continue
-      if (!insertedTrainingHistory && !isSectionAKey(section.key)) {
+      if (!insertedTrainingHistory && !isDigitalSkillSectionKey(section.key)) {
         out.push({ type: 'training-history' })
         insertedTrainingHistory = true
       }

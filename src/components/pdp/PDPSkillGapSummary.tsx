@@ -5,10 +5,10 @@ import type { PDPQuestion } from '@/components/pdp/PDPSectionRenderer'
 
 interface Section { key: string; title: string; questions: PDPQuestion[] }
 
-// Line managers validate Section B (the actual development plan) — they don't re-walk the full
+// Line managers validate Section A (the actual development plan) — they don't re-walk the full
 // 24+ question Digital Skill Assessment question by question, which was the complaint this
 // replaced ("they will just see a summary... based on the filled [assessment]"). This reads the
-// employee's own Section A answers (never editable here) down to: which tools they said they need
+// employee's own Section B answers (never editable here) down to: which tools they said they need
 // training on, their self-rated level in each, and the priority order they set — everything a
 // manager needs to sanity-check the plan without re-litigating 60+ answers.
 export function PDPSkillGapSummary({
@@ -48,7 +48,7 @@ export function PDPSkillGapSummary({
     <div className={bare ? '' : 'bg-white border border-slate-200 rounded-xl p-5 mb-4'}>
       <p className="text-[18px] font-semibold text-slate-800 mb-1">Digital Skill Assessment Summary</p>
       <p className="text-[14px] text-slate-400 mb-3">
-        {staffName.split(' ')[0]}&apos;s self-assessment (Section A). Captured here for context, not editable, you validate the Personal Development Plan below (Section B).
+        {staffName.split(' ')[0]}&apos;s self-assessment (Section B). Captured here for context, not editable, you validate the Personal Development Plan below (Section A).
       </p>
       <div className="border border-slate-200 rounded-lg divide-y divide-slate-100">
         {rows.map((r) => (

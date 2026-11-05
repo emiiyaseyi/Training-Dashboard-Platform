@@ -3,8 +3,8 @@
 // Page 1 of both tracks' forms: read-only employee context (Section 1 of the source draft,
 // system-rendered from the roster, never an editable question). The 2026 Learning Interventions
 // list used to live here too; it's now its own page (PDPTrainingHistoryPage) positioned right
-// before Section B, since it's reference material for Section B's development needs, not for
-// Section A's skill assessment.
+// before the Personal Development Plan section, since it's reference material for that section's
+// development needs, not for the Digital Skill Assessment.
 export function PDPIntroPage({
   staffName, staffId, businessUnit, department, role, lineManagerName,
 }: {
@@ -21,10 +21,10 @@ export function PDPIntroPage({
         <p className="text-[15px] font-medium text-navy-800 mb-1">Before you start</p>
         <p className="text-[14px] text-navy-700 leading-relaxed">This form has two parts.</p>
         <p className="text-[14px] text-navy-700 leading-relaxed mt-1.5">
-          <strong>Section A, Digital Skill Assessment:</strong> rates your comfort with core workplace tools (Word, Excel, Teams, AI tools, and more).
+          <strong>Section A, Personal Development Plan:</strong> captures your 2027 development needs.
         </p>
         <p className="text-[14px] text-navy-700 leading-relaxed mt-1.5">
-          <strong>Section B, Personal Development Plan:</strong> captures your 2027 development needs.
+          <strong>Section B, Digital Skill Assessment:</strong> rates your comfort with core workplace tools (Word, Excel, Teams, AI tools, and more).
         </p>
         <p className="text-[14px] text-navy-700 leading-relaxed mt-1.5">
           Work through both in order. Your progress saves automatically as you go, so it&apos;s fine to close the tab and come back.

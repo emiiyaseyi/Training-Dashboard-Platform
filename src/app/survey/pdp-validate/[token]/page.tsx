@@ -7,7 +7,7 @@ import { PDPSectionRenderer, type PDPQuestion } from '@/components/pdp/PDPSectio
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied, type TrainingHistoryItem } from '@/components/pdp/RepeatInterventionCheck'
 import { PDPSkillGapSummary } from '@/components/pdp/PDPSkillGapSummary'
-import { isSectionAKey } from '@/lib/pdp-wrapup'
+import { isDigitalSkillSectionKey } from '@/lib/pdp-wrapup'
 
 interface PrefillSnapshot { businessUnit: string; department: string | null; role: string | null; trainingHistory2026: TrainingHistoryItem[] }
 interface Section { id: string; key: string; title: string; description: string | null; maxRepeats: number; questions: PDPQuestion[] }
@@ -265,7 +265,7 @@ export default function PDPManagerValidatePage() {
           <p className="text-[18px] font-semibold text-slate-800 mb-1">Submitted Plan</p>
           <p className="text-[14px] text-slate-400 mb-3">Edit anything below if needed before accepting. Fields you change show what {ctx.staffName.split(' ')[0]} originally selected.</p>
           <EditablePlanSections
-            sections={ctx.respondentSections.filter((s) => !isSectionAKey(s.key))}
+            sections={ctx.respondentSections.filter((s) => !isDigitalSkillSectionKey(s.key))}
             original={staffAnswers}
             edited={editedForm}
             onChange={setEditedForm}

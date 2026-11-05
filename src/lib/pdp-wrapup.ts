@@ -7,15 +7,15 @@ export const TOOL_SECTION_KEYS = [
 ]
 const TOOL_GATE_KEY = 'digital_skill_tool_selection'
 const WRAPUP_KEY = 'digital_skill_wrapup'
-// Everything that belongs to Section A (Digital Skill Assessment) — the gate, every tool section,
-// and the wrap-up. Used to find where Section B (Personal Development Plan) starts, so the
+// Everything that belongs to Section B (Digital Skill Assessment) — the gate, every tool section,
+// and the wrap-up. Used to find where Section A (Personal Development Plan) starts, so the
 // Training History page can be inserted right before it.
-const SECTION_A_KEYS = [TOOL_GATE_KEY, ...TOOL_SECTION_KEYS, WRAPUP_KEY]
+const DIGITAL_SKILL_KEYS = [TOOL_GATE_KEY, ...TOOL_SECTION_KEYS, WRAPUP_KEY]
 
-// True for any section that's part of Section A (Digital Skill Assessment) — used to find the
-// boundary where Section B (Personal Development Plan) begins.
-export function isSectionAKey(key: string): boolean {
-  return SECTION_A_KEYS.includes(key)
+// True for any section that's part of Section B (Digital Skill Assessment) — used to find the
+// boundary where Section A (Personal Development Plan) begins.
+export function isDigitalSkillSectionKey(key: string): boolean {
+  return DIGITAL_SKILL_KEYS.includes(key)
 }
 
 interface SectionLike {
