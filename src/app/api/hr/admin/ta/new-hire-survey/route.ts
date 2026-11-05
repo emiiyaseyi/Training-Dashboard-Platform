@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
-import { buildNewHireSurveyInsights, getNewHireSurveyCcEmails, saveNewHireSurveyCcEmails } from '@/lib/new-hire-survey'
+import { buildNewHireSurveyInsights, getNewHireSurveyCcEmails, saveNewHireSurveyCcEmails, NEW_HIRE_QUESTIONS } from '@/lib/new-hire-survey'
 
 export async function GET() {
   const gate = await requirePermission('hr-talent-acquisition', 'admin')
@@ -11,7 +11,10 @@ export async function GET() {
     prisma.newHireExperienceSurvey.findMany({ orderBy: { hireDate: 'desc' } }),
     getNewHireSurveyCcEmails(),
   ])
-  return NextResponse.json({ surveys, insights: buildNewHireSurveyInsights(surveys), ccEmails })
+  // Question definitions ship alongside the rows (rather than the client importing new-hire-
+  // survey.ts directly) so the admin panel can render a named individual-response view — that
+  // file also pulls in prisma/mailer, which have no business in a client bundle.
+  return NextResponse.json({ surveys, insights: buildNewHireSurveyInsights(surveys), ccEmails, questions: NEW_HIRE_QUESTIONS })
 }
 
 // Saves TA's own Cc list for this survey (comma/semicolon-separated, any number of addresses) —

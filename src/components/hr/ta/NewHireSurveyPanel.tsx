@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, RefreshCw, Send, CheckCircle2, AlertTriangle, Save, BarChart2 } from 'lucide-react'
+import { Loader2, RefreshCw, Send, CheckCircle2, AlertTriangle, Save, BarChart2, Eye, X } from 'lucide-react'
 
 interface Survey {
   id: string
@@ -13,6 +13,14 @@ interface Survey {
   scheduledFor: string
   sentAt: string | null
   respondedAt: string | null
+  answers: string | null
+}
+
+interface Question {
+  id: string
+  label: string
+  type: 'single-choice' | 'textarea'
+  options?: string[]
 }
 
 interface Insights {
@@ -36,6 +44,7 @@ function statusOf(s: Survey): { label: string; className: string } {
 export function NewHireSurveyPanel() {
   const [surveys, setSurveys] = useState<Survey[] | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
+  const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
@@ -46,6 +55,7 @@ export function NewHireSurveyPanel() {
   const [savingCc, setSavingCc] = useState(false)
   const [ccSaved, setCcSaved] = useState(false)
   const [showInsights, setShowInsights] = useState(false)
+  const [viewingId, setViewingId] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -55,6 +65,7 @@ export function NewHireSurveyPanel() {
         if (!res.ok) throw new Error(data.error || 'Failed to load.')
         setSurveys(data.surveys)
         setInsights(data.insights)
+        setQuestions(data.questions || [])
         setCcEmails(data.ccEmails || '')
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load.'))
@@ -265,19 +276,30 @@ export function NewHireSurveyPanel() {
                 const status = statusOf(s)
                 return (
                   <tr key={s.id} className="border-b border-slate-100">
-                    <td className="py-2 pr-3 font-medium text-slate-800">{s.staffName}</td>
+                    <td className="py-2 pr-3 font-medium text-slate-800">
+                      {s.respondedAt && s.answers ? (
+                        <button onClick={() => setViewingId(s.id)} className="text-meristem-700 hover:underline font-medium text-left">
+                          {s.staffName}
+                        </button>
+                      ) : s.staffName}
+                    </td>
                     <td className="py-2 pr-3 text-slate-600">{s.businessUnit || '-'}</td>
                     <td className="py-2 pr-3 text-slate-600">{new Date(s.hireDate).toLocaleDateString()}</td>
                     <td className="py-2 pr-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full border text-[11px] ${status.className}`}>{status.label}</span>
                       {!s.email && <span className="ml-1.5 text-red-600">No email on file</span>}
                     </td>
-                    <td className="py-2 pr-3">
+                    <td className="py-2 pr-3 text-right whitespace-nowrap">
+                      {s.respondedAt && s.answers && (
+                        <button onClick={() => setViewingId(s.id)} className="text-slate-400 hover:text-meristem-700 p-1 mr-1" title="View response">
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {!s.respondedAt && (
                         <button
                           onClick={() => sendNow(s.id)}
                           disabled={sendingId === s.id || !s.email}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-meristem-700 hover:text-meristem-900 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-meristem-700 hover:text-meristem-900 disabled:opacity-50"
                         >
                           {sendingId === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                           {s.sentAt ? 'Resend now' : 'Send now'}
@@ -291,6 +313,41 @@ export function NewHireSurveyPanel() {
           </table>
         </div>
       )}
+
+      {viewingId && (() => {
+        const s = surveys?.find((x) => x.id === viewingId)
+        if (!s || !s.answers) return null
+        let answers: Record<string, string>
+        try {
+          answers = JSON.parse(s.answers) as Record<string, string>
+        } catch {
+          return null
+        }
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setViewingId(null)} />
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+              <div className="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{s.staffName}&rsquo;s response</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {s.businessUnit ? `${s.businessUnit} · ` : ''}Submitted {s.respondedAt ? new Date(s.respondedAt).toLocaleDateString() : ''}
+                  </p>
+                </div>
+                <button onClick={() => setViewingId(null)} className="text-slate-400 hover:text-slate-700 p-1.5"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="px-5 py-4 overflow-y-auto space-y-3">
+                {questions.map((q) => (
+                  <div key={q.id}>
+                    <p className="text-[11px] font-medium text-slate-500 mb-0.5">{q.label}</p>
+                    <p className="text-sm text-slate-800">{answers[q.id] || '—'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
