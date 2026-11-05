@@ -75,6 +75,29 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
     }
   }
 
+  const [retrofittingOptions, setRetrofittingOptions] = useState(false)
+  const [retrofitMessage, setRetrofitMessage] = useState<string | null>(null)
+
+  // Updates this already-seeded cycle's "Primary Role Responsibilities", "Primary/Secondary
+  // Development Driver", "Relevant Business Outcome" and "Skill or capability area" questions to
+  // the latest broadened option lists — editing PDP_DEFAULT_SECTIONS only affects cycles seeded
+  // AFTER that edit, same gap "Reset to recommended order" closes for section order.
+  const retrofitQuestionOptions = async () => {
+    setRetrofittingOptions(true)
+    setRetrofitMessage(null)
+    try {
+      const res = await fetch(`/api/admin/pdp/${cycle.id}/sections/retrofit-options`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to update question options.')
+      const data = await res.json()
+      setRetrofitMessage(`Updated ${data.count} question(s) to the latest option list.`)
+      await onReload()
+    } catch (err) {
+      setRetrofitMessage(err instanceof Error ? err.message : 'Failed to update question options.')
+    } finally {
+      setRetrofittingOptions(false)
+    }
+  }
+
   const [movingSectionId, setMovingSectionId] = useState<string | null>(null)
   const [movingQId, setMovingQId] = useState<string | null>(null)
 
@@ -264,12 +287,21 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
           >
             {reordering && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Reset to recommended order
           </button>
+          <button
+            onClick={retrofitQuestionOptions}
+            disabled={retrofittingOptions}
+            className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:underline disabled:opacity-50"
+            title="Updates Primary Role Responsibilities, Primary/Secondary Development Driver, Relevant Business Outcome and Skill or capability area to the latest, broader option lists."
+          >
+            {retrofittingOptions && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Update question options to latest
+          </button>
           <button onClick={() => setShowAddSection((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-navy-700 hover:underline">
             <Plus className="w-3.5 h-3.5" /> Add section
           </button>
         </div>
       </div>
       {reorderMessage && <p className="text-[11px] text-slate-500">{reorderMessage}</p>}
+      {retrofitMessage && <p className="text-[11px] text-slate-500">{retrofitMessage}</p>}
 
       {showAddSection && (
         <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2">

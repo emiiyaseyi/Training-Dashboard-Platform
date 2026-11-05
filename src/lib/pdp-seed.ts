@@ -92,6 +92,58 @@ export const DIGITAL_SKILL_TOOL_TITLES = [
   'AI Literacy, Prompt Engineering & Responsible AI', 'Virtual Advisory & Digital Prospecting',
 ]
 
+// Shared across two questions that are deliberately kept in lockstep: "Primary Role
+// Responsibilities" (role_alignment) and "Skill or capability area" (development_needs). Using one
+// taxonomy for both means a person's stated development need always lands in a category their own
+// role responsibility could also land in — nothing analytical gets lost in translation between the
+// two questions. Broadened from role_alignment's original 12 categories to cover every department
+// in the roster (trading/treasury, trust & family office, cybersecurity, data, innovation/digital
+// assets, brand/marketing, HR/talent, etc.), not just the generic functions the original list named.
+export const ROLE_RESPONSIBILITY_CATEGORIES = [
+  'Client acquisition, business development and sales',
+  'Client relationship management and account servicing',
+  'Customer service and client experience delivery',
+  'Investment and wealth advisory services',
+  'Investment, research and market analysis',
+  'Trading, treasury and market execution',
+  'Portfolio and asset management',
+  'Transaction processing, settlement and reconciliation',
+  'Trust, fiduciary and family office services',
+  'Risk management and internal controls',
+  'Compliance, legal and regulatory affairs',
+  'Audit and assurance',
+  'Technology, systems engineering and digital solutions',
+  'Cybersecurity and IT risk management',
+  'Data analysis, visualization and reporting',
+  'Innovation, digital products and new ventures',
+  'Marketing, branding and communications',
+  'Finance, accounting and financial reporting',
+  'Human resources and talent management',
+  'Strategy, planning and business execution',
+  'People management and team leadership',
+  'Project, programme and partnerships management',
+  'Corporate support, administration and facilities',
+  'Other',
+]
+
+// Shared between Primary and Secondary Development Driver — same list both times (the two
+// questions differ only in how many picks they allow), plus an escape hatch ("Other") the
+// original list never had.
+export const DEVELOPMENT_DRIVER_OPTIONS = [
+  'Improve performance in my current role',
+  'Close an identified skills or knowledge gap',
+  "Support my team's 2027 objectives",
+  'Support a new responsibility or expanded role',
+  'Adapt to a new system, technology or process',
+  'Meet a regulatory or compliance requirement',
+  'Improve productivity, quality or turnaround time',
+  'Prepare for future business or role requirements',
+  'Support career progression or promotion readiness',
+  'Support a lateral move, secondment or job rotation',
+  'Build capability for succession planning',
+  'Other',
+]
+
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   // Gates everything that follows — a respondent only sees the per-tool sections for what they
   // pick here (see computeSelectedTools/isToolSectionVisible in pdp-wrapup.ts), so someone who
@@ -352,23 +404,9 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         description: 'Select up to three responsibilities that are most critical to your role.',
         type: 'multiselect',
         maxSelect: 3,
-        searchable: false,
+        searchable: true,
         required: true,
-        options: [
-          'Client acquisition and relationship management',
-          'Sales, revenue generation and business development',
-          'Investment, research and financial analysis',
-          'Transaction processing and service delivery',
-          'Risk management, compliance and controls',
-          'Operations and process improvement',
-          'Technology, systems and digital solutions',
-          'Data analysis, reporting and insights',
-          'Strategy, planning and execution',
-          'People management and team development',
-          'Project and programme management',
-          'Corporate support and administration',
-          'Other',
-        ],
+        options: ROLE_RESPONSIBILITY_CATEGORIES,
       },
       {
         label: 'Primary Development Driver',
@@ -376,16 +414,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         type: 'select',
         required: true,
         searchable: true,
-        options: [
-          'Improve performance in my current role',
-          'Close an identified skills or knowledge gap',
-          "Support my team's 2027 objectives",
-          'Support a new responsibility or expanded role',
-          'Adapt to a new system, technology or process',
-          'Meet a regulatory or compliance requirement',
-          'Improve productivity, quality or turnaround time',
-          'Prepare for future business or role requirements',
-        ],
+        options: DEVELOPMENT_DRIVER_OPTIONS,
       },
       {
         label: 'Secondary Development Driver',
@@ -393,17 +422,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         type: 'multiselect',
         maxSelect: 2,
         required: true,
-        searchable: false,
-        options: [
-          'Improve performance in my current role',
-          'Close an identified skills or knowledge gap',
-          "Support my team's 2027 objectives",
-          'Support a new responsibility or expanded role',
-          'Adapt to a new system, technology or process',
-          'Meet a regulatory or compliance requirement',
-          'Improve productivity, quality or turnaround time',
-          'Prepare for future business or role requirements',
-        ],
+        searchable: true,
+        options: DEVELOPMENT_DRIVER_OPTIONS,
       },
       {
         label: 'Relevant Business Outcome',
@@ -421,6 +441,8 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
           'Digital adoption, automation and innovation',
           'Strategic execution and business performance',
           'Employee capability and team effectiveness',
+          'Financial control, accuracy and reporting integrity',
+          'Client trust, retention and relationship strength',
           'Other',
         ],
       },
@@ -446,22 +468,10 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         type: 'select',
         required: true,
         searchable: true,
-        options: [
-          'Technical/job-specific skills',
-          'Financial, investment or analytical skills',
-          'Sales and business development',
-          'Client service and relationship management',
-          'Risk, compliance and regulatory knowledge',
-          'Digital tools and workplace applications',
-          'Data analytics and reporting',
-          'AI, automation and emerging technology',
-          'Communication and presentation',
-          'Problem-solving and critical thinking',
-          'Project management and execution',
-          'People management and collaboration',
-          'Strategic thinking and commercial awareness',
-          'Other',
-        ],
+        // Same taxonomy as role_alignment's "Primary Role Responsibilities" (see
+        // ROLE_RESPONSIBILITY_CATEGORIES) — a stated development need always lands in a category
+        // that could also describe a role responsibility, rather than its own separate, narrower list.
+        options: ROLE_RESPONSIBILITY_CATEGORIES,
       },
       {
         label: 'Nature of the development need',
