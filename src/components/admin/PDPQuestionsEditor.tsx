@@ -56,6 +56,24 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
   const [addingSection, setAddingSection] = useState(false)
   const [savingSectionId, setSavingSectionId] = useState<string | null>(null)
 
+  const [reordering, setReordering] = useState(false)
+  const [reorderMessage, setReorderMessage] = useState<string | null>(null)
+
+  const resetToRecommendedOrder = async () => {
+    setReordering(true)
+    setReorderMessage(null)
+    try {
+      const res = await fetch(`/api/admin/pdp/${cycle.id}/sections/reorder`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to reorder sections.')
+      setReorderMessage('Section order updated — PDP sections now come before the Digital Skill Assessment.')
+      await onReload()
+    } catch (err) {
+      setReorderMessage(err instanceof Error ? err.message : 'Failed to reorder sections.')
+    } finally {
+      setReordering(false)
+    }
+  }
+
   const [addingQuestionTo, setAddingQuestionTo] = useState<string | null>(null)
   const [newQ, setNewQ] = useState(emptyQuestionDraft)
   const [savingQuestion, setSavingQuestion] = useState(false)
@@ -194,12 +212,23 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
         </p>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs font-semibold text-slate-600">Sections</p>
-        <button onClick={() => setShowAddSection((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-navy-700 hover:underline">
-          <Plus className="w-3.5 h-3.5" /> Add section
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={resetToRecommendedOrder}
+            disabled={reordering}
+            className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:underline disabled:opacity-50"
+            title="Role and Business Alignment, Capabilities, and Development Needs first; then the Digital Skill Assessment; then Confirmation; manager-only sections stay last."
+          >
+            {reordering && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Reset to recommended order
+          </button>
+          <button onClick={() => setShowAddSection((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-navy-700 hover:underline">
+            <Plus className="w-3.5 h-3.5" /> Add section
+          </button>
+        </div>
       </div>
+      {reorderMessage && <p className="text-[11px] text-slate-500">{reorderMessage}</p>}
 
       {showAddSection && (
         <div className="border border-dashed border-slate-300 rounded-lg p-3 space-y-2">

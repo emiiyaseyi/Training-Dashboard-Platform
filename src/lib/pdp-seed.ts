@@ -633,8 +633,32 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   },
 ]
 
+// The front-end order respondents actually see a new cycle's sections in — kept separate from
+// PDP_DEFAULT_SECTIONS' own array order above so moving a section's position in the flow never
+// means physically relocating its (sometimes large) content block. PDP core sections come first,
+// then the Digital Skill Assessment, then the final confirmation step; manager-only sections
+// (rendered on the separate manager validation/team-fill pages, never shown to the respondent
+// themself) stay last regardless. Any key not listed here (a custom admin-added section) falls
+// back to the end, in whatever relative order it already had.
+export const RECOMMENDED_SECTION_ORDER: string[] = [
+  'role_alignment', 'capabilities', 'development_needs',
+  'digital_skill_tool_selection', 'digital_skill_word', 'digital_skill_excel', 'digital_skill_powerpoint',
+  'digital_skill_outlook', 'digital_skill_teams', 'digital_skill_powerbi', 'digital_skill_sql',
+  'digital_skill_power_automate', 'digital_skill_ai', 'digital_skill_virtual_advisory', 'digital_skill_wrapup',
+  'confirmation', 'manager_validation', 'manager_need_review',
+]
+
+function recommendedOrderIndex(key: string): number {
+  const i = RECOMMENDED_SECTION_ORDER.indexOf(key)
+  return i === -1 ? RECOMMENDED_SECTION_ORDER.length : i
+}
+
 export async function seedDefaultPDPSections(cycleId: string): Promise<void> {
-  for (const [sectionOrder, section] of PDP_DEFAULT_SECTIONS.entries()) {
+  // Array.prototype.sort is stable (ES2019+), so sections not in RECOMMENDED_SECTION_ORDER (there
+  // are none today, but a future admin-added default could be) keep their original relative order
+  // among themselves rather than being shuffled.
+  const orderedSections = [...PDP_DEFAULT_SECTIONS].sort((a, b) => recommendedOrderIndex(a.key) - recommendedOrderIndex(b.key))
+  for (const [sectionOrder, section] of orderedSections.entries()) {
     const created = await prisma.pDPSection.create({
       data: {
         cycleId,
