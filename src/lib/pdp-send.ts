@@ -102,10 +102,12 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
     }, `${baseUrl}/survey/pdp/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
-      await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+      await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date(), lastSendError: null } })
       result.sent++
     } catch (err) {
-      result.skipped.push({ name: survey.staffName, reason: err instanceof Error ? err.message : 'Send failed.' })
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      result.skipped.push({ name: survey.staffName, reason: message })
+      await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { lastSendError: message } }).catch(() => {})
     }
   }
   return result
@@ -167,10 +169,12 @@ export async function sendPDPManagerValidation(staffSurveyId: string): Promise<{
     }, `${baseUrl}/survey/pdp-validate/${validation.surveyToken}`)
     try {
       await sendMail({ to: manager.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
-      await prisma.pDPManagerValidation.update({ where: { id: validation.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+      await prisma.pDPManagerValidation.update({ where: { id: validation.id }, data: { sentAt: new Date(), reminderAt: new Date(), lastSendError: null } })
       result.sent++
     } catch (err) {
-      result.skipped.push({ name: manager.name, reason: err instanceof Error ? err.message : 'Send failed.' })
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      result.skipped.push({ name: manager.name, reason: message })
+      await prisma.pDPManagerValidation.update({ where: { id: validation.id }, data: { lastSendError: message } }).catch(() => {})
     }
   }
   return result
@@ -282,9 +286,11 @@ export async function notifyManagerOfTeamUpdate(staffSurveyId: string): Promise<
       }, `${baseUrl}/survey/pdp-manager/${managerSurvey.surveyToken}`)
       try {
         await sendMail({ to: manager.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
-        await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+        await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { sentAt: new Date(), reminderAt: new Date(), lastSendError: null } })
       } catch (err) {
         console.error('[notifyManagerOfTeamUpdate] send failed', err)
+        const message = err instanceof Error ? err.message : 'Send failed.'
+        await prisma.pDPManagerSurvey.update({ where: { id: managerSurvey.id }, data: { lastSendError: message } }).catch(() => {})
       }
     }
   }
@@ -384,10 +390,12 @@ export async function sendPDPManagerSurvey(cycle: PDPCycle, audience: PDPAudienc
     }, `${baseUrl}/survey/pdp-manager/${survey.surveyToken}`)
     try {
       await sendMail({ to: survey.email, subject, html, skipDefaultCc: cycle.excludeDefaultCcOnReminders })
-      await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date() } })
+      await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { sentAt: new Date(), reminderAt: new Date(), lastSendError: null } })
       result.sent++
     } catch (err) {
-      result.skipped.push({ name: survey.managerName, reason: err instanceof Error ? err.message : 'Send failed.' })
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      result.skipped.push({ name: survey.managerName, reason: message })
+      await prisma.pDPManagerSurvey.update({ where: { id: survey.id }, data: { lastSendError: message } }).catch(() => {})
     }
   }
   return result
@@ -434,9 +442,12 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     }, `${baseUrl}/survey/pdp/${s.surveyToken}`, true)
     try {
       await sendMail({ to: s.email!, subject, html, skipDefaultCc: true })
-      await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date() } })
+      await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { reminderAt: new Date(), lastSendError: null } })
       sent++
-    } catch { /* left for the next run */ }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      await prisma.pDPStaffSurvey.update({ where: { id: s.id }, data: { lastSendError: message } }).catch(() => {})
+    }
   }
 
   const validationsDue = await prisma.pDPManagerValidation.findMany({
@@ -454,9 +465,12 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     }, `${baseUrl}/survey/pdp-validate/${v.surveyToken}`, true)
     try {
       await sendMail({ to: v.email!, subject, html, skipDefaultCc: true })
-      await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { reminderAt: new Date() } })
+      await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { reminderAt: new Date(), lastSendError: null } })
       sent++
-    } catch { /* left for the next run */ }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      await prisma.pDPManagerValidation.update({ where: { id: v.id }, data: { lastSendError: message } }).catch(() => {})
+    }
   }
 
   const managerSurveysDue = await prisma.pDPManagerSurvey.findMany({
@@ -473,9 +487,12 @@ export async function sendPDPReminders(): Promise<{ sent: number }> {
     }, `${baseUrl}/survey/pdp-manager/${m.surveyToken}`, true)
     try {
       await sendMail({ to: m.email!, subject, html, skipDefaultCc: true })
-      await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date() } })
+      await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { reminderAt: new Date(), lastSendError: null } })
       sent++
-    } catch { /* left for the next run */ }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Send failed.'
+      await prisma.pDPManagerSurvey.update({ where: { id: m.id }, data: { lastSendError: message } }).catch(() => {})
+    }
   }
 
   return { sent }

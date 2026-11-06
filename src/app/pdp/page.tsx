@@ -25,10 +25,10 @@ interface Cycle {
   _count: { staffSurveys: number; managerSurveys: number; managerOverrides: number }
 }
 
-interface Validation { id: string; managerName: string | null; respondedAt: string | null; answers: string | null }
-interface StaffSurvey { id: string; staffId: string; staffName: string; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; requireManagerValidation: boolean; lineManagerNames: string[]; rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file' }
+interface Validation { id: string; managerName: string | null; email: string | null; respondedAt: string | null; answers: string | null; lastSendError: string | null }
+interface StaffSurvey { id: string; staffId: string; staffName: string; email: string | null; businessUnit: string; sentAt: string | null; respondedAt: string | null; answers: string | null; validations: Validation[]; requireManagerValidation: boolean; lineManagerNames: string[]; rosterStatus: 'ok' | 'not-in-roster' | 'no-manager-on-file'; lastSendError: string | null }
 interface TeamMember { id: string; staffId: string; staffName: string; businessUnit: string | null; status: string; needsReview: boolean; submittedAt: string | null; answers: string | null }
-interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
+interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; email: string | null; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[]; lastSendError: string | null }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
 interface Section { id: string; key: string; order: number; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
 interface LaunchExclusion { staffId: string; staffName: string | null }
@@ -243,6 +243,7 @@ export default function PDPPage() {
   const [reminderDraft, setReminderDraft] = useState<{ expiryDays: string; staffDeadline: string; validationDeadline: string; managerDeadline: string; excludeDefaultCcOnReminders: boolean } | null>(null)
   const [savingReminderSettings, setSavingReminderSettings] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [showDeliveryIssues, setShowDeliveryIssues] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
   const [stoppingId, setStoppingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -720,6 +721,27 @@ export default function PDPPage() {
   const teamMembersTotal = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'accepted' || t.status === 'added').length, 0) ?? 0
   const teamMembersPendingRoster = detail?.managerSurveys.reduce((s, m) => s + m.teamMembers.filter((t) => t.status === 'pending').length, 0) ?? 0
 
+  // Everyone who never got their email, across all three tracks — either because there's no
+  // address on file at all, or because the send itself failed (malformed/nonexistent address
+  // rejected by the SMTP server, etc. — see PDPStaffSurvey.lastSendError). Deliberately excludes
+  // anyone with sentAt already set: once a send has succeeded at least once, a LATER reminder
+  // failure still shows here via lastSendError, but is labeled differently so "never reached them
+  // at all" isn't confused with "they have it, a later nudge just hiccuped."
+  type DeliveryIssue = { track: string; name: string; staffId: string; email: string | null; reason: string; neverSent: boolean }
+  const deliveryIssues: DeliveryIssue[] = []
+  for (const s of detail?.staffSurveys ?? []) {
+    if (!s.email) deliveryIssues.push({ track: 'Track A', name: s.staffName, staffId: s.staffId, email: null, reason: 'No email address on file.', neverSent: true })
+    else if (s.lastSendError) deliveryIssues.push({ track: 'Track A', name: s.staffName, staffId: s.staffId, email: s.email, reason: s.lastSendError, neverSent: !s.sentAt })
+    for (const v of s.validations) {
+      if (!v.email) deliveryIssues.push({ track: 'Manager Validation', name: v.managerName || 'Manager', staffId: s.staffId, email: null, reason: `No email address on file (reviewing ${s.staffName}'s plan).`, neverSent: true })
+      else if (v.lastSendError) deliveryIssues.push({ track: 'Manager Validation', name: v.managerName || 'Manager', staffId: s.staffId, email: v.email, reason: v.lastSendError, neverSent: !v.respondedAt })
+    }
+  }
+  for (const m of detail?.managerSurveys ?? []) {
+    if (!m.email) deliveryIssues.push({ track: 'Track B', name: m.managerName, staffId: m.managerStaffId, email: null, reason: 'No email address on file.', neverSent: true })
+    else if (m.lastSendError) deliveryIssues.push({ track: 'Track B', name: m.managerName, staffId: m.managerStaffId, email: m.email, reason: m.lastSendError, neverSent: !m.sentAt })
+  }
+
   const q = reportQuery.trim().toLowerCase()
   const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) => !q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) : []
   const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) => !q || m.managerName.toLowerCase().includes(q) || m.managerStaffId.toLowerCase().includes(q)) : []
@@ -1077,6 +1099,55 @@ export default function PDPPage() {
               {showAnalysis && (
                 <div className="mt-4">
                   <PDPAnalysisPanel cycleId={selectedId!} />
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <button onClick={() => setShowDeliveryIssues((v) => !v)} className="w-full flex items-center justify-between text-left">
+                <p className="text-sm font-semibold text-slate-800">
+                  Delivery Issues — who never got their email{deliveryIssues.length > 0 && <span className="ml-2 text-xs font-medium text-red-600">({deliveryIssues.length})</span>}
+                </p>
+                {showDeliveryIssues ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </button>
+              {showDeliveryIssues && (
+                <div className="mt-4">
+                  <p className="text-[11px] text-slate-400 mb-3">
+                    No email on file is caught immediately. A send that outright failed (bad/nonexistent address, SMTP rejection) shows the error below.
+                    This can&apos;t catch an address that LOOKS valid, gets accepted, and bounces later — this platform has no bounce-tracking for that case.
+                  </p>
+                  {deliveryIssues.length === 0 ? (
+                    <p className="text-xs text-slate-400">No known delivery failures for this cycle.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-slate-400 uppercase tracking-wide border-b border-slate-100">
+                            <th className="py-1.5 pr-3">Track</th>
+                            <th className="py-1.5 pr-3">Name</th>
+                            <th className="py-1.5 pr-3">Staff ID</th>
+                            <th className="py-1.5 pr-3">Status</th>
+                            <th className="py-1.5">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {deliveryIssues.map((d, i) => (
+                            <tr key={`${d.track}-${d.staffId}-${i}`} className="border-b border-slate-50 last:border-0">
+                              <td className="py-1.5 pr-3 text-slate-500">{d.track}</td>
+                              <td className="py-1.5 pr-3 text-slate-700">{d.name}</td>
+                              <td className="py-1.5 pr-3 text-slate-500">{d.staffId}</td>
+                              <td className="py-1.5 pr-3">
+                                <span className={d.neverSent ? 'text-red-600 font-medium' : 'text-amber-600 font-medium'}>
+                                  {d.neverSent ? 'Never sent' : 'Reminder failed (originally sent OK)'}
+                                </span>
+                              </td>
+                              <td className="py-1.5 text-slate-500">{d.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

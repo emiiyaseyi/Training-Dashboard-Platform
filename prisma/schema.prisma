@@ -1228,6 +1228,13 @@ model PDPStaffSurvey {
   // table that already has rows — lazily generated and persisted in app code (ensureViewToken in
   // pdp-send.ts) the first time one is actually needed, instead.
   viewToken   String?   @unique
+  // The error message from the most recent failed send attempt (launch or reminder) — null once a
+  // send actually succeeds. Lets the admin panel show a durable "why this one never went out"
+  // reason (e.g. a malformed/nonexistent address the SMTP server rejected outright) instead of
+  // only the one-time result banner shown right after a Launch click, which is gone on reload.
+  // NOT a bounce tracker: a mailbox that looks valid and is accepted by the SMTP server, then
+  // bounces later, is never reflected here — this app has no bounce-webhook listener.
+  lastSendError String?
 
   cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   validations PDPManagerValidation[]
@@ -1255,6 +1262,7 @@ model PDPManagerValidation {
   sentAt         DateTime?
   respondedAt    DateTime?
   reminderAt     DateTime?
+  lastSendError  String? // see PDPStaffSurvey.lastSendError
 
   staffSurvey PDPStaffSurvey @relation(fields: [staffSurveyId], references: [id], onDelete: Cascade)
 
@@ -1278,6 +1286,7 @@ model PDPManagerSurvey {
   // daily reminder sweep skips it, without deleting the row or losing any already-submitted data.
   disabled          Boolean   @default(false)
   disabledMessage   String?
+  lastSendError     String? // see PDPStaffSurvey.lastSendError
 
   cycle       PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   teamMembers PDPManagerTeamMemberEntry[]
