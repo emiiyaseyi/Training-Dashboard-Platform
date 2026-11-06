@@ -213,15 +213,36 @@ export function TrainingCatalogPanel() {
   // Academy, PwC Business School, POISE, FITC, Phillips Consulting — local deliveries only), each
   // pre-tagged against the same taxonomies the PDP form uses. Safe to click more than once — upserts
   // by (title, provider), so a second click just re-confirms the data rather than duplicating it.
+  // Driven in batches from here (not one giant server-side pass) — a single request covering all
+  // ~993 courses risked tripping Vercel's serverless timeout and left the button spinning forever
+  // with no response ever coming back. Each batch is small and fast; looping client-side also
+  // means the admin sees live progress instead of a frozen spinner.
+  const SEED_BATCH_SIZE = 100
   const seedCatalog = async () => {
     if (!confirm('Load the initial ~993-course catalog from the 7 provider calendars? Safe to run more than once — existing courses are updated in place, never duplicated.')) return
     setSeeding(true)
     setSeedMessage(null)
+    let offset = 0
+    let createdTotal = 0
+    let updatedTotal = 0
+    let total = 0
     try {
-      const res = await fetch('/api/admin/training-catalog/seed', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to load the catalog.')
-      setSeedMessage(`Done — ${data.created} added, ${data.updated} updated (${data.total} total).`)
+      while (true) {
+        const res = await fetch('/api/admin/training-catalog/seed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offset, limit: SEED_BATCH_SIZE }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Failed to load the catalog.')
+        createdTotal += data.created
+        updatedTotal += data.updated
+        total = data.total
+        offset = data.nextOffset
+        setSeedMessage(`Loading… ${Math.min(offset, total)} / ${total} processed (${createdTotal} added, ${updatedTotal} updated so far).`)
+        if (data.done) break
+      }
+      setSeedMessage(`Done — ${createdTotal} added, ${updatedTotal} updated (${total} total).`)
       load()
     } catch (err) {
       setSeedMessage(err instanceof Error ? err.message : 'Failed to load the catalog.')
