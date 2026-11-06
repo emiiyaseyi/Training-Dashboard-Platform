@@ -3,7 +3,10 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { GraduationCap, Loader2, Plus, Pencil, Trash2, X, Search, Download } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 import { ROLE_RESPONSIBILITY_CATEGORIES, DEVELOPMENT_DRIVER_OPTIONS, BUSINESS_OUTCOME_OPTIONS } from '@/lib/pdp-seed'
+
+const PAGE_SIZE = 50
 
 interface Course {
   id: string
@@ -134,6 +137,7 @@ export function TrainingCatalogPanel() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [providerFilter, setProviderFilter] = useState('all')
+  const [page, setPage] = useState(1)
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [addDraft, setAddDraft] = useState<Draft>(emptyDraft())
@@ -165,6 +169,10 @@ export function TrainingCatalogPanel() {
       return true
     })
   }, [courses, query, providerFilter])
+
+  useEffect(() => { setPage(1) }, [query, providerFilter])
+
+  const pageRows = paginate(filtered, page, PAGE_SIZE)
 
   const addCourse = async () => {
     setSaving(true)
@@ -251,6 +259,22 @@ export function TrainingCatalogPanel() {
     }
   }
 
+  const stripYears = async () => {
+    setSeeding(true)
+    setSeedMessage(null)
+    try {
+      const res = await fetch('/api/admin/training-catalog/strip-years', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to clean up titles.')
+      setSeedMessage(data.updated > 0 ? `Removed the year from ${data.updated} title(s).` : 'No course titles had a year to remove.')
+      load()
+    } catch (err) {
+      setSeedMessage(err instanceof Error ? err.message : 'Failed to clean up titles.')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   const deleteCourse = async (c: Course) => {
     if (!confirm(`Delete "${c.title}" (${c.provider}) from the training catalog? This can't be undone, but doesn't affect any PDP already filled.`)) return
     setBusyId(c.id)
@@ -296,6 +320,15 @@ export function TrainingCatalogPanel() {
               Load Initial Catalog
             </button>
             <button
+              onClick={stripYears}
+              disabled={seeding}
+              title="Removes a calendar year from any course title (e.g. '2026 Chief Information Officers...' -> 'Chief Information Officers...'). Keeps years that are part of an actual product name, like 'COBIT 2019'."
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+              Remove Years from Titles
+            </button>
+            <button
               onClick={() => { setShowAddForm((v) => !v); setAddDraft(emptyDraft()); setFormError(null) }}
               className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700"
             >
@@ -326,10 +359,10 @@ export function TrainingCatalogPanel() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">Loading…</td></tr>
-                ) : filtered.length === 0 ? (
+                ) : pageRows.length === 0 ? (
                   <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-400">No courses match.</td></tr>
                 ) : (
-                  filtered.map((c) => (
+                  pageRows.map((c) => (
                     <Fragment key={c.id}>
                       <tr className="border-b border-slate-100 last:border-0 align-top">
                         <td className="px-3 py-2 text-slate-700">{c.title}</td>
@@ -366,6 +399,7 @@ export function TrainingCatalogPanel() {
             </table>
           </div>
         </div>
+        <Pagination page={page} totalItems={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </SectionCard>
   )
