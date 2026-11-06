@@ -181,6 +181,8 @@ export default function EmployeesPage() {
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [buFilter, setBuFilter] = useState('all')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [missingEmailOnly, setMissingEmailOnly] = useState(false)
+  const [missingLineManagerOnly, setMissingLineManagerOnly] = useState(false)
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [addDraft, setAddDraft] = useState<Draft>(emptyDraft())
@@ -208,22 +210,28 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [query, statusFilter, employmentFilter, departmentFilter, buFilter, roleFilter])
+  }, [query, statusFilter, employmentFilter, departmentFilter, buFilter, roleFilter, missingEmailOnly, missingLineManagerOnly])
 
   // Always computed from the full unfiltered list, not whatever tab/search is active — "how many
   // staff do we have" shouldn't change depending on which filter happens to be selected.
   const summary = useMemo(() => {
     const activeCount = employees.filter((e) => e.active).length
     const byBU = new Map<string, number>()
+    let missingEmail = 0
+    let missingLineManager = 0
     for (const e of employees) {
       if (!e.active) continue
       byBU.set(e.businessUnit || 'Unassigned', (byBU.get(e.businessUnit || 'Unassigned') || 0) + 1)
+      if (!e.email?.trim()) missingEmail++
+      if (!e.lineManagerStaffId?.trim()) missingLineManager++
     }
     return {
       total: employees.length,
       active: activeCount,
       inactive: employees.length - activeCount,
       byBU: [...byBU.entries()].sort((a, b) => b[1] - a[1]),
+      missingEmail,
+      missingLineManager,
     }
   }, [employees])
 
@@ -256,10 +264,14 @@ export default function EmployeesPage() {
       if (departmentFilter !== 'all' && (e.department || '') !== departmentFilter) return false
       if (buFilter !== 'all' && e.businessUnit !== buFilter) return false
       if (roleFilter !== 'all' && (e.role || '') !== roleFilter) return false
+      // Both toggles are OR'd together (not AND) — "show me anyone with a data gap I need to go
+      // fix," not "only people missing both at once," which would hide most of the problem rows.
+      if ((missingEmailOnly || missingLineManagerOnly) &&
+          !((missingEmailOnly && !e.email?.trim()) || (missingLineManagerOnly && !e.lineManagerStaffId?.trim()))) return false
       if (q && !(e.name.toLowerCase().includes(q) || e.staffId.toLowerCase().includes(q) || e.email?.toLowerCase().includes(q))) return false
       return true
     })
-  }, [employees, query, statusFilter, employmentFilter, departmentFilter, buFilter, roleFilter])
+  }, [employees, query, statusFilter, employmentFilter, departmentFilter, buFilter, roleFilter, missingEmailOnly, missingLineManagerOnly])
 
   const pageRows = paginate(filtered, page, PAGE_SIZE)
 
@@ -456,6 +468,24 @@ export default function EmployeesPage() {
             <option value="all">All Job Roles</option>
             {roles.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
+
+          <div className="flex items-center gap-1.5 text-xs border-l border-slate-200 pl-3 ml-1">
+            <span className="text-slate-500 mr-0.5">Data gaps:</span>
+            <button
+              onClick={() => setMissingEmailOnly((v) => !v)}
+              title="Show only active staff with no email address on file"
+              className={`px-2.5 py-1 rounded-full font-medium ${missingEmailOnly ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              Missing Email ({summary.missingEmail})
+            </button>
+            <button
+              onClick={() => setMissingLineManagerOnly((v) => !v)}
+              title="Show only active staff with no Line Manager on file"
+              className={`px-2.5 py-1 rounded-full font-medium ${missingLineManagerOnly ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              Missing Line Manager ({summary.missingLineManager})
+            </button>
+          </div>
         </div>
 
         {statusMessage && (
