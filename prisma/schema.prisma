@@ -160,6 +160,30 @@ model DifferentiatingCapability {
   updatedAt DateTime @updatedAt
 }
 
+// Admin-managed catalog of real, bookable external training courses (PwC, Phillips Consulting,
+// FITC, Lagos Business School, POISE, Nigerian Institute of Management, or any admin-added
+// provider), tagged across the same taxonomies the PDP form already asks respondents to pick
+// from — lets the PDP's "Proposed Training Title" question suggest actual courses instead of a
+// respondent having to already know what's available. `tags` is a JSON array of strings (this
+// codebase's standard multi-value-column convention, see PDPQuestion.options) whose values are
+// drawn from ROLE_RESPONSIBILITY_CATEGORIES, DEVELOPMENT_DRIVER_OPTIONS, BUSINESS_OUTCOME_OPTIONS
+// (all in pdp-seed.ts) and/or current DifferentiatingCapability.name values — not freeform text —
+// so matching against a respondent's actual answers is a simple set-overlap, not fuzzy search.
+model TrainingCatalogCourse {
+  id            String   @id @default(cuid())
+  title         String
+  provider      String // "PwC Nigeria", "Phillips Consulting", "FITC", "Lagos Business School", "POISE", "Nigerian Institute of Management", or an admin-added new one
+  category      String? // the provider's own track/category label — descriptive only, never used for matching
+  tags          String // JSON array of strings — see comment above
+  durationLabel String? // e.g. "3 days" — free text, display only
+  sourceUrl     String?
+  active        Boolean  @default(true) // admin can retire a course without deleting it, for a gentle yearly refresh
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([provider])
+}
+
 // The Talent Member (TM) roster, merged with its enrichment fields (formerly split between
 // TalentMemberRosterEntry and a separately-tracked "TM Info" sheet nobody could edit in-app) —
 // admin-entered/edited from the Talent Members page, bulk or one at a time, NOT derived from a

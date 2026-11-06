@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { resolveRespondentSections } from '@/lib/pdp-form'
+import { getActiveTrainingCatalog } from '@/lib/pdp-training-suggestions'
 
 // Admin-only, no token, nothing created or sent — exactly what a respondent's form currently
 // looks like for this cycle, with placeholder prefill content standing in for a real person's
@@ -14,13 +15,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
   const cycle = await prisma.pDPCycle.findUnique({ where: { id: cycleId } })
   if (!cycle) return NextResponse.json({ error: 'Cycle not found.' }, { status: 404 })
 
-  const sections = await resolveRespondentSections(cycleId)
+  const [sections, trainingCatalog] = await Promise.all([
+    resolveRespondentSections(cycleId),
+    getActiveTrainingCatalog(),
+  ])
 
   return NextResponse.json({
     valid: true,
     cycleTitle: cycle.title,
     staffName: 'Sample Employee',
     sections,
+    trainingCatalog,
     prefill: {
       businessUnit: 'Sample Business Unit',
       department: 'Sample Department',

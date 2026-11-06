@@ -7,6 +7,7 @@ import { buildPDPPrefillIndex, getPDPPrefillForStaff } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections, resolvePDPSections } from '@/lib/pdp-form'
 import { sendPDPMemberFinalizedEmail } from '@/lib/pdp-send'
+import { getActiveTrainingCatalog } from '@/lib/pdp-training-suggestions'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-manager-get', 60, 60_000)
@@ -28,11 +29,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       })
     }
 
-    const sections = await resolveRespondentSections(survey.cycleId)
-    // Only ever rendered here (and on the validate page) — the manager's own per-need assessment
-    // (Priority + baseline proficiency rating), shown for every member regardless of whether their
-    // entry was prefilled from a self-fill submission or is being filled from scratch.
-    const needReviewSections = await resolvePDPSections(survey.cycleId, { onlyKeys: ['manager_need_review'] })
+    const [sections, needReviewSections, trainingCatalog] = await Promise.all([
+      resolveRespondentSections(survey.cycleId),
+      // Only ever rendered here (and on the validate page) — the manager's own per-need assessment
+      // (Priority + baseline proficiency rating), shown for every member regardless of whether their
+      // entry was prefilled from a self-fill submission or is being filled from scratch.
+      resolvePDPSections(survey.cycleId, { onlyKeys: ['manager_need_review'] }),
+      getActiveTrainingCatalog(),
+    ])
 
     return NextResponse.json({
       valid: true,
@@ -43,6 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       alreadyResponded: !!survey.respondedAt,
       sections,
       needReviewSection: needReviewSections[0] ?? null,
+      trainingCatalog,
       teamMembers: survey.teamMembers.map((m) => ({
         id: m.id,
         staffId: m.staffId,

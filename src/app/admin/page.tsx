@@ -9,6 +9,7 @@ import { SectionCard } from '@/components/ui/SectionCard'
 import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } from '@/lib/signature-settings'
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { SkillsGapSettingsPanel } from '@/components/admin/SkillsGapSettingsPanel'
+import { TrainingCatalogPanel } from '@/components/admin/TrainingCatalogPanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
 import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
@@ -60,6 +61,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
   { id: 'skills-gap-settings', label: 'Skills Gap Settings', tab: 'taxonomies' },
   { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
+  { id: 'training-catalog', label: 'Training Catalog', tab: 'taxonomies' },
   { id: 'google-sheets', label: 'Live Data Source — Google Sheets', tab: 'data-quality' },
   { id: 'training-record-changes', label: 'Training Data Changes to Review', tab: 'data-quality' },
   { id: 'data-quality-audit', label: 'Data Quality Audit', tab: 'data-quality' },
@@ -721,6 +723,9 @@ export default function AdminPage() {
                 endpoint="/api/vendors"
                 namePlaceholder="e.g. Lagos Business School"
               />
+            </div>
+            <div id="training-catalog" className={`lg:col-span-2 ${sectionWrapClass('training-catalog')}`}>
+              <TrainingCatalogPanel />
             </div>
           </div>
         )}

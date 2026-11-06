@@ -81,7 +81,8 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
   // Updates this already-seeded cycle's "Primary Role Responsibilities", "Primary/Secondary
   // Development Driver", "Relevant Business Outcome" and "Skill or capability area" questions to
   // the latest broadened option lists — editing PDP_DEFAULT_SECTIONS only affects cycles seeded
-  // AFTER that edit, same gap "Reset to recommended order" closes for section order.
+  // AFTER that edit, same gap "Reset to recommended order" closes for section order. Also adds the
+  // "Proposed Training Title" question to Development Needs if this cycle predates it entirely.
   const retrofitQuestionOptions = async () => {
     setRetrofittingOptions(true)
     setRetrofitMessage(null)
@@ -89,7 +90,10 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
       const res = await fetch(`/api/admin/pdp/${cycle.id}/sections/retrofit-options`, { method: 'POST' })
       if (!res.ok) throw new Error('Failed to update question options.')
       const data = await res.json()
-      setRetrofitMessage(`Updated ${data.count} question(s) to the latest option list.`)
+      setRetrofitMessage(
+        `Updated ${data.count} question(s) to the latest option list.` +
+        (data.addedQuestions?.length ? ` Added ${data.addedQuestions.map((l: string) => `"${l}"`).join(' and ')} to Development Needs.` : '')
+      )
       await onReload()
     } catch (err) {
       setRetrofitMessage(err instanceof Error ? err.message : 'Failed to update question options.')
@@ -291,7 +295,7 @@ export function PDPQuestionsEditor({ cycle, sections, onReload }: { cycle: Cycle
             onClick={retrofitQuestionOptions}
             disabled={retrofittingOptions}
             className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:underline disabled:opacity-50"
-            title="Updates Primary Role Responsibilities, Primary/Secondary Development Driver, Relevant Business Outcome and Skill or capability area to the latest, broader option lists."
+            title="Updates Primary Role Responsibilities, Primary/Secondary Development Driver, Relevant Business Outcome and Skill or capability area to the latest, broader option lists. Also adds the Proposed Training Title and Current Knowledge Level questions to Development Needs if this cycle predates them."
           >
             {retrofittingOptions && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Update question options to latest
           </button>

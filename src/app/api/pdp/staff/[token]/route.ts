@@ -5,6 +5,7 @@ import { notifyManagerOfTeamUpdate, ensureTeamMemberViewToken } from '@/lib/pdp-
 import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections } from '@/lib/pdp-form'
+import { getActiveTrainingCatalog } from '@/lib/pdp-training-suggestions'
 
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control, same
 // convention as /api/custom-survey/[token] and /api/survey/[token]/[stage].
@@ -35,7 +36,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     }
 
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
-    const sections = await resolveRespondentSections(survey.cycleId)
+    const [sections, trainingCatalog] = await Promise.all([
+      resolveRespondentSections(survey.cycleId),
+      getActiveTrainingCatalog(),
+    ])
 
     return NextResponse.json({
       valid: true,
@@ -46,6 +50,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       sections,
       prefill,
       answers: survey.answers ? JSON.parse(survey.answers) : null,
+      trainingCatalog,
     })
   } catch (err) {
     console.error('[pdp/staff GET]', err)

@@ -10,6 +10,7 @@ import { PDPSkillGapSummary } from '@/components/pdp/PDPSkillGapSummary'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
 import { resolveWrapupSectionQuestions, isToolSectionVisible, isDigitalSkillSectionKey } from '@/lib/pdp-wrapup'
+import { resolveNeedTrainingOptions, type TrainingCatalogCourseLike } from '@/lib/pdp-training-suggestions'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -46,6 +47,7 @@ interface Context {
   sections: Section[]
   needReviewSection: Section | null
   teamMembers: TeamMember[]
+  trainingCatalog: TrainingCatalogCourseLike[]
 }
 
 interface SearchHit { staffId: string; name: string; businessUnit: string | null; role: string | null }
@@ -336,7 +338,9 @@ export default function PDPManagerTeamPage() {
   const checkCurrentPage = (): boolean => {
     if (!current || current.type === 'intro' || current.type === 'training-history' || current.type === 'skill-gap-summary') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
-    const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
+    const questions = current.type === 'need'
+      ? resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog)
+      : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
     const issue = firstPageIssue(questions, values)
     if (issue) { setPageError(issue); return false }
     if (current.type === 'need' && ctx.needReviewSection) {
@@ -438,7 +442,7 @@ export default function PDPManagerTeamPage() {
               </div>
               {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer
-                questions={current.section.questions}
+                questions={resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog)}
                 values={form.developmentNeeds[current.index] || {}}
                 onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
               />

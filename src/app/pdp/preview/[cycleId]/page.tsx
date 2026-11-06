@@ -9,6 +9,7 @@ import { PDPTrainingHistoryPage } from '@/components/pdp/PDPTrainingHistoryPage'
 import { firstPageIssue } from '@/lib/pdp-validate'
 import { RepeatInterventionCheck, REPEAT_REASON_KEY, findRepeatedCapability, repeatReasonSatisfied } from '@/components/pdp/RepeatInterventionCheck'
 import { resolveWrapupSectionQuestions, isToolSectionVisible, isDigitalSkillSectionKey } from '@/lib/pdp-wrapup'
+import { resolveNeedTrainingOptions, type TrainingCatalogCourseLike } from '@/lib/pdp-training-suggestions'
 
 interface PrefillSnapshot {
   businessUnit: string
@@ -32,6 +33,7 @@ interface Context {
   staffName: string
   sections: Section[]
   prefill: PrefillSnapshot
+  trainingCatalog: TrainingCatalogCourseLike[]
 }
 
 type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
@@ -113,7 +115,9 @@ export default function PDPFormPreviewPage() {
   const checkCurrentPage = (): boolean => {
     if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (developmentNeeds[current.index] || {}) : answers
-    const questions = current.type === 'need' ? current.section.questions : resolveWrapupSectionQuestions(current.section, ctx.sections, answers)
+    const questions = current.type === 'need'
+      ? resolveNeedTrainingOptions(current.section, ctx.sections, developmentNeeds[current.index] || {}, answers, ctx.trainingCatalog)
+      : resolveWrapupSectionQuestions(current.section, ctx.sections, answers)
     const issue = firstPageIssue(questions, values)
     if (issue) { setPageError(issue); return false }
     if (current.type === 'need' && areaQuestionId) {
@@ -183,7 +187,7 @@ export default function PDPFormPreviewPage() {
               </div>
               {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer
-                questions={current.section.questions}
+                questions={resolveNeedTrainingOptions(current.section, ctx.sections, developmentNeeds[current.index] || {}, answers, ctx.trainingCatalog)}
                 values={developmentNeeds[current.index] || {}}
                 onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
               />

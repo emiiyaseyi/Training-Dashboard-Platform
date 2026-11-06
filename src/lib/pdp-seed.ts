@@ -144,6 +144,24 @@ export const DEVELOPMENT_DRIVER_OPTIONS = [
   'Other',
 ]
 
+// Shared by "Relevant Business Outcome" (role_alignment) and, going forward, the Training
+// Catalog's tagging taxonomy — extracted from what was an inline array only this one question
+// used, so a course can be tagged against the exact same outcome list a respondent picks from,
+// not a second hand-copied list that can silently drift out of sync.
+export const BUSINESS_OUTCOME_OPTIONS = [
+  'Revenue growth and business development',
+  'Customer experience and client satisfaction',
+  'Operational efficiency and productivity',
+  'Quality, accuracy and turnaround time',
+  'Risk management and regulatory compliance',
+  'Digital adoption, automation and innovation',
+  'Strategic execution and business performance',
+  'Employee capability and team effectiveness',
+  'Financial control, accuracy and reporting integrity',
+  'Client trust, retention and relationship strength',
+  'Other',
+]
+
 export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
   // Gates everything that follows — a respondent only sees the per-tool sections for what they
   // pick here (see computeSelectedTools/isToolSectionVisible in pdp-wrapup.ts), so someone who
@@ -432,19 +450,7 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
         maxSelect: 2,
         required: true,
         searchable: false,
-        options: [
-          'Revenue growth and business development',
-          'Customer experience and client satisfaction',
-          'Operational efficiency and productivity',
-          'Quality, accuracy and turnaround time',
-          'Risk management and regulatory compliance',
-          'Digital adoption, automation and innovation',
-          'Strategic execution and business performance',
-          'Employee capability and team effectiveness',
-          'Financial control, accuracy and reporting integrity',
-          'Client trust, retention and relationship strength',
-          'Other',
-        ],
+        options: BUSINESS_OUTCOME_OPTIONS,
       },
     ],
   },
@@ -513,6 +519,30 @@ export const PDP_DEFAULT_SECTIONS: SeedSection[] = [
           'Medium: Important for improved performance',
           'Low: Longer-term development need',
         ],
+      },
+      {
+        label: 'Proposed Training Title',
+        description: 'Pick one of the suggested titles below, edit it, or enter a different one.',
+        type: 'select',
+        required: false, // suggestions may legitimately come back empty for an unusual need — don't block submission
+        searchable: true,
+        // Always overridden at render/validation time with up to 5 real course titles matched
+        // against this need's and the respondent's other answers — see resolveNeedTrainingOptions
+        // in pdp-training-suggestions.ts. Empty here is just the seed-time placeholder, same
+        // convention as the digital-skill wrap-up's 'ranking' question (see pdp-wrapup.ts).
+        options: [],
+      },
+      {
+        label: 'Current Knowledge Level on This Topic',
+        description: 'Where you are today on the proposed training title above, before the intervention.',
+        type: 'select',
+        required: true,
+        searchable: false,
+        // Deliberately a plain fixed scale, not tied to any taxonomy/capability list — this exists
+        // so HR can later group respondents who landed on the same level for the same topic (e.g.
+        // everyone who said "Beginner" on a given course), not to feed the training-suggestion
+        // matching engine.
+        options: ['No knowledge', 'Beginner', 'Intermediate', 'Advanced'],
       },
       { label: 'Brief description of the specific gap', type: 'textarea', required: false },
       {
