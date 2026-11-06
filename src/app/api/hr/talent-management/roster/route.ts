@@ -3,13 +3,28 @@ import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 import { mirrorRosterEntryToSheet } from '@/lib/talent-member-roster-mirror'
 import { normalizeBUName } from '@/lib/bu-normalizer'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 
+// Date of birth isn't stored on TalentMemberInfo itself — it's read live from StaffRosterRecord
+// (the single source of truth for personal details, edited on Admin -> Employees) and joined in
+// here by Staff ID, same "most recent upload wins" convention as the Employees page, so there's
+// never a second place DOB can drift out of sync.
 export async function GET() {
   const gate = await requirePermission('hr-talent-management', 'view')
   if (gate instanceof NextResponse) return gate
 
-  const entries = await prisma.talentMemberInfo.findMany({ orderBy: { name: 'asc' } })
-  return NextResponse.json(entries)
+  const [entries, rosterRecords] = await Promise.all([
+    prisma.talentMemberInfo.findMany({ orderBy: { name: 'asc' } }),
+    prisma.staffRosterRecord.findMany({ orderBy: { createdAt: 'asc' }, select: { staffId: true, dateOfBirth: true } }),
+  ])
+  const dobByKey = new Map<string, Date | null>()
+  for (const r of rosterRecords) dobByKey.set(normalizeStaffIdKey(r.staffId), r.dateOfBirth)
+
+  const withDob = entries.map((e) => ({
+    ...e,
+    dateOfBirth: e.staffId ? dobByKey.get(normalizeStaffIdKey(e.staffId))?.toISOString().slice(0, 10) ?? null : null,
+  }))
+  return NextResponse.json(withDob)
 }
 
 interface RosterItemInput {

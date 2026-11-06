@@ -12,10 +12,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { staffId, firstName, middleName, lastName, email, businessUnit, lineManagerStaffId, department, role, employmentType, active } = body as {
+    const { staffId, firstName, middleName, lastName, email, businessUnit, lineManagerStaffId, department, role, employmentType, active, dateOfBirth, employmentDate } = body as {
       staffId?: string; firstName?: string; middleName?: string; lastName?: string
       email?: string; businessUnit?: string; lineManagerStaffId?: string
       department?: string; role?: string; employmentType?: string; active?: boolean
+      dateOfBirth?: string | null; employmentDate?: string | null
     }
 
     const record = await prisma.staffRosterRecord.update({
@@ -32,6 +33,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(role !== undefined && { role: role.trim() || null }),
         ...(employmentType !== undefined && { employmentType: employmentType.trim() || null }),
         ...(active !== undefined && { active }),
+        ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+        ...(employmentDate !== undefined && { employmentDate: employmentDate ? new Date(employmentDate) : null }),
       },
     })
     invalidateComprehensiveStaffListCache() // this DB edit alone changes what loadRosterDirectory() returns, regardless of the sheet sync below

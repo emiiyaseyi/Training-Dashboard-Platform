@@ -35,6 +35,8 @@ export async function GET() {
       employmentType: r.employmentType,
       active: r.active,
       lineManagerStaffId: r.lineManagerStaffId,
+      dateOfBirth: r.dateOfBirth ? r.dateOfBirth.toISOString().slice(0, 10) : null,
+      employmentDate: r.employmentDate ? r.employmentDate.toISOString().slice(0, 10) : null,
     }))
 
     return NextResponse.json(employees)
@@ -50,10 +52,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { staffId, firstName, middleName, lastName, email, businessUnit, department, role, employmentType, lineManagerStaffId } = body as {
+    const { staffId, firstName, middleName, lastName, email, businessUnit, department, role, employmentType, lineManagerStaffId, dateOfBirth, employmentDate } = body as {
       staffId?: string; firstName?: string; middleName?: string; lastName?: string
       email?: string; businessUnit?: string; department?: string; role?: string
-      employmentType?: string; lineManagerStaffId?: string
+      employmentType?: string; lineManagerStaffId?: string; dateOfBirth?: string; employmentDate?: string
     }
 
     if (!staffId?.trim() || !firstName?.trim() || !lastName?.trim() || !businessUnit?.trim()) {
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
         role: role?.trim() || null,
         employmentType: employmentType?.trim() || null,
         lineManagerStaffId: lineManagerStaffId?.trim().toUpperCase() || null,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        employmentDate: employmentDate ? new Date(employmentDate) : null,
         batchId: batch.id,
       },
     })

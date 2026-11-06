@@ -265,7 +265,92 @@ export async function sendDueTMCelebrationEmails(): Promise<CelebrationSweepResu
     }
   }
 
+  await prisma.tMCelebrationSweepRun.create({
+    data: { birthdaysSent, anniversariesSent, errors: errors.length > 0 ? errors.join('; ') : null },
+  })
+
   return { birthdaysSent, anniversariesSent, errors }
+}
+
+export interface UpcomingCelebration {
+  staffId: string
+  name: string
+  month: number
+  day: number
+  daysAway: number
+}
+
+export interface UpcomingAnniversary extends UpcomingCelebration {
+  years: number
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// Next occurrence of a (month, day) from "today" (Lagos midnight) — 0 if it's today, otherwise
+// days until it next comes around (wrapping to next year if this year's date has already passed).
+// Returns the occurrence's own calendar year too, since the anniversary "years" count depends on
+// which year it next falls in, not just how many days away it is.
+function nextOccurrence(month: number, day: number, today: Date): { daysAway: number; year: number } {
+  const todayAtMidnight = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+  let next = new Date(Date.UTC(todayAtMidnight.getUTCFullYear(), month - 1, day))
+  if (next.getTime() < todayAtMidnight.getTime()) next = new Date(Date.UTC(todayAtMidnight.getUTCFullYear() + 1, month - 1, day))
+  return { daysAway: Math.round((next.getTime() - todayAtMidnight.getTime()) / DAY_MS), year: next.getUTCFullYear() }
+}
+
+// Powers the Celebrations panel's "coming up" lists — same candidate set as the daily sweep
+// (active Talent Members resolvable against the Staff Roster), just sorted by days-to-next-
+// occurrence instead of filtered to "today."
+export async function getUpcomingCelebrations(limit = 5): Promise<{ birthdays: UpcomingCelebration[]; anniversaries: UpcomingAnniversary[] }> {
+  const candidates = await getActiveCandidates()
+  const today = new Date(Date.now() + 60 * 60 * 1000)
+
+  const birthdays: UpcomingCelebration[] = []
+  const anniversaries: UpcomingAnniversary[] = []
+
+  for (const c of candidates) {
+    if (c.dateOfBirth) {
+      const month = c.dateOfBirth.getUTCMonth() + 1
+      const day = c.dateOfBirth.getUTCDate()
+      const { daysAway } = nextOccurrence(month, day, today)
+      birthdays.push({ staffId: c.staffId, name: c.firstName, month, day, daysAway })
+    }
+    if (c.anniversaryDate) {
+      const month = c.anniversaryDate.getUTCMonth() + 1
+      const day = c.anniversaryDate.getUTCDate()
+      const { daysAway, year } = nextOccurrence(month, day, today)
+      const years = year - c.anniversaryDate.getUTCFullYear()
+      if (years > 0) anniversaries.push({ staffId: c.staffId, name: c.firstName, month, day, daysAway, years })
+    }
+  }
+
+  birthdays.sort((a, b) => a.daysAway - b.daysAway)
+  anniversaries.sort((a, b) => a.daysAway - b.daysAway)
+
+  return { birthdays: birthdays.slice(0, limit), anniversaries: anniversaries.slice(0, limit) }
+}
+
+export interface CelebrationHistoryEntry {
+  staffId: string
+  staffName: string
+  type: CelebrationType
+  year: number
+  sentAt: Date
+}
+
+export async function getRecentCelebrationSendLog(limit = 20): Promise<CelebrationHistoryEntry[]> {
+  const rows = await prisma.tMCelebrationSendLog.findMany({ orderBy: { sentAt: 'desc' }, take: limit })
+  return rows.map((r) => ({ staffId: r.staffId, staffName: r.staffName, type: r.type as CelebrationType, year: r.year, sentAt: r.sentAt }))
+}
+
+export interface SweepRunEntry {
+  ranAt: Date
+  birthdaysSent: number
+  anniversariesSent: number
+  errors: string | null
+}
+
+export async function getRecentSweepRuns(limit = 5): Promise<SweepRunEntry[]> {
+  return prisma.tMCelebrationSweepRun.findMany({ orderBy: { ranAt: 'desc' }, take: limit })
 }
 
 function isUniqueConstraintError(err: unknown): boolean {

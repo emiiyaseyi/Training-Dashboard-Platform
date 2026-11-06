@@ -1362,3 +1362,17 @@ model TMCelebrationSendLog {
   @@unique([staffId, type, year])
   @@index([staffId])
 }
+
+// One row per cron sweep invocation (whether or not anyone's email went out that day) — lets the
+// Celebrations admin panel show "last checked at <time>" so a reported "no mail by 8am" question
+// can be answered from the data (did the sweep even run yet today, and if so what did it see)
+// instead of guessing at Vercel's cron delivery timing.
+model TMCelebrationSweepRun {
+  id                String   @id @default(cuid())
+  ranAt             DateTime @default(now())
+  birthdaysSent     Int      @default(0)
+  anniversariesSent Int      @default(0)
+  errors            String?
+
+  @@index([ranAt])
+}

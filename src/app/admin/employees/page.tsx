@@ -19,6 +19,8 @@ interface Employee {
   employmentType: string | null
   active: boolean
   lineManagerStaffId: string | null
+  dateOfBirth: string | null
+  employmentDate: string | null
 }
 
 interface BusinessUnitOption {
@@ -29,7 +31,7 @@ interface BusinessUnitOption {
 type Draft = {
   staffId: string; firstName: string; middleName: string; lastName: string
   email: string; businessUnit: string; department: string; role: string; employmentType: string
-  lineManagerStaffId: string
+  lineManagerStaffId: string; dateOfBirth: string; employmentDate: string
 }
 
 interface StaffOption { staffId: string; label: string }
@@ -38,7 +40,7 @@ const EMPLOYMENT_TYPES = ['Full-Time', 'Part-Time', 'Intern', 'Contract']
 const PAGE_SIZE = 20
 
 function emptyDraft(): Draft {
-  return { staffId: '', firstName: '', middleName: '', lastName: '', email: '', businessUnit: '', department: '', role: '', employmentType: '', lineManagerStaffId: '' }
+  return { staffId: '', firstName: '', middleName: '', lastName: '', email: '', businessUnit: '', department: '', role: '', employmentType: '', lineManagerStaffId: '', dateOfBirth: '', employmentDate: '' }
 }
 
 // Every field is a labeled <label> wrapping its input, not a bare placeholder — a placeholder
@@ -131,6 +133,12 @@ function EmployeeForm({
           <datalist id="line-manager-options">
             {staffOptions.map((o) => <option key={o.staffId} value={o.label} />)}
           </datalist>
+        </Field>
+        <Field label="Date of Birth">
+          <input type="date" value={draft.dateOfBirth} onChange={(e) => setDraft({ ...draft, dateOfBirth: e.target.value })} className={inputClass} />
+        </Field>
+        <Field label="Join Date">
+          <input type="date" value={draft.employmentDate} onChange={(e) => setDraft({ ...draft, employmentDate: e.target.value })} className={inputClass} />
         </Field>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -273,6 +281,7 @@ export default function EmployeesPage() {
       staffId: e.staffId, firstName: e.firstName, middleName: e.middleName || '', lastName: e.lastName,
       email: e.email || '', businessUnit: e.businessUnit, department: e.department || '', role: e.role || '',
       employmentType: e.employmentType || '', lineManagerStaffId: e.lineManagerStaffId || '',
+      dateOfBirth: e.dateOfBirth || '', employmentDate: e.employmentDate || '',
     })
   }
 
@@ -458,15 +467,17 @@ export default function EmployeesPage() {
                   <th className="px-4 py-2.5">Job Role</th>
                   <th className="px-4 py-2.5">Line Manager</th>
                   <th className="px-4 py-2.5">Employment</th>
+                  <th className="px-4 py-2.5">Date of Birth</th>
+                  <th className="px-4 py-2.5">Join Date</th>
                   <th className="px-4 py-2.5">Status</th>
                   <th className="px-4 py-2.5">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9} className="px-4 py-6 text-center text-xs text-slate-400">Loading…</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-6 text-center text-xs text-slate-400">Loading…</td></tr>
                 ) : pageRows.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-6 text-center text-xs text-slate-400">No employees match these filters.</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-6 text-center text-xs text-slate-400">No employees match these filters.</td></tr>
                 ) : (
                   pageRows.map((e) => (
                     <Fragment key={e.id}>
@@ -481,6 +492,8 @@ export default function EmployeesPage() {
                         <td className="px-4 py-3 text-slate-600">{e.role || '—'}</td>
                         <td className="px-4 py-3 text-slate-600">{lineManagerName(e.lineManagerStaffId) || '—'}</td>
                         <td className="px-4 py-3 text-slate-600">{e.employmentType || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{e.dateOfBirth || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{e.employmentDate || '—'}</td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleActive(e)}

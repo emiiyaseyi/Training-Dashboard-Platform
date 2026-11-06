@@ -858,6 +858,9 @@ export default function TalentManagementAdminPage() {
         computedColumns={[
           { key: 'lengthOfService', label: 'Length of Service (live)', compute: (r) => fmtYears(yearsBetweenToday(r.dojMeristem as string)) },
           { key: 'lengthInTM', label: 'Length in TM (live)', compute: (r) => fmtYears(yearsBetweenToday(r.dateJoinedTM as string)) },
+          // Read-only — sourced live from the Staff Roster (Admin -> Employees) by Staff ID, not
+          // editable here, so DOB only ever has one place it can be corrected.
+          { key: 'dateOfBirth', label: 'Date of Birth', compute: (r) => (r.dateOfBirth as string) || '—' },
         ]}
       />
 
