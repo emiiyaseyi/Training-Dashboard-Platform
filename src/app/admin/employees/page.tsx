@@ -60,6 +60,7 @@ function EmployeeForm({
   setDraft,
   businessUnits,
   staffOptions,
+  departments,
   onSave,
   onCancel,
   saving,
@@ -69,6 +70,7 @@ function EmployeeForm({
   setDraft: (d: Draft) => void
   businessUnits: BusinessUnitOption[]
   staffOptions: StaffOption[]
+  departments: string[]
   onSave: () => void
   onCancel: () => void
   saving: boolean
@@ -105,7 +107,16 @@ function EmployeeForm({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Field label="Department">
-          <input value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value })} className={inputClass} />
+          <input
+            list="department-options"
+            value={draft.department}
+            onChange={(e) => setDraft({ ...draft, department: e.target.value })}
+            placeholder="Search or type a new department…"
+            className={inputClass}
+          />
+          <datalist id="department-options">
+            {departments.map((d) => <option key={d} value={d} />)}
+          </datalist>
         </Field>
         <Field label="Job role">
           <input placeholder="e.g. Internal Audit Officer" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} className={inputClass} />
@@ -397,6 +408,7 @@ export default function EmployeesPage() {
             setDraft={setAddDraft}
             businessUnits={businessUnits}
             staffOptions={staffOptions}
+            departments={departments}
             onSave={addEmployee}
             onCancel={() => setShowAddForm(false)}
             saving={saving}
@@ -535,6 +547,7 @@ export default function EmployeesPage() {
                               setDraft={setEditDraft}
                               businessUnits={businessUnits}
                               staffOptions={staffOptions}
+                              departments={departments}
                               onSave={saveEdit}
                               onCancel={() => setEditingId(null)}
                               saving={saving}
