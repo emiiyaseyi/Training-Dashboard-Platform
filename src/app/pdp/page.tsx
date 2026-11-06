@@ -34,7 +34,7 @@ interface Section { id: string; key: string; order: number; title: string; descr
 interface LaunchExclusion { staffId: string; staffName: string | null }
 interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[]; staffExclusions: LaunchExclusion[]; managerExclusions: LaunchExclusion[] }
 
-interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }
+interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string; department?: string | null }
 interface BusinessUnitOption { id: string; name: string }
 
 type AudienceType = 'all' | 'businessUnit' | 'department' | 'selected'
@@ -194,6 +194,46 @@ function StaffExcludePicker({ roster, selected, onAdd, onRemove, busy }: { roste
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function BreakdownTable({ title, rows }: { title: string; rows: { name: string; total: number; launched: number; filled: number }[] }) {
+  return (
+    <div className="border border-slate-200 rounded-lg p-3">
+      <p className="text-xs font-semibold text-slate-600 mb-2">{title}</p>
+      {rows.length === 0 ? (
+        <p className="text-[11px] text-slate-400">No roster data to break down.</p>
+      ) : (
+        <div className="overflow-x-auto max-h-64 overflow-y-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-left text-slate-400 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
+                <th className="py-1 pr-2">Name</th>
+                <th className="py-1 pr-2 text-right">Total Staff</th>
+                <th className="py-1 pr-2 text-right">Launched</th>
+                <th className="py-1 pr-2 text-right">Filled</th>
+                <th className="py-1 text-right">Completion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const rate = r.total > 0 ? Math.round((r.filled / r.total) * 100) : 0
+                return (
+                  <tr key={r.name} className="border-b border-slate-50 last:border-0">
+                    <td className="py-1 pr-2 text-slate-700">{r.name}</td>
+                    <td className="py-1 pr-2 text-right text-slate-500">{r.total}</td>
+                    <td className="py-1 pr-2 text-right text-slate-500">{r.launched}</td>
+                    <td className="py-1 pr-2 text-right text-slate-500">{r.filled}</td>
+                    <td className={`py-1 text-right font-medium ${rate >= 80 ? 'text-emerald-600' : rate >= 40 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[10px] text-slate-400 mt-1.5">Total Staff = everyone currently active here, company-wide (not just who this cycle launched to). Completion = Filled ÷ Total Staff.</p>
     </div>
   )
 }
@@ -742,6 +782,35 @@ export default function PDPPage() {
     else if (m.lastSendError) deliveryIssues.push({ track: 'Track B', name: m.managerName, staffId: m.managerStaffId, email: m.email, reason: m.lastSendError, neverSent: !m.sentAt })
   }
 
+  // Completion rate by Business Unit and Department — denominator is every ACTIVE staff member
+  // currently in that BU/department company-wide (the `roster` state, already active-only), not
+  // just whoever this cycle happened to launch to, so this reads as true org-wide coverage rather
+  // than "% of who we already emailed." PDPStaffSurvey.department is never actually populated at
+  // launch time (always written null — see sendPDPStaffSurvey), so department here is resolved
+  // live by looking each survey's staffId up in `roster` instead of trusting that stored field.
+  type TrackBreakdownRow = { name: string; total: number; launched: number; filled: number }
+  const buildBreakdown = (groupKey: (s: RosterStaff) => string, surveyGroupKey: (s: StaffSurvey) => string): TrackBreakdownRow[] => {
+    const totalBy = new Map<string, number>()
+    for (const r of roster) {
+      const k = groupKey(r) || 'Unassigned'
+      totalBy.set(k, (totalBy.get(k) || 0) + 1)
+    }
+    const launchedBy = new Map<string, number>()
+    const filledBy = new Map<string, number>()
+    for (const s of detail?.staffSurveys ?? []) {
+      const k = surveyGroupKey(s) || 'Unassigned'
+      if (s.sentAt) launchedBy.set(k, (launchedBy.get(k) || 0) + 1)
+      if (s.respondedAt) filledBy.set(k, (filledBy.get(k) || 0) + 1)
+    }
+    const keys = new Set([...totalBy.keys(), ...launchedBy.keys(), ...filledBy.keys()])
+    return [...keys]
+      .map((k) => ({ name: k, total: totalBy.get(k) || 0, launched: launchedBy.get(k) || 0, filled: filledBy.get(k) || 0 }))
+      .sort((a, b) => b.total - a.total)
+  }
+  const staffIdToDepartment = new Map(roster.filter((r) => r.department).map((r) => [r.staffId.trim().toUpperCase(), r.department as string]))
+  const buBreakdown = buildBreakdown((r) => r.businessUnit, (s) => s.businessUnit)
+  const deptBreakdown = buildBreakdown((r) => r.department || '', (s) => staffIdToDepartment.get(s.staffId.trim().toUpperCase()) || '')
+
   const q = reportQuery.trim().toLowerCase()
   const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) => !q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) : []
   const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) => !q || m.managerName.toLowerCase().includes(q) || m.managerStaffId.toLowerCase().includes(q)) : []
@@ -1168,6 +1237,12 @@ export default function PDPPage() {
                       )}
                     </div>
                   )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <BreakdownTable title="Completion by Business Unit" rows={buBreakdown} />
+                    <BreakdownTable title="Completion by Department" rows={deptBreakdown} />
+                  </div>
+
                   <div className="relative max-w-xs">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input

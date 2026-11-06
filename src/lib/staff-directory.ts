@@ -15,6 +15,10 @@ export interface ResolvedStaff {
   lineManagerStaffId: string | null
   businessUnit: string
   role: string | null
+  // Optional (not every caller/source populates it — e.g. the comprehensive staff list sheet
+  // deliberately never sets this, see the comment where it's built) — a PDP BU/department
+  // completion breakdown is the first consumer; treat a missing value the same as null.
+  department?: string | null
   // Deactivated (Employees page) staff still resolve here — this directory is also used for
   // historical lookups (an old training record's attendee shouldn't fail to resolve just because
   // they've since left) — but callers adding someone to something NEW (a training schedule, the
@@ -150,6 +154,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       lineManagerStaffId: r.lineManagerStaffId ? r.lineManagerStaffId.toUpperCase() : null,
       businessUnit: r.businessUnit,
       role: r.role,
+      department: r.department,
       active: r.active,
     })
   }
@@ -169,6 +174,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
         lineManagerStaffId: existing.lineManagerStaffId || extra.lineManagerStaffId,
         businessUnit: existing.businessUnit || extra.businessUnit,
         role: existing.role || extra.role,
+        department: existing.department ?? extra.department,
         active: existing.active,
       })
     }
