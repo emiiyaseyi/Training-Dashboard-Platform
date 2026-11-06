@@ -31,7 +31,8 @@ interface TeamMember { id: string; staffId: string; staffName: string; businessU
 interface ManagerSurvey { id: string; managerStaffId: string; managerName: string; sentAt: string | null; respondedAt: string | null; rosterConfirmedAt: string | null; teamMembers: TeamMember[] }
 interface Question { id: string; order: number; label: string; description: string | null; type: string; options: string | null; optionsSource: string | null; ratingMax: number; required: boolean; searchable: boolean; maxSelect: number | null }
 interface Section { id: string; key: string; order: number; title: string; description: string | null; enabled: boolean; maxRepeats: number; questions: Question[] }
-interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[] }
+interface LaunchExclusion { staffId: string; staffName: string | null }
+interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[]; staffExclusions: LaunchExclusion[]; managerExclusions: LaunchExclusion[] }
 
 interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string }
 interface BusinessUnitOption { id: string; name: string }
@@ -139,11 +140,14 @@ function AudiencePicker({
   )
 }
 
-// Search-and-chips picker for "exclude these specific people from this launch" — the same
-// search/chip mechanics as AudiencePicker's "Specific people" mode, but standalone (no audience
-// type selector) since exclusion is an orthogonal filter applied on top of whatever audience type
-// is chosen above it, not an audience type of its own.
-function StaffExcludePicker({ roster, selected, setSelected }: { roster: RosterStaff[]; selected: RosterStaff[]; setSelected: (s: RosterStaff[]) => void }) {
+// Search-and-chips picker for "exclude these specific people from this (and every future) launch
+// of this track" — the same search/chip mechanics as AudiencePicker's "Specific people" mode, but
+// standalone (no audience type selector) since exclusion is an orthogonal filter applied on top of
+// whatever audience type is chosen above it, not an audience type of its own. Persisted on the
+// cycle (PDPLaunchExclusion) as each chip is added/removed, so this list survives a page reload
+// and is pre-filled every time the Launch panel is reopened — it only changes when explicitly
+// edited here.
+function StaffExcludePicker({ roster, selected, onAdd, onRemove, busy }: { roster: RosterStaff[]; selected: RosterStaff[]; onAdd: (s: RosterStaff) => void; onRemove: (staffId: string) => void; busy: boolean }) {
   const [query, setQuery] = useState('')
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -154,14 +158,15 @@ function StaffExcludePicker({ roster, selected, setSelected }: { roster: RosterS
 
   return (
     <div className="border border-slate-200 rounded-lg p-3 space-y-2">
-      <p className="text-[11px] font-medium text-slate-500">Exclude these people from this launch (optional, one-time — not remembered for next time)</p>
+      <p className="text-[11px] font-medium text-slate-500">Exclude these people from this and every future launch of this track (saved — stays excluded until removed here)</p>
       <div className="relative max-w-sm">
         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name or Staff ID…"
-          className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+          disabled={busy}
+          className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs disabled:opacity-50"
         />
         {results.length > 0 && (
           <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -169,7 +174,7 @@ function StaffExcludePicker({ roster, selected, setSelected }: { roster: RosterS
               <button
                 key={r.staffId}
                 type="button"
-                onClick={() => { setSelected([...selected, r]); setQuery('') }}
+                onClick={() => { onAdd(r); setQuery('') }}
                 className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center justify-between gap-2"
               >
                 <span>{r.name}</span>
@@ -184,7 +189,7 @@ function StaffExcludePicker({ roster, selected, setSelected }: { roster: RosterS
           {selected.map((p) => (
             <span key={p.staffId} className="inline-flex items-center gap-1.5 text-xs bg-red-50 text-red-700 rounded-full pl-2.5 pr-1.5 py-1">
               {p.name}
-              <button type="button" onClick={() => setSelected(selected.filter((s) => s.staffId !== p.staffId))}><X className="w-3 h-3" /></button>
+              <button type="button" disabled={busy} onClick={() => onRemove(p.staffId)} className="disabled:opacity-50"><X className="w-3 h-3" /></button>
             </span>
           ))}
         </div>
@@ -219,6 +224,7 @@ export default function PDPPage() {
   const [managerAudienceValue, setManagerAudienceValue] = useState('')
   const [managerAudienceSelected, setManagerAudienceSelected] = useState<RosterStaff[]>([])
   const [managerExcludeSelected, setManagerExcludeSelected] = useState<RosterStaff[]>([])
+  const [exclusionBusy, setExclusionBusy] = useState(false)
 
   const [launchingStaff, setLaunchingStaff] = useState(false)
   const [launchingManagers, setLaunchingManagers] = useState(false)
@@ -296,6 +302,14 @@ export default function PDPPage() {
       managerDeadline: toDateInput(detail.cycle.managerDeadline),
       excludeDefaultCcOnReminders: detail.cycle.excludeDefaultCcOnReminders,
     })
+  }, [detail?.cycle.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Seeds the exclude-picker chips from what's actually saved on the cycle (PDPLaunchExclusion),
+  // not an empty array — this is what makes the exclusion list survive a reload.
+  useEffect(() => {
+    if (!detail) return
+    const toRosterStaff = (e: LaunchExclusion): RosterStaff => ({ staffId: e.staffId, name: e.staffName || e.staffId, email: null, businessUnit: '' })
+    setStaffExcludeSelected(detail.staffExclusions.map(toRosterStaff))
+    setManagerExcludeSelected(detail.managerExclusions.map(toRosterStaff))
   }, [detail?.cycle.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetch('/api/admin/roster-directory').then((r) => r.json()).then((d) => setRoster(Array.isArray(d) ? d : [])).catch(() => {})
@@ -389,7 +403,6 @@ export default function PDPPage() {
       if (res.ok) {
         setLaunchResult({ track: 'Staff Self-Fill', ...data })
         setStaffAudienceSelected([])
-        setStaffExcludeSelected([])
       } else {
         alert(data.error || 'Failed to launch.')
       }
@@ -414,7 +427,6 @@ export default function PDPPage() {
       if (res.ok) {
         setLaunchResult({ track: 'Manager Team-Fill', ...data })
         setManagerAudienceSelected([])
-        setManagerExcludeSelected([])
       } else {
         alert(data.error || 'Failed to launch.')
       }
@@ -422,6 +434,39 @@ export default function PDPPage() {
       await loadDetail(selectedId)
     } finally {
       setLaunchingManagers(false)
+    }
+  }
+
+  const addExclusion = async (track: 'staff' | 'manager', staff: RosterStaff) => {
+    if (!selectedId) return
+    setExclusionBusy(true)
+    try {
+      const res = await fetch(`/api/admin/pdp/${selectedId}/exclusions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track, staffId: staff.staffId }),
+      })
+      if (res.ok) {
+        if (track === 'staff') setStaffExcludeSelected((prev) => [...prev, staff])
+        else setManagerExcludeSelected((prev) => [...prev, staff])
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Failed to exclude.')
+      }
+    } finally {
+      setExclusionBusy(false)
+    }
+  }
+
+  const removeExclusion = async (track: 'staff' | 'manager', staffId: string) => {
+    if (!selectedId) return
+    setExclusionBusy(true)
+    try {
+      await fetch(`/api/admin/pdp/${selectedId}/exclusions?track=${track}&staffId=${encodeURIComponent(staffId)}`, { method: 'DELETE' })
+      if (track === 'staff') setStaffExcludeSelected((prev) => prev.filter((s) => s.staffId !== staffId))
+      else setManagerExcludeSelected((prev) => prev.filter((s) => s.staffId !== staffId))
+    } finally {
+      setExclusionBusy(false)
     }
   }
 
@@ -918,7 +963,7 @@ export default function PDPPage() {
                   value={staffAudienceValue} setValue={setStaffAudienceValue}
                   selected={staffAudienceSelected} setSelected={setStaffAudienceSelected}
                 />
-                <StaffExcludePicker roster={roster} selected={staffExcludeSelected} setSelected={setStaffExcludeSelected} />
+                <StaffExcludePicker roster={roster} selected={staffExcludeSelected} onAdd={(s) => addExclusion('staff', s)} onRemove={(id) => removeExclusion('staff', id)} busy={exclusionBusy} />
                 <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                   <input type="checkbox" checked={staffRequireValidation} onChange={(e) => setStaffRequireValidation(e.target.checked)} />
                   Require line manager review after this batch submits (on by default). Applies only to the people launched below — Track B managers skip this since they are the line manager already, and launching Track A again later can use a different setting.
@@ -935,7 +980,7 @@ export default function PDPPage() {
                   value={managerAudienceValue} setValue={setManagerAudienceValue}
                   selected={managerAudienceSelected} setSelected={setManagerAudienceSelected}
                 />
-                <StaffExcludePicker roster={roster} selected={managerExcludeSelected} setSelected={setManagerExcludeSelected} />
+                <StaffExcludePicker roster={roster} selected={managerExcludeSelected} onAdd={(s) => addExclusion('manager', s)} onRemove={(id) => removeExclusion('manager', id)} busy={exclusionBusy} />
                 <button onClick={launchManagers} disabled={launchingManagers} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
                   {launchingManagers ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
                   Launch Track B (Manager Team-Fill)

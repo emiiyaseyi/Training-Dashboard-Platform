@@ -1054,10 +1054,31 @@ model PDPCycle {
   staffSurveys     PDPStaffSurvey[]
   managerSurveys   PDPManagerSurvey[]
   managerOverrides PDPManagerOverride[]
+  launchExclusions PDPLaunchExclusion[]
   sections         PDPSection[]
   questions        PDPQuestion[]
   reviews          PDPReview[]
   emailTemplates   PDPEmailTemplate[]
+}
+
+// Durable "leave this person out of future launches of this track" list — one row per
+// (cycle, track, staff member). Previously this was only ever a one-launch, in-memory picker
+// selection on the admin page (reset on every reload), so re-launching later for newly-added
+// staff silently re-included anyone an admin meant to keep excluded all along. Persisting it here
+// means a launch's exclude list is whatever's saved here, shown pre-filled every time the Launch
+// panel is opened, and only changes when an admin explicitly adds/removes someone.
+model PDPLaunchExclusion {
+  id        String   @id @default(cuid())
+  cycleId   String
+  track     String // "staff" (Track A) | "manager" (Track B)
+  staffId   String
+  staffName String?
+  createdAt DateTime @default(now())
+
+  cycle PDPCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, track, staffId])
+  @@index([cycleId, track])
 }
 
 // Admin-editable copy for each of the three PDP email kinds, per cycle — no hardcoded subject/body
