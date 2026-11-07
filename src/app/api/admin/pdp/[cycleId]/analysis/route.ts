@@ -181,12 +181,24 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     groupOpportunities.sort((a, b) => b.count - a.count)
   }
 
+  // How many people filled 1 development need vs. 2, 3, etc. — a plain count of
+  // developmentNeeds.length per finalized plan, bucketed.
+  const needCountBy = new Map<number, number>()
+  for (const plan of plans) {
+    const count = plan.answers.developmentNeeds.length
+    needCountBy.set(count, (needCountBy.get(count) || 0) + 1)
+  }
+  const developmentNeedCountDistribution = [...needCountBy.entries()]
+    .map(([needCount, people]) => ({ needCount, people }))
+    .sort((a, b) => a.needCount - b.needCount)
+
   return NextResponse.json({
     totalPlans: plans.length,
     businessUnits,
     departments,
     capabilityDemand,
     groupOpportunities,
+    developmentNeedCountDistribution,
     questions: [...breakdowns.values()],
     // Full section/question structure (including text/textarea/rating/yesno, not just the
     // countable select/multiselect ones above) — lets the client render a complete per-person

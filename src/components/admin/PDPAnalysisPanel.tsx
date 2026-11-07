@@ -20,6 +20,7 @@ interface Person { staffId: string; staffName: string; businessUnit: string; dep
 interface InProgressPerson extends Person { draftSavedAt: string | null }
 
 interface GroupOpportunity { area: string; businessUnit: string; count: number; people: string[] }
+interface NeedCountRow { needCount: number; people: number }
 
 interface AnalysisData {
   totalPlans: number
@@ -27,6 +28,7 @@ interface AnalysisData {
   departments: string[]
   capabilityDemand: QuestionBreakdown
   groupOpportunities: GroupOpportunity[]
+  developmentNeedCountDistribution: NeedCountRow[]
   questions: QuestionBreakdown[]
   sections: Section[]
   people: Person[]
@@ -115,7 +117,7 @@ function PersonRecap({ sections, answers }: { sections: Section[]; answers: Answ
 export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'aggregate' | 'people' | 'inProgress'>('aggregate')
+  const [tab, setTab] = useState<'pdp' | 'digitalSkills' | 'people' | 'inProgress'>('pdp')
   const [scope, setScope] = useState<'all' | 'businessUnit' | 'department'>('all')
   const [scopeValue, setScopeValue] = useState('')
   const [peopleQuery, setPeopleQuery] = useState('')
@@ -179,35 +181,49 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-1.5">
-        <button onClick={() => setTab('aggregate')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'aggregate' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Aggregate Counts</button>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <button onClick={() => setTab('pdp')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'pdp' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>PDP Analysis</button>
+        <button onClick={() => setTab('digitalSkills')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'digitalSkills' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Digital Skills Assessment</button>
         <button onClick={() => setTab('people')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'people' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Per-Person ({data.people.length})</button>
         <button onClick={() => setTab('inProgress')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'inProgress' ? 'bg-amber-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>In Progress ({data.inProgress.length})</button>
       </div>
 
-      {tab === 'aggregate' && (
-        <>
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] text-slate-500">{data.totalPlans} finalized plan(s) analyzed.</p>
-            <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
-              <option value="all">Whole organisation</option>
-              <option value="businessUnit">By Business Unit</option>
-              <option value="department">By Department</option>
+      {(tab === 'pdp' || tab === 'digitalSkills') && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[11px] text-slate-500">{data.totalPlans} finalized plan(s) analyzed.</p>
+          <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
+            <option value="all">Whole organisation</option>
+            <option value="businessUnit">By Business Unit</option>
+            <option value="department">By Department</option>
+          </select>
+          {scope === 'businessUnit' && (
+            <select value={scopeValue} onChange={(e) => setScopeValue(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
+              {data.businessUnits.map((bu) => <option key={bu} value={bu}>{bu}</option>)}
             </select>
-            {scope === 'businessUnit' && (
-              <select value={scopeValue} onChange={(e) => setScopeValue(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
-                {data.businessUnits.map((bu) => <option key={bu} value={bu}>{bu}</option>)}
-              </select>
-            )}
-            {scope === 'department' && (
-              <select value={scopeValue} onChange={(e) => setScopeValue(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
-                {data.departments.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-          </div>
+          )}
+          {scope === 'department' && (
+            <select value={scopeValue} onChange={(e) => setScopeValue(e.target.value)} className="border border-slate-300 rounded-md px-2 py-1 text-xs">
+              {data.departments.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          )}
+        </div>
+      )}
 
+      {tab === 'pdp' && (
+        <>
           <div className="border border-slate-200 rounded-xl p-4 space-y-4">
             <p className="text-sm font-bold text-slate-800">Personal Development Plan</p>
+
+            {data.developmentNeedCountDistribution.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-700 mb-1">Development Needs per Person</p>
+                <p className="text-[11px] text-slate-400 mb-2">How many people filled in just 1 development need vs. 2, 3, etc. — org-wide (not affected by the Business Unit/Department scope above, since it&apos;s about form-filling behaviour, not need content).</p>
+                <CountTable
+                  counts={Object.fromEntries(data.developmentNeedCountDistribution.map((r) => [`${r.needCount} need${r.needCount === 1 ? '' : 's'}`, r.people]))}
+                  max={Math.max(1, ...data.developmentNeedCountDistribution.map((r) => r.people))}
+                />
+              </div>
+            )}
 
             {capabilityDemandScoped && Object.keys(capabilityDemandScoped.counts).length > 0 && (
               <div>
@@ -258,26 +274,30 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
               </div>
             ))}
           </div>
-
-          {groupedDigitalSkills.length > 0 && (
-            <div className="border border-slate-200 rounded-xl p-4 space-y-4">
-              <p className="text-sm font-bold text-slate-800">Digital Skill Assessment</p>
-              {groupedDigitalSkills.map(([sectionTitle, questions]) => (
-                <div key={sectionTitle}>
-                  <p className="text-xs font-semibold text-slate-700 mb-2">{sectionTitle}</p>
-                  <div className="space-y-4">
-                    {questions.map((q) => (
-                      <div key={q.questionId}>
-                        <p className="text-[11px] font-medium text-slate-500 mb-1">{q.label}</p>
-                        <CountTable counts={q.counts} max={q.max} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </>
+      )}
+
+      {tab === 'digitalSkills' && (
+        groupedDigitalSkills.length > 0 ? (
+          <div className="border border-slate-200 rounded-xl p-4 space-y-4">
+            <p className="text-sm font-bold text-slate-800">Digital Skill Assessment</p>
+            {groupedDigitalSkills.map(([sectionTitle, questions]) => (
+              <div key={sectionTitle}>
+                <p className="text-xs font-semibold text-slate-700 mb-2">{sectionTitle}</p>
+                <div className="space-y-4">
+                  {questions.map((q) => (
+                    <div key={q.questionId}>
+                      <p className="text-[11px] font-medium text-slate-500 mb-1">{q.label}</p>
+                      <CountTable counts={q.counts} max={q.max} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">No Digital Skill Assessment data for this scope yet.</p>
+        )
       )}
 
       {tab === 'people' && (
