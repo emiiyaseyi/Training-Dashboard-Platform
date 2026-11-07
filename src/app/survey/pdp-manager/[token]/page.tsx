@@ -68,6 +68,12 @@ export default function PDPManagerTeamPage() {
   const [addedPending, setAddedPending] = useState<SearchHit[]>([])
   const [confirming, setConfirming] = useState(false)
 
+  // Team overview step — shown between roster confirmation and the per-member fill flow, listing
+  // everyone (both needs-review and fill-from-scratch) with their status so the manager can see at
+  // a glance who's left and jump straight to anyone, rather than being forced through a strict
+  // Next/Back sequence. Defaults to true so a manager reopening this link always lands here first.
+  const [showOverview, setShowOverview] = useState(true)
+
   // Per-member fill step state
   const [memberIndex, setMemberIndex] = useState(0)
   const [page, setPage] = useState(0)
@@ -308,6 +314,37 @@ export default function PDPManagerTeamPage() {
     </div>
   )
 
+  // ── Step 2b: team overview — who's left, who's done, jump to anyone ───
+  if (showOverview) {
+    const sortedMembers = [...activeMembers].sort((a, b) => Number(a.submitted) - Number(b.submitted))
+    const doneCount = activeMembers.filter((m) => m.submitted).length
+    return (
+      <div className="min-h-screen bg-slate-50 py-8 px-4">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-[23px] font-bold text-slate-900">{ctx.cycleTitle}</h1>
+          <p className="text-[18px] text-slate-500 mt-0.5 mb-4">{doneCount} of {activeMembers.length} done</p>
+          <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+            {sortedMembers.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => { setMemberIndex(activeMembers.findIndex((x) => x.id === m.id)); setShowOverview(false) }}
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-50"
+              >
+                <div>
+                  <p className="text-[18px] font-medium text-slate-800">{m.staffName}</p>
+                  <p className="text-[14px] text-slate-400">{m.needsReview ? 'Self-filled — needs your review' : 'Fill on their behalf'}</p>
+                </div>
+                <span className={`text-[15px] font-medium shrink-0 ml-3 ${m.submitted ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {m.submitted ? (m.needsReview ? '✓ Validated' : '✓ Filled') : (m.needsReview ? 'Pending review' : 'Not yet filled')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!currentMember || !form) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
 
   const current = pages[page]
@@ -378,7 +415,7 @@ export default function PDPManagerTeamPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setSaveError(data.error || 'Failed to save.'); return }
       if (data.allDone) { setAllDone(true); return }
-      setMemberIndex((i) => i + 1)
+      setShowOverview(true)
     } catch {
       setSaveError('Failed to save. Network error.')
     } finally {
@@ -389,7 +426,9 @@ export default function PDPManagerTeamPage() {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <p className="text-[15px] text-slate-400 mb-1">Team member {memberIndex + 1} of {activeMembers.length}</p>
+        <button onClick={() => setShowOverview(true)} className="flex items-center gap-1 text-[15px] text-slate-500 hover:text-slate-800 mb-1">
+          <ChevronLeft className="w-3.5 h-3.5" /> Back to team overview
+        </button>
         <h1 className="text-[23px] font-bold text-slate-900">
           {currentMember.needsReview ? 'Review ' : 'Fill '}{currentMember.staffName}&apos;s Plan
         </h1>
@@ -503,7 +542,7 @@ export default function PDPManagerTeamPage() {
               className="flex items-center gap-1.5 text-[18px] font-medium text-white bg-emerald-600 rounded-lg px-4 py-2 hover:bg-emerald-700 disabled:opacity-50"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {memberIndex === activeMembers.length - 1 ? 'Finish' : 'Save & Next Person'}
+              Save &amp; Return to Overview
             </button>
           )}
         </div>
