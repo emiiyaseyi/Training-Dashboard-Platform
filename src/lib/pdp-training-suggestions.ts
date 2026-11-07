@@ -44,8 +44,10 @@ function scoreCourse(
 ): number {
   const tagSet = new Set(course.tags)
   const overlap = (values: string[]) => values.filter((v) => tagSet.has(v)).length
+  // skillArea is enforced as a hard filter before this ever runs (see resolveNeedTrainingOptions),
+  // so every candidate already matches it — the rest of the score is a tie-breaker across the
+  // respondent's other, broader signals.
   let score = 0
-  if (signals.skillArea.some((v) => tagSet.has(v))) score += 3
   score += overlap(signals.roleResponsibilities) * 2
   score += overlap(signals.developmentDrivers) * 2
   score += overlap(signals.businessOutcomes) * 2
@@ -53,7 +55,7 @@ function scoreCourse(
   return score
 }
 
-// Up to 5 suggested real course titles for ONE Development Need, scored against that need's own
+// Up to 10 suggested real course titles for ONE Development Need, scored against that need's own
 // "Skill or capability area" answer plus the respondent's role_alignment + capabilities answers
 // (both answered once, before any Development Need block, per PDP_DEFAULT_SECTIONS' section
 // order — see pdp-seed.ts). Same wiring pattern as resolveWrapupSectionQuestions in pdp-wrapup.ts:
@@ -90,12 +92,15 @@ export function resolveNeedTrainingOptions(
     ],
   }
 
-  const suggested = catalog
+  // Nothing is suggested until the respondent has actually picked THIS need's own skill/capability
+  // area — showing titles before that point felt premature and disconnected from what they'd just
+  // filled in (reported directly by the user), so skillArea is a hard gate, not just a scoring bonus.
+  const suggested = signals.skillArea.length === 0 ? [] : catalog
     .filter((course) => course.minTier == null || course.minTier <= respondentTier)
+    .filter((course) => signals.skillArea.some((v) => course.tags.includes(v)))
     .map((course) => ({ course, score: scoreCourse(course, signals) }))
-    .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || a.course.title.localeCompare(b.course.title))
-    .slice(0, 5)
+    .slice(0, 10)
     .map((s) => s.course.title)
 
   return section.questions.map((q) => (q.label === 'Proposed Training Title' ? { ...q, options: [...suggested, 'Other'] } : q))

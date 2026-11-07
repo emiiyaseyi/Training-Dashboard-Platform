@@ -16,6 +16,7 @@ export function SearchableSelect({
 }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     const base = q ? options.filter((o) => o.toLowerCase().includes(q)) : options
@@ -24,10 +25,20 @@ export function SearchableSelect({
 
   return (
     <div className="relative">
-      {value ? (
-        <div className="flex items-center justify-between border border-slate-300 rounded-md px-2.5 py-2 text-[18px] bg-white">
+      {value && !editing ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => { setEditing(true); setQuery(''); setOpen(true) }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setEditing(true); setQuery(''); setOpen(true) } }}
+          className="flex items-center justify-between border border-slate-300 rounded-md px-2.5 py-2 text-[18px] bg-white cursor-pointer hover:border-navy-400"
+        >
           <span>{value}</span>
-          <button type="button" onClick={() => onChange('')} className="text-slate-400 hover:text-red-600 shrink-0 ml-2">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange('') }}
+            className="text-slate-400 hover:text-red-600 shrink-0 ml-2"
+          >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -39,8 +50,9 @@ export function SearchableSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setOpen(true)}
-              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              onBlur={() => setTimeout(() => { setOpen(false); setEditing(false) }, 150)}
               placeholder={placeholder}
+              autoFocus={editing}
               className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-md text-[18px]"
             />
           </div>
@@ -50,7 +62,7 @@ export function SearchableSelect({
                 <button
                   key={o}
                   type="button"
-                  onMouseDown={() => { onChange(o); setQuery('') }}
+                  onMouseDown={() => { onChange(o); setQuery(''); setEditing(false); setOpen(false) }}
                   className="w-full text-left px-3 py-2 text-[18px] hover:bg-slate-50"
                 >
                   {o}

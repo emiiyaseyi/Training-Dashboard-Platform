@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { GraduationCap, Loader2, Plus, Pencil, Trash2, X, Search, Download } from 'lucide-react'
+import { GraduationCap, Loader2, Plus, Pencil, Trash2, X, Search, Download, Tags } from 'lucide-react'
 import { SectionCard } from '@/components/ui/SectionCard'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { ROLE_RESPONSIBILITY_CATEGORIES, DEVELOPMENT_DRIVER_OPTIONS, BUSINESS_OUTCOME_OPTIONS } from '@/lib/pdp-seed'
@@ -308,6 +308,25 @@ export function TrainingCatalogPanel() {
     }
   }
 
+  // One-off pass: tags courses against Meristem's currently-configured Differentiating
+  // Capabilities, via keyword overlap on title/category. Never removes an existing tag, so it's
+  // safe to re-run after adding new capabilities or new courses.
+  const autoTagCapabilities = async () => {
+    setSeeding(true)
+    setSeedMessage(null)
+    try {
+      const res = await fetch('/api/admin/training-catalog/auto-tag-capabilities', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to auto-tag capabilities.')
+      setSeedMessage(data.tagged > 0 ? `Added a Meristem Strategic Capability tag to ${data.tagged} course(s) based on title/category keyword matches. Spot-check via the table — this is keyword matching, not a guarantee of true relevance.` : (data.note || 'No courses matched a configured capability by keyword.'))
+      load()
+    } catch (err) {
+      setSeedMessage(err instanceof Error ? err.message : 'Failed to auto-tag capabilities.')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   const deleteCourse = async (c: Course) => {
     if (!confirm(`Delete "${c.title}" (${c.provider}) from the training catalog? This can't be undone, but doesn't affect any PDP already filled.`)) return
     setBusyId(c.id)
@@ -369,6 +388,15 @@ export function TrainingCatalogPanel() {
             >
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GraduationCap className="w-3.5 h-3.5" />}
               Auto-tag Grade Levels
+            </button>
+            <button
+              onClick={autoTagCapabilities}
+              disabled={seeding}
+              title="One-off: tags courses against Meristem's currently-configured Strategic Capabilities by matching keywords in the capability name against each course's title/category. Never removes a tag already set — safe to re-run."
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tags className="w-3.5 h-3.5" />}
+              Auto-tag Capabilities
             </button>
             <button
               onClick={() => { setShowAddForm((v) => !v); setAddDraft(emptyDraft()); setFormError(null) }}
