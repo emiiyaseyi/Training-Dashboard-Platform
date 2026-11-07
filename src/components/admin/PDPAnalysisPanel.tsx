@@ -16,8 +16,11 @@ interface QuestionBreakdown {
 interface PDPQuestion { id: string; label: string; type: string }
 interface Section { id: string; key: string; title: string; questions: PDPQuestion[] }
 interface Answers { answers: Record<string, string | string[]>; developmentNeeds: Record<string, string | string[]>[] }
-interface Person { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers }
-interface InProgressPerson extends Person { draftSavedAt: string | null }
+interface Person {
+  staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers
+  startedAt: string | null; completedAt: string | null; durationMinutes: number | null
+}
+interface InProgressPerson { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers; startedAt: string | null; draftSavedAt: string | null }
 
 interface GroupOpportunity { area: string; businessUnit: string; count: number; people: string[] }
 interface NeedCountRow { needCount: number; people: number }
@@ -29,10 +32,23 @@ interface AnalysisData {
   capabilityDemand: QuestionBreakdown
   groupOpportunities: GroupOpportunity[]
   developmentNeedCountDistribution: NeedCountRow[]
+  averageCompletionMinutes: number | null
   questions: QuestionBreakdown[]
   sections: Section[]
   people: Person[]
   inProgress: InProgressPerson[]
+}
+
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+function formatDuration(minutes: number | null): string {
+  if (minutes == null) return '—'
+  if (minutes < 60) return `${minutes}m`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
 // Tabular AND graphical in one: a real table (Option / Count / Share) with an inline bar inside
@@ -302,6 +318,11 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
 
       {tab === 'people' && (
         <div>
+          {data.averageCompletionMinutes != null && (
+            <p className="text-[11px] text-slate-500 mb-2">
+              Average completion time: <span className="font-semibold text-slate-700">{formatDuration(data.averageCompletionMinutes)}</span> (started → submitted, across everyone with both timestamps)
+            </p>
+          )}
           <div className="relative max-w-xs mb-3">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
@@ -318,6 +339,9 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
                   <div>
                     <p className="text-xs font-medium text-slate-700">{p.staffName} <span className="text-slate-400">({p.staffId})</span></p>
                     <p className="text-[11px] text-slate-400">{p.businessUnit}{p.department ? ` · ${p.department}` : ''} · {p.source}</p>
+                    <p className="text-[11px] text-slate-400">
+                      Started {formatDateTime(p.startedAt)} · Completed {formatDateTime(p.completedAt)} · Took {formatDuration(p.durationMinutes)}
+                    </p>
                   </div>
                   {expandedStaffId === p.staffId ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                 </button>
@@ -353,7 +377,10 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
                     <p className="text-xs font-medium text-slate-700">{p.staffName} <span className="text-slate-400">({p.staffId})</span></p>
                     <p className="text-[11px] text-amber-700">
                       {p.businessUnit}{p.department ? ` · ${p.department}` : ''} · In Progress
-                      {p.draftSavedAt && ` · last saved ${new Date(p.draftSavedAt).toLocaleString()}`}
+                    </p>
+                    <p className="text-[11px] text-amber-700">
+                      Started {formatDateTime(p.startedAt)} · Last saved {formatDateTime(p.draftSavedAt)}
+                      {p.startedAt && p.draftSavedAt && ` · ${formatDuration(Math.max(0, Math.round((new Date(p.draftSavedAt).getTime() - new Date(p.startedAt).getTime()) / 60000)))} so far`}
                     </p>
                   </div>
                   {expandedStaffId === p.staffId ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}

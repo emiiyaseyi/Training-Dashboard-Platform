@@ -160,7 +160,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     // (a draft can be partial), so coming back later resumes exactly where they left off; the
     // overall survey is never marked responded from a draft save.
     if (body.draft) {
-      await prisma.pDPManagerTeamMemberEntry.update({ where: { id: entryId }, data: { answers: JSON.stringify(body.answers), draftSavedAt: new Date() } })
+      const now = new Date()
+      await prisma.pDPManagerTeamMemberEntry.update({
+        where: { id: entryId },
+        data: { answers: JSON.stringify(body.answers), draftSavedAt: now, ...(entry.startedAt ? {} : { startedAt: now }) },
+      })
       return NextResponse.json({ success: true })
     }
 
@@ -175,9 +179,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     const validationError = validatePDPFormAnswers(answers, [...sections, ...needReviewSections])
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
+    const submittedAt = new Date()
     await prisma.pDPManagerTeamMemberEntry.update({
       where: { id: entryId },
-      data: { answers: JSON.stringify(body.answers), submittedAt: new Date() },
+      data: { answers: JSON.stringify(body.answers), submittedAt, ...(entry.startedAt ? {} : { startedAt: submittedAt }) },
     })
     sendPDPMemberFinalizedEmail(entryId).catch((err) => console.error('[pdp/manager PUT] member finalized email failed', err))
 

@@ -25,6 +25,17 @@ interface FinalizedPlan {
   department: string | null
   source: string
   answers: Answers
+  startedAt: string | null
+  completedAt: string | null
+}
+
+// Minutes between startedAt (first draft autosave — see PDPStaffSurvey.startedAt) and
+// completedAt (final submit), rounded to the nearest minute. Null if either timestamp is
+// missing (e.g. a plan finalized by a manager typing it in directly has no respondent-side
+// startedAt/completedAt of its own to measure).
+function durationMinutes(startedAt: Date | null, completedAt: Date | null): number | null {
+  if (!startedAt || !completedAt) return null
+  return Math.max(0, Math.round((completedAt.getTime() - startedAt.getTime()) / 60000))
 }
 
 // Generic, section/question-driven aggregation — works against whatever sections/questions this
@@ -50,13 +61,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
   // per-person list as if submitted), because the only check was "does answers parse," not "did
   // they actually submit." Fixed by requiring respondedAt/submittedAt below, with everyone who
   // has a draft but no submission reported here instead, as genuinely in progress.
-  interface InProgressPlan { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers; draftSavedAt: string | null }
+  interface InProgressPlan { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers; startedAt: string | null; draftSavedAt: string | null }
   const plans: FinalizedPlan[] = []
   const inProgress: InProgressPlan[] = []
   for (const s of staffSurveys) {
     if (!s.respondedAt) {
       const draft = parseAnswers(s.answers)
-      if (draft) inProgress.push({ staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department, source: 'Self-Fill — in progress', answers: draft, draftSavedAt: s.draftSavedAt?.toISOString() ?? null })
+      if (draft) inProgress.push({ staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department, source: 'Self-Fill — in progress', answers: draft, startedAt: s.startedAt?.toISOString() ?? null, draftSavedAt: s.draftSavedAt?.toISOString() ?? null })
       continue
     }
     const completedValidation = s.validations.find((v) => v.respondedAt && v.editedAnswers)
@@ -66,6 +77,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
       staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department,
       source: completedValidation ? `Filled — validated by ${completedValidation.managerName || 'manager'}` : 'Filled — awaiting manager validation',
       answers,
+      // Always the STAFF member's own timing (how long they took to fill it), never the
+      // manager's later validation timing, regardless of which branch above.
+      startedAt: s.startedAt?.toISOString() ?? null,
+      completedAt: s.respondedAt.toISOString(),
     })
   }
   for (const m of managerSurveys) {
@@ -73,14 +88,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
       if (t.status !== 'accepted' && t.status !== 'added') continue
       if (!t.submittedAt) {
         const draft = parseAnswers(t.answers)
-        if (draft) inProgress.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName}) — in progress`, answers: draft, draftSavedAt: t.draftSavedAt?.toISOString() ?? null })
+        if (draft) inProgress.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName}) — in progress`, answers: draft, startedAt: t.startedAt?.toISOString() ?? null, draftSavedAt: t.draftSavedAt?.toISOString() ?? null })
         continue
       }
       const answers = parseAnswers(t.answers)
       if (!answers) continue
-      plans.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName})`, answers })
+      plans.push({
+        staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName})`, answers,
+        startedAt: t.startedAt?.toISOString() ?? null, completedAt: t.submittedAt.toISOString(),
+      })
     }
   }
+
+  // Average completion time — minutes between startedAt and completedAt, averaged across every
+  // finalized plan that has both (a plan filled with zero draft autosaves before submit, e.g. a
+  // manager who filled someone's plan from scratch in one continuous sitting with no intermediate
+  // save firing, won't have a meaningful startedAt and is excluded rather than skewing the
+  // average toward zero).
+  const durations = plans
+    .map((p) => (p.startedAt && p.completedAt ? durationMinutes(new Date(p.startedAt), new Date(p.completedAt)) : null))
+    .filter((d): d is number => d != null)
+  const averageCompletionMinutes = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null
 
   // questionId -> label (for questions worth counting: select/multiselect only — text/textarea
   // are free-form and not meaningfully countable, rating/yesno are low-cardinality enough to just
@@ -199,6 +227,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     capabilityDemand,
     groupOpportunities,
     developmentNeedCountDistribution,
+    averageCompletionMinutes,
     questions: [...breakdowns.values()],
     // Full section/question structure (including text/textarea/rating/yesno, not just the
     // countable select/multiselect ones above) — lets the client render a complete per-person
@@ -206,6 +235,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     sections,
     people: plans.map((p) => ({
       staffId: p.staffId, staffName: p.staffName, businessUnit: p.businessUnit, department: p.department, source: p.source, answers: p.answers,
+      startedAt: p.startedAt, completedAt: p.completedAt,
+      durationMinutes: p.startedAt && p.completedAt ? durationMinutes(new Date(p.startedAt), new Date(p.completedAt)) : null,
     })),
     // Never counted in totalPlans or any of the aggregate breakdowns above — this is purely a
     // visibility list ("who's actively working on theirs, and when did they last save") so the
@@ -215,7 +246,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
       .sort((a, b) => (b.draftSavedAt || '').localeCompare(a.draftSavedAt || ''))
       .map((p) => ({
         staffId: p.staffId, staffName: p.staffName, businessUnit: p.businessUnit, department: p.department,
-        source: p.source, answers: p.answers, draftSavedAt: p.draftSavedAt,
+        source: p.source, answers: p.answers, startedAt: p.startedAt, draftSavedAt: p.draftSavedAt,
       })),
   })
 }

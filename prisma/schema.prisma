@@ -1244,6 +1244,11 @@ model PDPStaffSurvey {
   answers         String?
   sentAt          DateTime?
   respondedAt     DateTime?
+  // The FIRST draft autosave for this person — i.e. the first time they actually entered an
+  // answer, not just opened the link (opening without touching anything isn't "starting"). Never
+  // updated again after that first save. Paired with respondedAt to measure how long completing
+  // the form actually took someone, distinct from how long the link sat unopened.
+  startedAt       DateTime?
   // Set only by a draft autosave, never touched by final submit — lets the admin see who's
   // actively working through their plan and when they last touched it, distinct from whether
   // they've finished (respondedAt). Stays at whatever it was before submission; use respondedAt
@@ -1350,6 +1355,8 @@ model PDPManagerTeamMemberEntry {
   // "finished," only submittedAt does (same caveat as PDPStaffSurvey.answers).
   answers         String?
   submittedAt     DateTime?
+  // The first draft autosave for this one team member's entry — see PDPStaffSurvey.startedAt.
+  startedAt       DateTime?
   // Set only by a draft autosave — see PDPStaffSurvey.draftSavedAt for the full reasoning.
   draftSavedAt    DateTime?
   // True when `answers` was prefilled from this person's own Track A self-fill submission rather

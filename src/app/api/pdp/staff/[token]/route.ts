@@ -79,7 +79,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
 
     const body = (await req.json()) as PDPFormAnswers
-    await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { answers: JSON.stringify(body), draftSavedAt: new Date() } })
+    const now = new Date()
+    await prisma.pDPStaffSurvey.update({
+      where: { id: survey.id },
+      data: { answers: JSON.stringify(body), draftSavedAt: now, ...(survey.startedAt ? {} : { startedAt: now }) },
+    })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('[pdp/staff PUT]', err)
@@ -109,9 +113,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     const validationError = validatePDPFormAnswers(body, sections)
     if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
+    const submittedAt = new Date()
     await prisma.pDPStaffSurvey.update({
       where: { id: survey.id },
-      data: { answers: JSON.stringify(body), respondedAt: new Date() },
+      // Backfills startedAt too, for the rare case nobody's own draft autosave fired before this
+      // (e.g. a very fast single-page fill) — without it, duration-to-complete would be missing
+      // for that person instead of reading as (correctly) near-instant.
+      data: { answers: JSON.stringify(body), respondedAt: submittedAt, ...(survey.startedAt ? {} : { startedAt: submittedAt }) },
     })
 
     // Fire-and-forget — getting this in front of the line manager shouldn't make the staff
