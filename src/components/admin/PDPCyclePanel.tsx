@@ -378,7 +378,7 @@ function SecondManagerOverridesPanel({
   )
 }
 
-function BreakdownTable({ title, rows }: { title: string; rows: { name: string; total: number; launched: number; filled: number }[] }) {
+function BreakdownTable({ title, rows }: { title: string; rows: { name: string; total: number; launched: number; filled: number; excluded: number }[] }) {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
       <p className="text-xs font-semibold text-slate-600 mb-2">{title}</p>
@@ -391,6 +391,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: { name: string; 
               <tr className="text-left text-slate-400 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
                 <th className="py-1 pr-2">Name</th>
                 <th className="py-1 pr-2 text-right">Total Staff</th>
+                <th className="py-1 pr-2 text-right">Excluded</th>
                 <th className="py-1 pr-2 text-right">Launched</th>
                 <th className="py-1 pr-2 text-right">Filled</th>
                 <th className="py-1 text-right">Completion</th>
@@ -403,6 +404,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: { name: string; 
                   <tr key={r.name} className="border-b border-slate-50 last:border-0">
                     <td className="py-1 pr-2 text-slate-700">{r.name}</td>
                     <td className="py-1 pr-2 text-right text-slate-500">{r.total}</td>
+                    <td className="py-1 pr-2 text-right text-slate-400">{r.excluded || '—'}</td>
                     <td className="py-1 pr-2 text-right text-slate-500">{r.launched}</td>
                     <td className="py-1 pr-2 text-right text-slate-500">{r.filled}</td>
                     <td className={`py-1 text-right font-medium ${rate >= 80 ? 'text-emerald-600' : rate >= 40 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</td>
@@ -413,7 +415,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: { name: string; 
           </table>
         </div>
       )}
-      <p className="text-[10px] text-slate-400 mt-1.5">Total Staff = everyone currently active here, company-wide (not just who this cycle launched to). Completion = Filled ÷ Total Staff.</p>
+      <p className="text-[10px] text-slate-400 mt-1.5">Total Staff = everyone currently active here, company-wide, minus anyone excluded from Track A for this cycle. Completion = Filled ÷ Total Staff.</p>
     </div>
   )
 }
@@ -990,16 +992,24 @@ export function PDPCyclePanel() {
   }
 
   // Completion rate by Business Unit and Department — denominator is every ACTIVE staff member
-  // currently in that BU/department company-wide (the `roster` state, already active-only), not
-  // just whoever this cycle happened to launch to, so this reads as true org-wide coverage rather
-  // than "% of who we already emailed." PDPStaffSurvey.department is never actually populated at
-  // launch time (always written null — see sendPDPStaffSurvey), so department here is resolved
-  // live by looking each survey's staffId up in `roster` instead of trusting that stored field.
-  type TrackBreakdownRow = { name: string; total: number; launched: number; filled: number }
+  // currently in that BU/department company-wide (the `roster` state, already active-only) MINUS
+  // anyone on the Track A exclusion list, not just whoever this cycle happened to launch to, so
+  // this reads as true org-wide coverage of the people actually EXPECTED to fill it — a BU with
+  // several deliberate exclusions shouldn't read as having poor completion because of people who
+  // were never supposed to get it. PDPStaffSurvey.department is never actually populated at launch
+  // time (always written null — see sendPDPStaffSurvey), so department here is resolved live by
+  // looking each survey's staffId up in `roster` instead of trusting that stored field.
+  type TrackBreakdownRow = { name: string; total: number; launched: number; filled: number; excluded: number }
   const buildBreakdown = (groupKey: (s: RosterStaff) => string, surveyGroupKey: (s: StaffSurvey) => string): TrackBreakdownRow[] => {
+    const excludedIds = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
     const totalBy = new Map<string, number>()
+    const excludedBy = new Map<string, number>()
     for (const r of roster) {
       const k = groupKey(r) || 'Unassigned'
+      if (excludedIds.has(r.staffId.trim().toUpperCase())) {
+        excludedBy.set(k, (excludedBy.get(k) || 0) + 1)
+        continue
+      }
       totalBy.set(k, (totalBy.get(k) || 0) + 1)
     }
     const launchedBy = new Map<string, number>()
@@ -1009,9 +1019,9 @@ export function PDPCyclePanel() {
       if (s.sentAt) launchedBy.set(k, (launchedBy.get(k) || 0) + 1)
       if (s.respondedAt) filledBy.set(k, (filledBy.get(k) || 0) + 1)
     }
-    const keys = new Set([...totalBy.keys(), ...launchedBy.keys(), ...filledBy.keys()])
+    const keys = new Set([...totalBy.keys(), ...launchedBy.keys(), ...filledBy.keys(), ...excludedBy.keys()])
     return [...keys]
-      .map((k) => ({ name: k, total: totalBy.get(k) || 0, launched: launchedBy.get(k) || 0, filled: filledBy.get(k) || 0 }))
+      .map((k) => ({ name: k, total: totalBy.get(k) || 0, launched: launchedBy.get(k) || 0, filled: filledBy.get(k) || 0, excluded: excludedBy.get(k) || 0 }))
       .sort((a, b) => b.total - a.total)
   }
   const staffIdToDepartment = new Map(roster.filter((r) => r.department).map((r) => [r.staffId.trim().toUpperCase(), r.department as string]))
@@ -1438,6 +1448,34 @@ export function PDPCyclePanel() {
                     <BreakdownTable title="Completion by Business Unit" rows={buBreakdown} />
                     <BreakdownTable title="Completion by Department" rows={deptBreakdown} />
                   </div>
+
+                  {(detail.staffExclusions.length > 0 || detail.managerExclusions.length > 0) && (
+                    <div className="border border-slate-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-slate-600 mb-2">Excluded from this cycle — never launched, not counted toward completion</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {detail.staffExclusions.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-medium text-slate-500 mb-1">Track A ({detail.staffExclusions.length})</p>
+                            <div className="flex flex-wrap gap-1">
+                              {detail.staffExclusions.map((e) => (
+                                <span key={e.staffId} className="text-[11px] bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">{e.staffName || e.staffId}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {detail.managerExclusions.length > 0 && (
+                          <div>
+                            <p className="text-[11px] font-medium text-slate-500 mb-1">Track B ({detail.managerExclusions.length})</p>
+                            <div className="flex flex-wrap gap-1">
+                              {detail.managerExclusions.map((e) => (
+                                <span key={e.staffId} className="text-[11px] bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 text-slate-600">{e.staffName || e.staffId}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="relative max-w-xs">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
