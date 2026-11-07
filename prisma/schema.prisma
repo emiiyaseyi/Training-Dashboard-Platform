@@ -177,6 +177,10 @@ model TrainingCatalogCourse {
   tags          String // JSON array of strings — see comment above
   durationLabel String? // e.g. "3 days" — free text, display only
   sourceUrl     String?
+  // Optional minimum grade tier (0-4, see staff-grade.ts) required to have this course suggested
+  // at all — null means no restriction, visible to every grade. Checked silently against the
+  // respondent's own roster Pay group at matching time; never shown to the respondent themselves.
+  minTier       Int?
   active        Boolean  @default(true) // admin can retire a course without deleting it, for a gentle yearly refresh
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

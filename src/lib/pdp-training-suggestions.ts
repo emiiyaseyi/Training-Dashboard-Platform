@@ -5,6 +5,7 @@ export interface TrainingCatalogCourseLike {
   title: string
   provider: string
   tags: string[]
+  minTier: number | null
 }
 
 // Every active catalog course, tags parsed — fetched once per page load (staff/manager/preview GET
@@ -12,7 +13,7 @@ export interface TrainingCatalogCourseLike {
 // per-need as the respondent fills the form" split as capabilityNames/optionsSource:'capabilities'.
 export async function getActiveTrainingCatalog(): Promise<TrainingCatalogCourseLike[]> {
   const rows = await prisma.trainingCatalogCourse.findMany({ where: { active: true }, orderBy: { title: 'asc' } })
-  return rows.map((r) => ({ title: r.title, provider: r.provider, tags: JSON.parse(r.tags) as string[] }))
+  return rows.map((r) => ({ title: r.title, provider: r.provider, tags: JSON.parse(r.tags) as string[], minTier: r.minTier }))
 }
 
 interface SectionLike {
@@ -66,6 +67,10 @@ export function resolveNeedTrainingOptions(
   needAnswers: Record<string, string | string[]>,
   answers: Record<string, string | string[]>,
   catalog: TrainingCatalogCourseLike[],
+  // The RESPONDENT's own grade tier (see staff-grade.ts) — for Track B this is the team member
+  // being filled for, never the manager doing the filling. A course with a minTier above this is
+  // silently excluded before scoring; nothing about grade/tier is ever shown to the respondent.
+  respondentTier: number,
 ): PDPQuestion[] {
   if (section.key !== 'development_needs') return section.questions
 
@@ -86,6 +91,7 @@ export function resolveNeedTrainingOptions(
   }
 
   const suggested = catalog
+    .filter((course) => course.minTier == null || course.minTier <= respondentTier)
     .map((course) => ({ course, score: scoreCourse(course, signals) }))
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score || a.course.title.localeCompare(b.course.title))

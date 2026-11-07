@@ -9,9 +9,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { title, provider, category, tags, durationLabel, sourceUrl, active } = body as {
+    const { title, provider, category, tags, durationLabel, sourceUrl, minTier, active } = body as {
       title?: string; provider?: string; category?: string; tags?: string[]
-      durationLabel?: string; sourceUrl?: string; active?: boolean
+      durationLabel?: string; sourceUrl?: string; minTier?: number | null; active?: boolean
     }
 
     const course = await prisma.trainingCatalogCourse.update({
@@ -23,6 +23,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(tags !== undefined && { tags: JSON.stringify(Array.isArray(tags) ? tags : []) }),
         ...(durationLabel !== undefined && { durationLabel: durationLabel.trim() || null }),
         ...(sourceUrl !== undefined && { sourceUrl: sourceUrl.trim() || null }),
+        ...(minTier !== undefined && { minTier }),
         ...(active !== undefined && { active }),
       },
     })

@@ -16,9 +16,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { title, provider, category, tags, durationLabel, sourceUrl, active } = body as {
+    const { title, provider, category, tags, durationLabel, sourceUrl, minTier, active } = body as {
       title?: string; provider?: string; category?: string; tags?: string[]
-      durationLabel?: string; sourceUrl?: string; active?: boolean
+      durationLabel?: string; sourceUrl?: string; minTier?: number | null; active?: boolean
     }
     if (!title?.trim() || !provider?.trim()) {
       return NextResponse.json({ error: 'Title and Provider are required.' }, { status: 400 })
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
         tags: JSON.stringify(Array.isArray(tags) ? tags : []),
         durationLabel: durationLabel?.trim() || null,
         sourceUrl: sourceUrl?.trim() || null,
+        minTier: minTier ?? null,
         active: active !== false,
       },
     })

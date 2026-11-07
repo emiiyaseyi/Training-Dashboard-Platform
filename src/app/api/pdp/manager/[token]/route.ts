@@ -8,6 +8,7 @@ import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections, resolvePDPSections } from '@/lib/pdp-form'
 import { sendPDPMemberFinalizedEmail } from '@/lib/pdp-send'
 import { getActiveTrainingCatalog } from '@/lib/pdp-training-suggestions'
+import { resolvePayGroupTier } from '@/lib/staff-grade'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const limited = rateLimit(req, 'pdp-manager-get', 60, 60_000)
@@ -29,13 +30,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       })
     }
 
-    const [sections, needReviewSections, trainingCatalog] = await Promise.all([
+    const [sections, needReviewSections, trainingCatalog, directory] = await Promise.all([
       resolveRespondentSections(survey.cycleId),
       // Only ever rendered here (and on the validate page) — the manager's own per-need assessment
       // (Priority + baseline proficiency rating), shown for every member regardless of whether their
       // entry was prefilled from a self-fill submission or is being filled from scratch.
       resolvePDPSections(survey.cycleId, { onlyKeys: ['manager_need_review'] }),
       getActiveTrainingCatalog(),
+      loadRosterDirectory(),
     ])
 
     return NextResponse.json({
@@ -59,6 +61,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
         prefill: m.prefillSnapshot ? JSON.parse(m.prefillSnapshot) : null,
         answers: m.answers ? JSON.parse(m.answers) : null,
         submitted: !!m.submittedAt,
+        // THIS team member's own grade, not the manager's — silent input to the Proposed Training
+        // Title matching, never surfaced in the UI.
+        respondentTier: resolvePayGroupTier(directory.get(normalizeStaffIdKey(m.staffId))?.payGroup),
       })),
     })
   } catch (err) {

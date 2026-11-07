@@ -19,6 +19,10 @@ export interface ResolvedStaff {
   // deliberately never sets this, see the comment where it's built) — a PDP BU/department
   // completion breakdown is the first consumer; treat a missing value the same as null.
   department?: string | null
+  // Optional, same caveat as department — the roster upload's "Pay group" column. First consumer
+  // is resolving a PDP respondent's grade tier for the Proposed Training Title matching engine
+  // (see staff-grade.ts) — never shown to the respondent themselves, see that file's comment.
+  payGroup?: string | null
   // Deactivated (Employees page) staff still resolve here — this directory is also used for
   // historical lookups (an old training record's attendee shouldn't fail to resolve just because
   // they've since left) — but callers adding someone to something NEW (a training schedule, the
@@ -155,6 +159,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
       businessUnit: r.businessUnit,
       role: r.role,
       department: r.department,
+      payGroup: r.payGroup,
       active: r.active,
     })
   }
@@ -175,6 +180,7 @@ export async function loadRosterDirectory(): Promise<Map<string, ResolvedStaff>>
         businessUnit: existing.businessUnit || extra.businessUnit,
         role: existing.role || extra.role,
         department: existing.department ?? extra.department,
+        payGroup: existing.payGroup ?? extra.payGroup,
         active: existing.active,
       })
     }

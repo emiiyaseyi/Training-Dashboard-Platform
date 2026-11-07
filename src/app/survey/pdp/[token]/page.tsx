@@ -44,6 +44,7 @@ interface Context {
   prefill: PrefillSnapshot
   answers: Answers | null
   trainingCatalog: TrainingCatalogCourseLike[]
+  respondentTier: number
 }
 
 type PageDescriptor = { type: 'intro' } | { type: 'training-history' } | { type: 'section'; section: Section } | { type: 'need'; section: Section; index: number }
@@ -183,7 +184,7 @@ export default function PDPStaffSurveyPage() {
     if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
     const questions = current.type === 'need'
-      ? resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog)
+      ? resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog, ctx.respondentTier)
       : resolveWrapupSectionQuestions(current.section, ctx.sections, form.answers)
     const issue = firstPageIssue(questions, values)
     if (issue) { setPageError(issue); return false }
@@ -270,7 +271,7 @@ export default function PDPStaffSurveyPage() {
               </div>
               {current.section.description && <p className="text-[15px] text-slate-500 mb-4">{current.section.description}</p>}
               <PDPSectionRenderer
-                questions={resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog)}
+                questions={resolveNeedTrainingOptions(current.section, ctx.sections, form.developmentNeeds[current.index] || {}, form.answers, ctx.trainingCatalog, ctx.respondentTier)}
                 values={form.developmentNeeds[current.index] || {}}
                 onChange={(qId, v) => setNeedAnswer(current.index, qId, v)}
               />

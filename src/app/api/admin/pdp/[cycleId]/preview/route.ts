@@ -26,6 +26,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     staffName: 'Sample Employee',
     sections,
     trainingCatalog,
+    // No real respondent to resolve a grade for — defaults to the highest tier so an admin
+    // previewing the form can QA every possible suggestion, not just what a junior grade would see.
+    respondentTier: 4,
     prefill: {
       businessUnit: 'Sample Business Unit',
       department: 'Sample Department',

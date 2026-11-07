@@ -5,6 +5,7 @@ import { GraduationCap, Loader2, Plus, Pencil, Trash2, X, Search, Download } fro
 import { SectionCard } from '@/components/ui/SectionCard'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 import { ROLE_RESPONSIBILITY_CATEGORIES, DEVELOPMENT_DRIVER_OPTIONS, BUSINESS_OUTCOME_OPTIONS } from '@/lib/pdp-seed'
+import { MIN_GRADE_TIER_OPTIONS } from '@/lib/staff-grade'
 
 const PAGE_SIZE = 50
 
@@ -16,16 +17,17 @@ interface Course {
   tags: string[]
   durationLabel: string | null
   sourceUrl: string | null
+  minTier: number | null
   active: boolean
 }
 
 type Draft = {
   title: string; provider: string; category: string; tags: string[]
-  durationLabel: string; sourceUrl: string; active: boolean
+  durationLabel: string; sourceUrl: string; minTier: number | null; active: boolean
 }
 
 function emptyDraft(): Draft {
-  return { title: '', provider: '', category: '', tags: [], durationLabel: '', sourceUrl: '', active: true }
+  return { title: '', provider: '', category: '', tags: [], durationLabel: '', sourceUrl: '', minTier: null, active: true }
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -102,6 +104,18 @@ function CourseForm({
           <input value={draft.sourceUrl} onChange={(e) => setDraft({ ...draft, sourceUrl: e.target.value })} className={inputClass} />
         </Field>
       </div>
+
+      <Field label="Minimum Grade Level — never shown to staff, only narrows who this can be suggested to">
+        <select
+          value={draft.minTier ?? ''}
+          onChange={(e) => setDraft({ ...draft, minTier: e.target.value === '' ? null : Number(e.target.value) })}
+          className={inputClass}
+        >
+          {MIN_GRADE_TIER_OPTIONS.map((o) => (
+            <option key={o.label} value={o.value ?? ''}>{o.label}</option>
+          ))}
+        </select>
+      </Field>
 
       <div className="space-y-3">
         <TagGroup label="Role Responsibility / Skill Area" options={ROLE_RESPONSIBILITY_CATEGORIES} selected={draft.tags} onToggle={toggleTag} />
@@ -196,7 +210,7 @@ export function TrainingCatalogPanel() {
     setFormError(null)
     setEditDraft({
       title: c.title, provider: c.provider, category: c.category || '', tags: c.tags,
-      durationLabel: c.durationLabel || '', sourceUrl: c.sourceUrl || '', active: c.active,
+      durationLabel: c.durationLabel || '', sourceUrl: c.sourceUrl || '', minTier: c.minTier, active: c.active,
     })
   }
 
@@ -275,6 +289,25 @@ export function TrainingCatalogPanel() {
     }
   }
 
+  // Conservative one-off pass — only flags clearly board/C-suite titles (e.g. "Chief Information
+  // Officers' Continuous Education Programme") as Tier 4, never touches a course that already has
+  // a grade level set. Everything else stays unrestricted; review/adjust via the table.
+  const autoTagGrade = async () => {
+    setSeeding(true)
+    setSeedMessage(null)
+    try {
+      const res = await fetch('/api/admin/training-catalog/auto-tag-grade', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Failed to auto-tag grade levels.')
+      setSeedMessage(data.tagged > 0 ? `Set "AVP and Above" on ${data.tagged} clearly board/C-suite course(s). Everything else stays unrestricted — review via the table.` : 'No untagged courses matched an obvious board/C-suite title.')
+      load()
+    } catch (err) {
+      setSeedMessage(err instanceof Error ? err.message : 'Failed to auto-tag grade levels.')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   const deleteCourse = async (c: Course) => {
     if (!confirm(`Delete "${c.title}" (${c.provider}) from the training catalog? This can't be undone, but doesn't affect any PDP already filled.`)) return
     setBusyId(c.id)
@@ -327,6 +360,15 @@ export function TrainingCatalogPanel() {
             >
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
               Remove Years from Titles
+            </button>
+            <button
+              onClick={autoTagGrade}
+              disabled={seeding}
+              title="One-off, conservative: flags only clearly board/C-suite titles (e.g. 'Chief Information Officers...') as 'AVP and Above', so a junior grade never sees them suggested. Never overwrites a course that already has a grade level set — everything else stays unrestricted."
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GraduationCap className="w-3.5 h-3.5" />}
+              Auto-tag Grade Levels
             </button>
             <button
               onClick={() => { setShowAddForm((v) => !v); setAddDraft(emptyDraft()); setFormError(null) }}

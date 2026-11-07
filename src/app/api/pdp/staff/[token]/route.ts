@@ -6,6 +6,9 @@ import type { PDPPrefillSnapshot } from '@/lib/pdp-prefill'
 import { validatePDPFormAnswers, type PDPFormAnswers } from '@/lib/pdp-validate'
 import { resolveRespondentSections } from '@/lib/pdp-form'
 import { getActiveTrainingCatalog } from '@/lib/pdp-training-suggestions'
+import { loadRosterDirectory } from '@/lib/staff-directory'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
+import { resolvePayGroupTier } from '@/lib/staff-grade'
 
 // Public, unauthenticated — the token itself (an unguessable cuid) is the access control, same
 // convention as /api/custom-survey/[token] and /api/survey/[token]/[stage].
@@ -36,10 +39,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
     }
 
     const prefill = JSON.parse(survey.prefillSnapshot) as PDPPrefillSnapshot
-    const [sections, trainingCatalog] = await Promise.all([
+    const [sections, trainingCatalog, directory] = await Promise.all([
       resolveRespondentSections(survey.cycleId),
       getActiveTrainingCatalog(),
+      loadRosterDirectory(),
     ])
+    // Silent input to the Proposed Training Title matching — never surfaced to the respondent.
+    const respondentTier = resolvePayGroupTier(directory.get(normalizeStaffIdKey(survey.staffId))?.payGroup)
 
     return NextResponse.json({
       valid: true,
@@ -51,6 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
       prefill,
       answers: survey.answers ? JSON.parse(survey.answers) : null,
       trainingCatalog,
+      respondentTier,
     })
   } catch (err) {
     console.error('[pdp/staff GET]', err)
