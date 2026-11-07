@@ -34,7 +34,7 @@ interface Section { id: string; key: string; order: number; title: string; descr
 interface LaunchExclusion { staffId: string; staffName: string | null }
 interface CycleDetail { cycle: Cycle; staffSurveys: StaffSurvey[]; managerSurveys: ManagerSurvey[]; overrides: { staffId: string; secondManagerStaffId: string }[]; sections: Section[]; staffExclusions: LaunchExclusion[]; managerExclusions: LaunchExclusion[] }
 
-interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string; department?: string | null }
+interface RosterStaff { staffId: string; name: string; email: string | null; businessUnit: string; department?: string | null; lineManagerStaffId?: string | null }
 interface BusinessUnitOption { id: string; name: string }
 
 type AudienceType = 'all' | 'businessUnit' | 'department' | 'selected'
@@ -198,6 +198,186 @@ function StaffExcludePicker({ roster, selected, onAdd, onRemove, busy }: { roste
   )
 }
 
+// One search box that resolves a roster person by name, Staff ID or email, same filter signature
+// as StaffExcludePicker above — reused here twice (staff member, second manager) rather than
+// building two slightly-different pickers.
+function RosterPersonPicker({
+  roster, picked, onPick, onClear, placeholder, disabled, exclude,
+}: {
+  roster: RosterStaff[]
+  picked: RosterStaff | null
+  onPick: (r: RosterStaff) => void
+  onClear: () => void
+  placeholder: string
+  disabled?: boolean
+  exclude?: Set<string>
+}) {
+  const [query, setQuery] = useState('')
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return roster
+      .filter((r) => !exclude?.has(r.staffId) && (r.name.toLowerCase().includes(q) || r.staffId.toLowerCase().includes(q) || (r.email || '').toLowerCase().includes(q)))
+      .slice(0, 8)
+  }, [query, roster, exclude])
+
+  if (picked) {
+    return (
+      <div className="flex items-center justify-between border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 bg-white">
+        <span>{picked.name} <span className="text-slate-400">({picked.staffId})</span></span>
+        <button type="button" onClick={onClear} className="text-slate-400 hover:text-red-600 shrink-0 ml-2"><X className="w-3.5 h-3.5" /></button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onBlur={() => setTimeout(() => setQuery(''), 150)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="block border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 w-full disabled:opacity-50"
+      />
+      {results.length > 0 && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {results.map((r) => (
+            <button key={r.staffId} type="button" onMouseDown={() => onPick(r)} className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50">
+              <div>{r.name}</div>
+              <div className="text-slate-400">{r.staffId}{r.email ? ` · ${r.email}` : ''}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface StagedOverride { staffId: string; name: string; currentManagerName: string | null; secondManagerId: string; secondManagerName: string }
+
+// Second Line Manager Exceptions — search-driven pick (name/Staff ID/email) instead of typing raw
+// Staff IDs, shows the staff member's current (first) line manager once picked so the admin can
+// confirm they're adding a SECOND one, batches picks into a staged list so several exceptions can
+// be reviewed and saved together, and can be used both before and after Track A has been launched
+// (see sendPDPManagerValidation in pdp-send.ts — it reads whichever overrides exist at the moment
+// a staff member actually submits, not at launch time, so adding/editing after launch is safe as
+// long as it happens before that particular person submits).
+function SecondManagerOverridesPanel({
+  roster, overrides, onSaveBatch, onRemove, busy, error,
+}: {
+  roster: RosterStaff[]
+  overrides: { staffId: string; secondManagerStaffId: string }[]
+  onSaveBatch: (pairs: { staffId: string; secondManagerStaffId: string }[]) => Promise<void>
+  onRemove: (staffId: string) => Promise<void>
+  busy: boolean
+  error: string
+}) {
+  const byId = useMemo(() => new Map(roster.map((r) => [r.staffId, r])), [roster])
+  const [pickedStaff, setPickedStaff] = useState<RosterStaff | null>(null)
+  const [pickedManager, setPickedManager] = useState<RosterStaff | null>(null)
+  const [staged, setStaged] = useState<StagedOverride[]>([])
+
+  const currentManager = pickedStaff?.lineManagerStaffId ? byId.get(pickedStaff.lineManagerStaffId) ?? null : null
+
+  const addToList = () => {
+    if (!pickedStaff || !pickedManager) return
+    setStaged((prev) => [
+      ...prev.filter((s) => s.staffId !== pickedStaff.staffId),
+      { staffId: pickedStaff.staffId, name: pickedStaff.name, currentManagerName: currentManager?.name ?? null, secondManagerId: pickedManager.staffId, secondManagerName: pickedManager.name },
+    ])
+    setPickedStaff(null)
+    setPickedManager(null)
+  }
+
+  const saveAll = async () => {
+    if (staged.length === 0) return
+    await onSaveBatch(staged.map((s) => ({ staffId: s.staffId, secondManagerStaffId: s.secondManagerId })))
+    setStaged([])
+  }
+
+  const startEdit = (staffId: string, secondManagerStaffId: string) => {
+    setPickedStaff(byId.get(staffId) ?? null)
+    setPickedManager(byId.get(secondManagerStaffId) ?? null)
+  }
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
+        <label className="text-xs text-slate-500">
+          Staff member
+          <RosterPersonPicker roster={roster} picked={pickedStaff} onPick={setPickedStaff} onClear={() => setPickedStaff(null)} placeholder="Search name, Staff ID or email…" />
+        </label>
+        <div className="text-xs text-slate-500">
+          Current line manager
+          <div className="mt-1 px-2.5 py-1.5 border border-slate-200 rounded-md bg-slate-50 text-slate-600 min-h-[34px] flex items-center">
+            {pickedStaff ? (currentManager?.name ?? 'Not on file') : '—'}
+          </div>
+        </div>
+        <label className="text-xs text-slate-500">
+          Second manager
+          <RosterPersonPicker
+            roster={roster} picked={pickedManager} onPick={setPickedManager} onClear={() => setPickedManager(null)}
+            placeholder="Search name, Staff ID or email…" disabled={!pickedStaff}
+            exclude={pickedStaff ? new Set([pickedStaff.staffId]) : undefined}
+          />
+        </label>
+      </div>
+
+      <button
+        type="button"
+        onClick={addToList}
+        disabled={!pickedStaff || !pickedManager}
+        className="mt-2 flex items-center gap-1.5 text-xs font-medium text-navy-700 border border-navy-200 rounded-lg px-3 py-1.5 hover:bg-navy-50 disabled:opacity-40"
+      >
+        <Plus className="w-3.5 h-3.5" /> Add to list
+      </button>
+
+      {staged.length > 0 && (
+        <div className="mt-3 space-y-1">
+          <p className="text-[11px] font-medium text-slate-500">Ready to save ({staged.length})</p>
+          {staged.map((s) => (
+            <div key={s.staffId} className="flex items-center justify-between text-xs bg-navy-50 border border-navy-200 rounded-lg px-3 py-1.5">
+              <span>{s.name} ({s.staffId}) — current manager: {s.currentManagerName ?? 'none on file'} → second manager: {s.secondManagerName}</span>
+              <button type="button" onClick={() => setStaged((prev) => prev.filter((x) => x.staffId !== s.staffId))} className="text-slate-400 hover:text-red-600 shrink-0 ml-2"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          ))}
+          <button type="button" onClick={saveAll} disabled={busy} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
+            {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+            Save {staged.length} exception{staged.length > 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+
+      {overrides.length > 0 && (
+        <div className="mt-4 space-y-1">
+          <p className="text-[11px] font-medium text-slate-500">Saved exceptions ({overrides.length})</p>
+          {overrides.map((o) => {
+            const staff = byId.get(o.staffId)
+            const mgr = byId.get(o.secondManagerStaffId)
+            const current = staff?.lineManagerStaffId ? byId.get(staff.lineManagerStaffId) ?? null : null
+            return (
+              <div key={o.staffId} className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+                <span>
+                  {staff?.name ?? o.staffId} <span className="text-slate-400">({o.staffId})</span> — current manager: {current?.name ?? 'none on file'} → second manager: {mgr?.name ?? o.secondManagerStaffId}
+                </span>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <button type="button" onClick={() => startEdit(o.staffId, o.secondManagerStaffId)} className="text-slate-400 hover:text-navy-600" title="Edit — reselect above, Add to list, then Save">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => onRemove(o.staffId)} disabled={busy} className="text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BreakdownTable({ title, rows }: { title: string; rows: { name: string; total: number; launched: number; filled: number }[] }) {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
@@ -270,8 +450,6 @@ export function PDPCyclePanel() {
   const [launchingManagers, setLaunchingManagers] = useState(false)
   const [launchResult, setLaunchResult] = useState<{ track: string; created: number; sent: number; skipped: { name: string; reason: string }[] } | null>(null)
 
-  const [overrideStaffId, setOverrideStaffId] = useState('')
-  const [overrideManagerId, setOverrideManagerId] = useState('')
   const [savingOverride, setSavingOverride] = useState(false)
   const [overrideError, setOverrideError] = useState('')
 
@@ -511,20 +689,20 @@ export function PDPCyclePanel() {
     }
   }
 
-  const addOverride = async () => {
-    if (!selectedId || !overrideStaffId.trim() || !overrideManagerId.trim()) return
+  const saveOverrideBatch = async (pairs: { staffId: string; secondManagerStaffId: string }[]) => {
+    if (!selectedId || pairs.length === 0) return
     setSavingOverride(true)
     setOverrideError('')
     try {
-      const res = await fetch(`/api/admin/pdp/${selectedId}/overrides`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staffId: overrideStaffId.trim(), secondManagerStaffId: overrideManagerId.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setOverrideError(data.error || 'Failed to add.'); return }
-      setOverrideStaffId('')
-      setOverrideManagerId('')
+      for (const p of pairs) {
+        const res = await fetch(`/api/admin/pdp/${selectedId}/overrides`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(p),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) { setOverrideError(data.error || `Failed to add exception for ${p.staffId}.`); return }
+      }
       await loadDetail(selectedId)
     } finally {
       setSavingOverride(false)
@@ -533,8 +711,13 @@ export function PDPCyclePanel() {
 
   const removeOverride = async (staffId: string) => {
     if (!selectedId) return
-    await fetch(`/api/admin/pdp/${selectedId}/overrides?staffId=${encodeURIComponent(staffId)}`, { method: 'DELETE' })
-    await loadDetail(selectedId)
+    setSavingOverride(true)
+    try {
+      await fetch(`/api/admin/pdp/${selectedId}/overrides?staffId=${encodeURIComponent(staffId)}`, { method: 'DELETE' })
+      await loadDetail(selectedId)
+    } finally {
+      setSavingOverride(false)
+    }
   }
 
   const downloadExcel = async () => {
@@ -1098,33 +1281,16 @@ export function PDPCyclePanel() {
               <div className="bg-white border border-slate-200 rounded-xl p-5">
                 <p className="text-sm font-semibold text-slate-800 mb-1">Second Line Manager Exceptions</p>
                 <p className="text-xs text-slate-500 mb-3">A staff member listed here gets a second, fully independent manager validation link — neither manager&apos;s answers overwrite the other.</p>
-                <div className="flex flex-wrap items-end gap-2 mb-3">
-                  <label className="text-xs text-slate-500">
-                    Staff ID
-                    <input value={overrideStaffId} onChange={(e) => setOverrideStaffId(e.target.value)} placeholder="e.g. MSL-0091" className="block border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 w-40" />
-                  </label>
-                  <label className="text-xs text-slate-500">
-                    Second Manager&apos;s Staff ID
-                    <input value={overrideManagerId} onChange={(e) => setOverrideManagerId(e.target.value)} placeholder="e.g. MSL-0012" className="block border border-slate-300 rounded-md px-2.5 py-1.5 text-sm mt-1 w-40" />
-                  </label>
-                  <button onClick={addOverride} disabled={savingOverride} className="flex items-center gap-1.5 text-xs font-medium text-white bg-navy-600 rounded-lg px-3 py-1.5 hover:bg-navy-700 disabled:opacity-50">
-                    {savingOverride ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
-                    Add
-                  </button>
-                </div>
-                {overrideError && <p className="text-xs text-red-600 mb-2">{overrideError}</p>}
-                {detail.overrides.length > 0 && (
-                  <div className="space-y-1">
-                    {detail.overrides.map((o) => (
-                      <div key={o.staffId} className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
-                        <span>{o.staffId} → second manager {o.secondManagerStaffId}</span>
-                        <button onClick={() => removeOverride(o.staffId)} className="text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className="text-[11px] text-amber-700 mt-2">
-                  Add exceptions BEFORE launching Track A — validation links are created when a staff member submits, using whoever is on this list at that moment.
+                <SecondManagerOverridesPanel
+                  roster={roster}
+                  overrides={detail.overrides}
+                  onSaveBatch={saveOverrideBatch}
+                  onRemove={removeOverride}
+                  busy={savingOverride}
+                  error={overrideError}
+                />
+                <p className="text-[11px] text-slate-500 mt-3">
+                  Safe to add, edit or remove exceptions at any time, including after Track A has already been sent — a validation link is created using whoever is on this list at the moment a given staff member actually submits their plan, not at launch time.
                 </p>
               </div>
             )}
