@@ -9,6 +9,7 @@ import { exportPDPCycleExcel } from '@/lib/pdp-export'
 import { PDPQuestionsEditor } from '@/components/admin/PDPQuestionsEditor'
 import { PDPEmailTemplatesEditor } from '@/components/admin/PDPEmailTemplatesEditor'
 import { PDPAnalysisPanel } from '@/components/admin/PDPAnalysisPanel'
+import { Pagination, paginate } from '@/components/ui/Pagination'
 
 interface Cycle {
   id: string
@@ -466,6 +467,11 @@ export function PDPCyclePanel() {
   const [showReport, setShowReport] = useState(false)
   const [showDeliveryIssues, setShowDeliveryIssues] = useState(false)
   const [reportQuery, setReportQuery] = useState('')
+  type FillStatusFilter = 'all' | 'filled' | 'sent-unfilled' | 'unsent'
+  const [reportStatusFilter, setReportStatusFilter] = useState<FillStatusFilter>('all')
+  const [reportDateFrom, setReportDateFrom] = useState('')
+  const [reportDateTo, setReportDateTo] = useState('')
+  const [reportPage, setReportPage] = useState(1)
   const [stoppingId, setStoppingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sendingId, setSendingId] = useState<string | null>(null)
@@ -510,6 +516,7 @@ export function PDPCyclePanel() {
 
   useEffect(() => { loadCycles() }, [loadCycles])
   useEffect(() => { if (selectedId) loadDetail(selectedId) }, [selectedId, loadDetail])
+  useEffect(() => { setReportPage(1) }, [reportQuery, reportStatusFilter, reportDateFrom, reportDateTo])
   // Seeds the Launch-time checkbox from the cycle's stored default the first time its detail
   // loads — purely a convenience starting point; the admin can still flip it per launch, and
   // what's actually sent is whatever the checkbox shows when Launch Track A is clicked.
@@ -1066,8 +1073,30 @@ export function PDPCyclePanel() {
   const deptBreakdown = buildBreakdown((r) => r.department || '', (s) => staffIdToDepartment.get(s.staffId.trim().toUpperCase()) || '')
 
   const q = reportQuery.trim().toLowerCase()
-  const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) => !q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) : []
-  const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) => !q || m.managerName.toLowerCase().includes(q) || m.managerStaffId.toLowerCase().includes(q)) : []
+  // Shared by both tables below — "filled" = respondedAt set, "sent, unfilled" = sentAt but no
+  // respondedAt yet, "unsent" = never emailed. Date range filters by the fill date (respondedAt)
+  // specifically, so it only matches people who HAVE filled, within that window — set together
+  // with the status filter, or on its own.
+  const matchesStatusAndDate = (sentAt: string | null, respondedAt: string | null) => {
+    if (reportStatusFilter === 'filled' && !respondedAt) return false
+    if (reportStatusFilter === 'sent-unfilled' && !(sentAt && !respondedAt)) return false
+    if (reportStatusFilter === 'unsent' && sentAt) return false
+    if ((reportDateFrom || reportDateTo) && !respondedAt) return false
+    if (respondedAt) {
+      const filledDate = respondedAt.slice(0, 10)
+      if (reportDateFrom && filledDate < reportDateFrom) return false
+      if (reportDateTo && filledDate > reportDateTo) return false
+    }
+    return true
+  }
+  const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) =>
+    (!q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) && matchesStatusAndDate(s.sentAt, s.respondedAt)
+  ) : []
+  const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) =>
+    (!q || m.managerName.toLowerCase().includes(q) || m.managerStaffId.toLowerCase().includes(q)) && matchesStatusAndDate(m.sentAt, m.respondedAt)
+  ) : []
+  const REPORT_PAGE_SIZE = 50
+  const pagedStaffSurveys = paginate(filteredStaffSurveys, reportPage, REPORT_PAGE_SIZE)
 
   return (
     <div className="flex flex-col">
@@ -1534,14 +1563,46 @@ export function PDPCyclePanel() {
                     </div>
                   )}
 
-                  <div className="relative max-w-xs">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      value={reportQuery}
-                      onChange={(e) => setReportQuery(e.target.value)}
-                      placeholder="Search by name or Staff ID…"
-                      className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
-                    />
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="relative max-w-xs">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={reportQuery}
+                        onChange={(e) => setReportQuery(e.target.value)}
+                        placeholder="Search by name or Staff ID…"
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+                      />
+                    </div>
+                    <label className="text-[11px] text-slate-500">
+                      Status
+                      <select
+                        value={reportStatusFilter}
+                        onChange={(e) => setReportStatusFilter(e.target.value as FillStatusFilter)}
+                        className="block border border-slate-300 rounded-md px-2 py-1.5 text-xs mt-0.5"
+                      >
+                        <option value="all">All</option>
+                        <option value="filled">Filled</option>
+                        <option value="sent-unfilled">Sent, not filled</option>
+                        <option value="unsent">Not sent yet</option>
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Filled from
+                      <input type="date" value={reportDateFrom} onChange={(e) => setReportDateFrom(e.target.value)} className="block border border-slate-300 rounded-md px-2 py-1.5 text-xs mt-0.5" />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Filled to
+                      <input type="date" value={reportDateTo} onChange={(e) => setReportDateTo(e.target.value)} className="block border border-slate-300 rounded-md px-2 py-1.5 text-xs mt-0.5" />
+                    </label>
+                    {(reportStatusFilter !== 'all' || reportDateFrom || reportDateTo || reportQuery) && (
+                      <button
+                        type="button"
+                        onClick={() => { setReportQuery(''); setReportStatusFilter('all'); setReportDateFrom(''); setReportDateTo('') }}
+                        className="text-[11px] font-medium text-slate-500 hover:text-red-600 underline"
+                      >
+                        Clear filters
+                      </button>
+                    )}
                   </div>
 
                   <div>
@@ -1590,7 +1651,7 @@ export function PDPCyclePanel() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredStaffSurveys.map((s) => {
+                          {pagedStaffSurveys.map((s) => {
                             const state = tickState(s.sentAt, s.respondedAt, detail.cycle.expiryDays)
                             return (
                             <tr key={s.id} className="border-b border-slate-50 last:border-0">
@@ -1672,6 +1733,7 @@ export function PDPCyclePanel() {
                         </tbody>
                       </table>
                     </div>
+                    <Pagination page={reportPage} totalItems={filteredStaffSurveys.length} pageSize={REPORT_PAGE_SIZE} onChange={setReportPage} />
                   </div>
 
                   <div>
