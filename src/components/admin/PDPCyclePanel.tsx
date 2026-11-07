@@ -943,6 +943,14 @@ export function PDPCyclePanel() {
 
   const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
   const selfTotal = detail?.staffSurveys.length ?? 0
+  // Distinct from "Filled" above — this is the actual delivery count (sentAt set), which is what
+  // answers "did everyone receive the email" (the big Filled/Total number does NOT answer that —
+  // it's how many have submitted so far, which starts at 0 right after a launch regardless of how
+  // many emails went out).
+  const selfSent = detail?.staffSurveys.filter((s) => s.sentAt).length ?? 0
+  const selfNoEmail = detail?.staffSurveys.filter((s) => !s.email).length ?? 0
+  const selfSendFailed = detail?.staffSurveys.filter((s) => s.email && !s.sentAt).length ?? 0
+  const managerLinksSent = detail?.managerSurveys.filter((m) => m.sentAt).length ?? 0
   // Whichever manager-review mechanism actually applies per person, not just the old
   // one-link-per-person PDPManagerValidation flow — new submissions go through the one-link-
   // per-manager flow instead (a PDPManagerTeamMemberEntry with needsReview: true), which never
@@ -1155,14 +1163,19 @@ export function PDPCyclePanel() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Track A — Self-Fill</p>
-                <p className="text-2xl font-bold text-slate-800">{selfSubmitted} / {selfTotal}</p>
+                <p className="text-2xl font-bold text-slate-800">{selfSubmitted} / {selfTotal} <span className="text-xs font-normal text-slate-400">filled</span></p>
+                <p className={`text-xs mt-1 font-medium ${selfSendFailed > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  Emailed: {selfSent} / {selfTotal}
+                  {selfSendFailed > 0 && <> · {selfSendFailed} not yet delivered — re-click Launch Track A to retry them</>}
+                  {selfNoEmail > 0 && <> · {selfNoEmail} have no email on file (see Delivery Issues below)</>}
+                </p>
                 <p className="text-xs text-slate-400 mt-1">Manager validations: {validationsSubmitted} / {validationsTotal}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Track B — Manager Team-Fill</p>
-                <p className="text-2xl font-bold text-slate-800">{teamMembersSubmitted} / {teamMembersTotal}</p>
+                <p className="text-2xl font-bold text-slate-800">{teamMembersSubmitted} / {teamMembersTotal} <span className="text-xs font-normal text-slate-400">filled</span></p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {detail.managerSurveys.length} manager link(s) sent
+                  {managerLinksSent} / {detail.managerSurveys.length} manager link(s) emailed
                   {teamMembersPendingRoster > 0 && <> · {teamMembersPendingRoster} team member(s) awaiting their manager&apos;s roster confirmation (not counted above yet)</>}
                 </p>
               </div>
