@@ -14,6 +14,22 @@ const nextConfig: NextConfig = {
     '/api/cron/send-bu-reports': ['node_modules/@sparticuz/chromium/**/*'],
     '/api/admin/report-automation/send-now': ['node_modules/@sparticuz/chromium/**/*'],
   },
+  // Vercel "Functions Storage" sums the size of every function bundle across all retained
+  // deployments (~220 API routes here). Keep each bundle lean: build-time tooling and the
+  // Prisma CLI/migration engines are never needed at runtime (the query engine lives in
+  // .prisma/client). Chromium is deliberately NOT excluded: the two PDF routes need it.
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/@swc/**',
+      'node_modules/esbuild*/**',
+      'node_modules/typescript/**',
+      'node_modules/webpack/**',
+      'node_modules/prisma/**',
+      'node_modules/@prisma/engines/**',
+      'node_modules/.prisma/client/*windows*',
+      'node_modules/.prisma/client/*darwin*',
+    ],
+  },
   webpack: (config, { isServer, webpack }) => {
     // pptxgenjs's browser build references Node core modules (fs/https) for its optional
     // Node.js file-writing path — these are never actually reached in the browser, but
