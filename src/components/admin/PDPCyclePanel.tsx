@@ -10,6 +10,7 @@ import { PDPQuestionsEditor } from '@/components/admin/PDPQuestionsEditor'
 import { PDPEmailTemplatesEditor } from '@/components/admin/PDPEmailTemplatesEditor'
 import { PDPAnalysisPanel } from '@/components/admin/PDPAnalysisPanel'
 import { Pagination, paginate } from '@/components/ui/Pagination'
+import { normalizeStaffIdKey } from '@/lib/staff-id'
 
 interface Cycle {
   id: string
@@ -960,8 +961,8 @@ export function PDPCyclePanel() {
   // 366 active − 8 excluded; confirmed explicitly against the admin's own expected figure) and
   // stay listed in the Response Report, since they're still genuinely eligible, just missing
   // contact info — which is exactly what Delivery Issues (below) exists to flag so it gets fixed.
-  const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
-  const eligibleStaffSurveys = (detail?.staffSurveys ?? []).filter((s) => !excludedStaffIdKeys.has(s.staffId.trim().toUpperCase()))
+  const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => normalizeStaffIdKey(e.staffId)))
+  const eligibleStaffSurveys = (detail?.staffSurveys ?? []).filter((s) => !excludedStaffIdKeys.has(normalizeStaffIdKey(s.staffId)))
 
   const selfSubmitted = eligibleStaffSurveys.filter((s) => s.respondedAt).length
   const selfTotal = eligibleStaffSurveys.length
@@ -1023,20 +1024,21 @@ export function PDPCyclePanel() {
 
   // Reconciliation check for the Track A tile — computed independently from the SAME roster data
   // already loaded for this page, so a mismatch against selfTotal is visible rather than silently
-  // trusted. A nonzero gap most likely means some of the 366-style total comes from entries this
-  // roster view doesn't carry (e.g. the comprehensive-staff-list merge in staff-directory.ts can
-  // include people not present in the main roster upload, defaulting to active:true) rather than a
-  // bug in the count itself — surfaced here instead of guessed at.
-  const rosterEligible = roster.filter((r) => !excludedStaffIdKeys.has(r.staffId.trim().toUpperCase()))
+  // trusted. Every Staff ID comparison here goes through normalizeStaffIdKey (not a plain
+  // .toUpperCase()) — confirmed directly against a real case where it mattered: "MSBL-0108" (a
+  // PDPStaffSurvey row, frozen at launch time) and "MSBL-108" (that same person's CURRENT roster
+  // record, re-entered without zero-padding at some point since) are the same person, and a naive
+  // string comparison was flagging 8 genuinely active, non-excluded people as an unaccounted
+  // "roster gap" purely because of that formatting drift, when they were never actually a problem.
+  const rosterEligible = roster.filter((r) => !excludedStaffIdKeys.has(normalizeStaffIdKey(r.staffId)))
   const rosterEligibleCount = rosterEligible.length
   const rosterEligibleNoEmail = rosterEligible.filter((r) => !r.email).length
   const totalReconcileGap = selfTotal - rosterEligibleCount
-  // Named, not just counted — the gap above used to just be guessed at ("likely people not in
-  // the main roster upload"). This lists exactly who: anyone with a (non-excluded) survey row
-  // whose Staff ID doesn't resolve against the current active roster at all.
-  const rosterEligibleIdKeys = new Set(rosterEligible.map((r) => r.staffId.trim().toUpperCase()))
+  // Named, not just counted — anyone with a (non-excluded) survey row whose Staff ID genuinely
+  // doesn't resolve against the current active roster at all, even after normalizing.
+  const rosterEligibleIdKeys = new Set(rosterEligible.map((r) => normalizeStaffIdKey(r.staffId)))
   const unaccountedStaffSurveys = totalReconcileGap > 0
-    ? eligibleStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(s.staffId.trim().toUpperCase()))
+    ? eligibleStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(normalizeStaffIdKey(s.staffId)))
     : []
 
   // Each distinct reason among the "not yet delivered" (has email, send attempted, never
@@ -1068,7 +1070,7 @@ export function PDPCyclePanel() {
     const excludedBy = new Map<string, number>()
     for (const r of roster) {
       const k = groupKey(r) || 'Unassigned'
-      if (excludedStaffIdKeys.has(r.staffId.trim().toUpperCase())) {
+      if (excludedStaffIdKeys.has(normalizeStaffIdKey(r.staffId))) {
         excludedBy.set(k, (excludedBy.get(k) || 0) + 1)
         continue
       }
@@ -1086,9 +1088,9 @@ export function PDPCyclePanel() {
       .map((k) => ({ name: k, total: totalBy.get(k) || 0, launched: launchedBy.get(k) || 0, filled: filledBy.get(k) || 0, excluded: excludedBy.get(k) || 0 }))
       .sort((a, b) => b.total - a.total)
   }
-  const staffIdToDepartment = new Map(roster.filter((r) => r.department).map((r) => [r.staffId.trim().toUpperCase(), r.department as string]))
+  const staffIdToDepartment = new Map(roster.filter((r) => r.department).map((r) => [normalizeStaffIdKey(r.staffId), r.department as string]))
   const buBreakdown = buildBreakdown((r) => r.businessUnit, (s) => s.businessUnit)
-  const deptBreakdown = buildBreakdown((r) => r.department || '', (s) => staffIdToDepartment.get(s.staffId.trim().toUpperCase()) || '')
+  const deptBreakdown = buildBreakdown((r) => r.department || '', (s) => staffIdToDepartment.get(normalizeStaffIdKey(s.staffId)) || '')
 
   const q = reportQuery.trim().toLowerCase()
   // Shared by both tables below — "filled" = respondedAt set, "sent, unfilled" = sentAt but no
