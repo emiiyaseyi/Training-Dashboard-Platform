@@ -50,7 +50,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     if (!answers) continue
     plans.push({
       staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department,
-      source: completedValidation ? `Self-Fill, validated by ${completedValidation.managerName || 'manager'}` : 'Self-Fill (not yet validated)',
+      // Every person who reaches this list has, by construction, actually submitted (s.answers is
+      // only ever written at submit time) — this panel never contains anyone still in progress.
+      // Phrased explicitly as "Filled" rather than the old, easy-to-misread "(not yet validated)"
+      // (which looked like it could mean "not yet filled").
+      source: completedValidation ? `Filled — validated by ${completedValidation.managerName || 'manager'}` : 'Filled — awaiting manager validation',
       answers,
     })
   }
