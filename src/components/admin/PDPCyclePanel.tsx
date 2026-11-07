@@ -950,15 +950,25 @@ export function PDPCyclePanel() {
     }
   }
 
-  const selfSubmitted = detail?.staffSurveys.filter((s) => s.respondedAt).length ?? 0
-  const selfTotal = detail?.staffSurveys.length ?? 0
+  // Someone currently on the exclusion list should never be counted or shown anywhere in Track
+  // A's numbers or the Response Report below — even if a PDPStaffSurvey row still physically
+  // exists for them (e.g. they were excluded sometime after an earlier launch already created
+  // it; that row gets actually cleaned up the next time Launch Track A runs with audience
+  // "Everyone" — see sendPDPStaffSurvey's reconciliation — but the display shouldn't wait on
+  // that to be correct). No-email people are NOT filtered out here — they're still genuinely
+  // eligible, just missing contact info, which is exactly what Delivery Issues is for surfacing.
+  const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
+  const eligibleStaffSurveys = (detail?.staffSurveys ?? []).filter((s) => !excludedStaffIdKeys.has(s.staffId.trim().toUpperCase()))
+
+  const selfSubmitted = eligibleStaffSurveys.filter((s) => s.respondedAt).length
+  const selfTotal = eligibleStaffSurveys.length
   // Distinct from "Filled" above — this is the actual delivery count (sentAt set), which is what
   // answers "did everyone receive the email" (the big Filled/Total number does NOT answer that —
   // it's how many have submitted so far, which starts at 0 right after a launch regardless of how
   // many emails went out).
-  const selfSent = detail?.staffSurveys.filter((s) => s.sentAt).length ?? 0
-  const selfNoEmail = detail?.staffSurveys.filter((s) => !s.email).length ?? 0
-  const selfSendFailed = detail?.staffSurveys.filter((s) => s.email && !s.sentAt).length ?? 0
+  const selfSent = eligibleStaffSurveys.filter((s) => s.sentAt).length
+  const selfNoEmail = eligibleStaffSurveys.filter((s) => !s.email).length
+  const selfSendFailed = eligibleStaffSurveys.filter((s) => s.email && !s.sentAt).length
   const managerLinksSent = detail?.managerSurveys.filter((m) => m.sentAt).length ?? 0
   // Whichever manager-review mechanism actually applies per person, not just the old
   // one-link-per-person PDPManagerValidation flow — new submissions go through the one-link-
@@ -978,7 +988,7 @@ export function PDPCyclePanel() {
   const reviewCompleteStaffIds = new Set(
     [...needsReviewEntriesByStaffId.entries()].filter(([, entries]) => entries.some((e) => e.submittedAt)).map(([staffId]) => staffId),
   )
-  const needsValidationSurveys = detail?.staffSurveys.filter((s) => s.requireManagerValidation) ?? []
+  const needsValidationSurveys = eligibleStaffSurveys.filter((s) => s.requireManagerValidation)
   const validationsTotal = needsValidationSurveys.length
   const validationsSubmitted = needsValidationSurveys.filter(
     (s) => s.validations.some((v) => v.respondedAt) || reviewCompleteStaffIds.has(s.staffId),
@@ -995,7 +1005,7 @@ export function PDPCyclePanel() {
   // at all" isn't confused with "they have it, a later nudge just hiccuped."
   type DeliveryIssue = { track: string; name: string; staffId: string; email: string | null; reason: string; neverSent: boolean }
   const deliveryIssues: DeliveryIssue[] = []
-  for (const s of detail?.staffSurveys ?? []) {
+  for (const s of eligibleStaffSurveys) {
     if (!s.email) deliveryIssues.push({ track: 'Track A', name: s.staffName, staffId: s.staffId, email: null, reason: 'No email address on file.', neverSent: true })
     else if (s.lastSendError) deliveryIssues.push({ track: 'Track A', name: s.staffName, staffId: s.staffId, email: s.email, reason: s.lastSendError, neverSent: !s.sentAt })
     for (const v of s.validations) {
@@ -1014,7 +1024,6 @@ export function PDPCyclePanel() {
   // roster view doesn't carry (e.g. the comprehensive-staff-list merge in staff-directory.ts can
   // include people not present in the main roster upload, defaulting to active:true) rather than a
   // bug in the count itself — surfaced here instead of guessed at.
-  const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
   const rosterEligible = roster.filter((r) => !excludedStaffIdKeys.has(r.staffId.trim().toUpperCase()))
   const rosterEligibleCount = rosterEligible.length
   const rosterEligibleNoEmail = rosterEligible.filter((r) => !r.email).length
@@ -1045,12 +1054,11 @@ export function PDPCyclePanel() {
   // looking each survey's staffId up in `roster` instead of trusting that stored field.
   type TrackBreakdownRow = { name: string; total: number; launched: number; filled: number; excluded: number }
   const buildBreakdown = (groupKey: (s: RosterStaff) => string, surveyGroupKey: (s: StaffSurvey) => string): TrackBreakdownRow[] => {
-    const excludedIds = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
     const totalBy = new Map<string, number>()
     const excludedBy = new Map<string, number>()
     for (const r of roster) {
       const k = groupKey(r) || 'Unassigned'
-      if (excludedIds.has(r.staffId.trim().toUpperCase())) {
+      if (excludedStaffIdKeys.has(r.staffId.trim().toUpperCase())) {
         excludedBy.set(k, (excludedBy.get(k) || 0) + 1)
         continue
       }
@@ -1058,7 +1066,7 @@ export function PDPCyclePanel() {
     }
     const launchedBy = new Map<string, number>()
     const filledBy = new Map<string, number>()
-    for (const s of detail?.staffSurveys ?? []) {
+    for (const s of eligibleStaffSurveys) {
       const k = surveyGroupKey(s) || 'Unassigned'
       if (s.sentAt) launchedBy.set(k, (launchedBy.get(k) || 0) + 1)
       if (s.respondedAt) filledBy.set(k, (filledBy.get(k) || 0) + 1)
@@ -1089,7 +1097,7 @@ export function PDPCyclePanel() {
     }
     return true
   }
-  const filteredStaffSurveys = detail ? detail.staffSurveys.filter((s) =>
+  const filteredStaffSurveys = detail ? eligibleStaffSurveys.filter((s) =>
     (!q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) && matchesStatusAndDate(s.sentAt, s.respondedAt)
   ) : []
   const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) =>
