@@ -955,8 +955,11 @@ export function PDPCyclePanel() {
   // exists for them (e.g. they were excluded sometime after an earlier launch already created
   // it; that row gets actually cleaned up the next time Launch Track A runs with audience
   // "Everyone" — see sendPDPStaffSurvey's reconciliation — but the display shouldn't wait on
-  // that to be correct). No-email people are NOT filtered out here — they're still genuinely
-  // eligible, just missing contact info, which is exactly what Delivery Issues is for surfacing.
+  // that to be correct).
+  // No-email people are NOT filtered out here — they stay counted in the denominator (358 =
+  // 366 active − 8 excluded; confirmed explicitly against the admin's own expected figure) and
+  // stay listed in the Response Report, since they're still genuinely eligible, just missing
+  // contact info — which is exactly what Delivery Issues (below) exists to flag so it gets fixed.
   const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
   const eligibleStaffSurveys = (detail?.staffSurveys ?? []).filter((s) => !excludedStaffIdKeys.has(s.staffId.trim().toUpperCase()))
 
@@ -1028,6 +1031,13 @@ export function PDPCyclePanel() {
   const rosterEligibleCount = rosterEligible.length
   const rosterEligibleNoEmail = rosterEligible.filter((r) => !r.email).length
   const totalReconcileGap = selfTotal - rosterEligibleCount
+  // Named, not just counted — the gap above used to just be guessed at ("likely people not in
+  // the main roster upload"). This lists exactly who: anyone with a (non-excluded) survey row
+  // whose Staff ID doesn't resolve against the current active roster at all.
+  const rosterEligibleIdKeys = new Set(rosterEligible.map((r) => r.staffId.trim().toUpperCase()))
+  const unaccountedStaffSurveys = totalReconcileGap > 0
+    ? eligibleStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(s.staffId.trim().toUpperCase()))
+    : []
 
   // Each distinct reason among the "not yet delivered" (has email, send attempted, never
   // succeeded) group, with a few names each — the Delivery Issues panel further down has the full
@@ -1247,7 +1257,9 @@ export function PDPCyclePanel() {
                 {totalReconcileGap !== 0 && (
                   <p className="text-[11px] text-slate-400 mt-1.5">
                     Roster check: {roster.length} active − {excludedStaffIdKeys.size} excluded = {rosterEligibleCount} expected (of which {rosterEligibleNoEmail} have no email). This cycle&apos;s total is {selfTotal}
-                    {totalReconcileGap > 0 ? `, ${totalReconcileGap} more than that — likely people not in the main roster upload (e.g. the comprehensive staff list) who were still eligible at launch time.` : `, ${Math.abs(totalReconcileGap)} fewer — likely people removed from the roster since launch who haven't yet reconciled; relaunch to Everyone to clean this up.`}
+                    {totalReconcileGap > 0
+                      ? `, ${totalReconcileGap} more than that — their Staff ID doesn't match anyone currently in the active roster: ${unaccountedStaffSurveys.slice(0, 8).map((s) => `${s.staffName} (${s.staffId})`).join(', ')}${unaccountedStaffSurveys.length > 8 ? ` +${unaccountedStaffSurveys.length - 8} more` : ''}.`
+                      : `, ${Math.abs(totalReconcileGap)} fewer — likely people removed from the roster since launch who haven't yet reconciled; relaunch to Everyone to clean this up.`}
                   </p>
                 )}
                 <p className="text-xs text-slate-400 mt-1">Manager validations: {validationsSubmitted} / {validationsTotal}</p>
