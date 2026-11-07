@@ -361,13 +361,6 @@ export default function PDPManagerTeamPage() {
   const setNeedAnswer = (index: number, questionId: string, value: string | string[]) => {
     setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.map((n, i) => (i === index ? { ...n, [questionId]: value } : n)) })
   }
-  // See the equivalent comment in the Track A page — without advancing `page` here too, clicking
-  // "Add another" appends the need but leaves the manager looking at the same page they were
-  // already on, with the button now gone (it only shows on the last need page).
-  const addNeed = () => {
-    setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
-    setPage((p) => p + 1)
-  }
   const removeNeed = (index: number) => {
     setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.filter((_, i) => i !== index) })
     setPage((p) => Math.max(0, p - 1))
@@ -394,6 +387,17 @@ export default function PDPManagerTeamPage() {
     }
     setPageError('')
     return true
+  }
+
+  // See the equivalent comment in the Track A page — without advancing `page` here too, clicking
+  // "Add another" appends the need but leaves the manager looking at the same page they were
+  // already on, with the button now gone (it only shows on the last need page). Gated the same
+  // way as Next — can't add another need while the current page's own required questions
+  // (including the manager's own need-review questions) are still unanswered.
+  const addNeed = () => {
+    if (!checkCurrentPage()) return
+    setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
+    setPage((p) => p + 1)
   }
 
   const goNext = () => {

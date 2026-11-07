@@ -104,10 +104,6 @@ export default function PDPFormPreviewPage() {
   const setNeedAnswer = (index: number, questionId: string, value: string | string[]) => {
     setDevelopmentNeeds((prev) => prev.map((n, i) => (i === index ? { ...n, [questionId]: value } : n)))
   }
-  const addNeed = () => {
-    setDevelopmentNeeds((prev) => [...prev, {}])
-    setPage((p) => p + 1)
-  }
   const removeNeed = (index: number) => {
     setDevelopmentNeeds((prev) => prev.filter((_, i) => i !== index))
     setPage((p) => Math.max(0, p - 1))
@@ -130,6 +126,12 @@ export default function PDPFormPreviewPage() {
     }
     setPageError('')
     return true
+  }
+
+  const addNeed = () => {
+    if (!checkCurrentPage()) return
+    setDevelopmentNeeds((prev) => [...prev, {}])
+    setPage((p) => p + 1)
   }
 
   const goNext = () => {

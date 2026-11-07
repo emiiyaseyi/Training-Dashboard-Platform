@@ -168,18 +168,9 @@ export default function PDPStaffSurveyPage() {
   // disappears, since it only shows on the last need page, making the click look like it did
   // nothing). The new need always lands immediately after the current one in the page order, since
   // it's appended to the end of developmentNeeds while the respondent is on the last existing need.
-  const addNeed = () => {
-    setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
-    setPage((p) => p + 1)
-  }
-  const removeNeed = (index: number) => {
-    setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.filter((_, i) => i !== index) })
-    setPage((p) => Math.max(0, p - 1))
-  }
-
-  // Checks the page currently showing against its own required/maxSelect rules before advancing
-  // or submitting — the intro page has nothing to check. Returns true when the page is clear to
-  // leave.
+  // Checks the page currently showing against its own required/maxSelect rules before advancing,
+  // adding another need, or submitting — the intro page has nothing to check. Returns true when
+  // the page is clear to leave.
   const checkCurrentPage = (): boolean => {
     if (!current || current.type === 'intro' || current.type === 'training-history') { setPageError(''); return true }
     const values = current.type === 'need' ? (form.developmentNeeds[current.index] || {}) : form.answers
@@ -197,6 +188,24 @@ export default function PDPStaffSurveyPage() {
     }
     setPageError('')
     return true
+  }
+
+  // Advances to the new blank need's page immediately — without this, the "Add another" click
+  // appends to developmentNeeds but leaves `page` pointing at the same index, so the respondent
+  // stays on the page they were already looking at and nothing visibly happens (the button simply
+  // disappears, since it only shows on the last need page, making the click look like it did
+  // nothing). The new need always lands immediately after the current one in the page order, since
+  // it's appended to the end of developmentNeeds while the respondent is on the last existing need.
+  // Gated the same way as Next — can't add another need while the current page's own required
+  // questions are still unanswered.
+  const addNeed = () => {
+    if (!checkCurrentPage()) return
+    setForm((prev) => prev && { ...prev, developmentNeeds: [...prev.developmentNeeds, {}] })
+    setPage((p) => p + 1)
+  }
+  const removeNeed = (index: number) => {
+    setForm((prev) => prev && { ...prev, developmentNeeds: prev.developmentNeeds.filter((_, i) => i !== index) })
+    setPage((p) => Math.max(0, p - 1))
   }
 
   const goNext = () => {
