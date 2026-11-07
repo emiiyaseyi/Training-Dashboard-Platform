@@ -447,6 +447,7 @@ export function PDPCyclePanel() {
   const [exclusionBusy, setExclusionBusy] = useState(false)
 
   const [launchingStaff, setLaunchingStaff] = useState(false)
+  const [launchProgress, setLaunchProgress] = useState<string | null>(null)
   const [launchingManagers, setLaunchingManagers] = useState(false)
   const [launchResult, setLaunchResult] = useState<{ track: string; created: number; sent: number; skipped: { name: string; reason: string }[] } | null>(null)
 
@@ -608,23 +609,46 @@ export function PDPCyclePanel() {
     return { type: 'all' as const, excludeStaffIds }
   }
 
+  // Batched, client-driven (same shape and reasoning as the Training Catalog admin actions) — an
+  // audience of hundreds means hundreds of sequential SMTP sends, which in one request risks
+  // tripping the serverless function's time limit and leaving the button spinning with no
+  // response ever coming back. The FIRST call creates every PDPStaffSurvey row for the audience
+  // (cheap, idempotent); every call (including the first) also sends one small batch of emails,
+  // so progress is visible immediately rather than after a separate slow "create" phase.
   const launchStaff = async () => {
     if (!selectedId) return
     setLaunchingStaff(true)
     setLaunchResult(null)
+    setLaunchProgress('Starting…')
+    const audience = buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected, staffExcludeSelected)
+    const LAUNCH_BATCH_SIZE = 25
+    let offset = 0
+    let createdTotal = 0
+    let sentTotal = 0
+    const skippedTotal: { name: string; reason: string }[] = []
+    let batchNum = 0
     try {
-      const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audience: buildAudience(staffAudienceType, staffAudienceValue, staffAudienceSelected, staffExcludeSelected), requireManagerValidation: staffRequireValidation }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setLaunchResult({ track: 'Staff Self-Fill', ...data })
-        setStaffAudienceSelected([])
-      } else {
-        alert(data.error || 'Failed to launch.')
+      while (true) {
+        const res = await fetch(`/api/admin/pdp/${selectedId}/launch-staff`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audience, requireManagerValidation: staffRequireValidation, batch: true, offset, limit: LAUNCH_BATCH_SIZE }),
+        })
+        const data = await res.json()
+        if (!res.ok) { alert(data.error || 'Failed to launch.'); break }
+        batchNum += 1
+        createdTotal += data.created || 0
+        sentTotal += data.sent || 0
+        skippedTotal.push(...(data.skipped || []))
+        const total = typeof data.total === 'number' ? data.total : 0
+        const totalBatches = total > 0 ? Math.ceil(total / LAUNCH_BATCH_SIZE) : batchNum
+        setLaunchProgress(`Batch ${batchNum} of ${totalBatches} complete — ${sentTotal} sent, ${skippedTotal.length} skipped so far (${Math.min(offset + LAUNCH_BATCH_SIZE, total)} / ${total} processed).`)
+        offset = typeof data.nextOffset === 'number' ? data.nextOffset : offset + LAUNCH_BATCH_SIZE
+        if (data.done) break
       }
+      setLaunchResult({ track: 'Staff Self-Fill', created: createdTotal, sent: sentTotal, skipped: skippedTotal })
+      setLaunchProgress(null)
+      setStaffAudienceSelected([])
       await loadCycles()
       await loadDetail(selectedId)
     } finally {
@@ -1246,6 +1270,12 @@ export function PDPCyclePanel() {
                   {launchingStaff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Launch Track A (Staff Self-Fill)
                 </button>
+                {launchProgress && (
+                  <div className="flex items-center gap-2 bg-navy-50 border border-navy-200 text-navy-700 rounded-lg px-3 py-2 text-xs font-medium">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    {launchProgress}
+                  </div>
+                )}
 
                 <AudiencePicker
                   label="Track B audience — which managers get their team's link (filtered by the manager's own BU/department)"

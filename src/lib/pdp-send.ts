@@ -34,6 +34,11 @@ export interface PDPLaunchResult {
   created: number
   sent: number
   skipped: { name: string; reason: string }[]
+  // Present only when called with a `batch` option (see sendPDPStaffSurvey) — lets a caller loop
+  // across multiple requests instead of emailing everyone in one request.
+  nextOffset?: number
+  total?: number
+  done?: boolean
 }
 
 const DAY_MS_LOCAL = 86400000
@@ -57,7 +62,19 @@ function resolveTrackDeadline(fixed: Date | null, expiryDays: number): Date {
 // `requireManagerValidation` is captured onto each new row as a snapshot of what the Launch panel
 // had set at the moment of THIS launch — not re-read from the cycle later, so earlier and later
 // launches of the same cycle can legitimately carry different settings.
-export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience = { type: 'all' }, requireManagerValidation = true): Promise<PDPLaunchResult> {
+// `batch` lets a caller (the admin panel, for an audience that can run into the hundreds) send in
+// slices across multiple requests instead of one request awaiting hundreds of sequential SMTP
+// sends — a single request doing that risks tripping the serverless function's time limit and
+// leaving the launch button spinning forever with no response (the same failure mode the Training
+// Catalog's seed/auto-tag routes hit at smaller scale). Row creation (idempotent, cheap) still
+// runs in full on every call; only the actual email-sending loop is sliced by offset/limit, over a
+// stable id-ordered list of still-unsent rows.
+export async function sendPDPStaffSurvey(
+  cycle: PDPCycle,
+  audience: PDPAudience = { type: 'all' },
+  requireManagerValidation = true,
+  batch?: { offset: number; limit: number },
+): Promise<PDPLaunchResult> {
   const directory = await loadRosterDirectory()
   const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
   const active = await filterStaffByAudience(activeAll, audience)
@@ -86,12 +103,14 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
   const result: PDPLaunchResult = { created: toCreate.length, sent: 0, skipped: [] }
   if (!(await hasSmtpCredentials())) {
     result.skipped = toCreate.filter((s) => s.email).map((s) => ({ name: s.name, reason: 'SMTP is not configured yet.' }))
+    if (batch) { result.nextOffset = batch.offset; result.total = 0; result.done = true }
     return result
   }
 
   const baseUrl = getAppBaseUrl()
   const template = await resolvePDPEmailTemplate(cycle.id, 'staffSurvey')
-  const unsent = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id, sentAt: null } })
+  const allUnsent = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id, sentAt: null }, orderBy: { id: 'asc' } })
+  const unsent = batch ? allUnsent.slice(batch.offset, batch.offset + batch.limit) : allUnsent
   for (const survey of unsent) {
     if (!survey.email) {
       result.skipped.push({ name: survey.staffName, reason: 'No email address on file.' })
@@ -109,6 +128,12 @@ export async function sendPDPStaffSurvey(cycle: PDPCycle, audience: PDPAudience 
       result.skipped.push({ name: survey.staffName, reason: message })
       await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { lastSendError: message } }).catch(() => {})
     }
+  }
+  if (batch) {
+    const nextOffset = batch.offset + unsent.length
+    result.nextOffset = nextOffset
+    result.total = allUnsent.length
+    result.done = nextOffset >= allUnsent.length
   }
   return result
 }
