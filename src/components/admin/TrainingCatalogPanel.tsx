@@ -231,101 +231,88 @@ export function TrainingCatalogPanel() {
     }
   }
 
-  // One-time initial load of ~993 courses from 7 providers' 2026 calendars (NIM, LBS, PwC Finance
-  // Academy, PwC Business School, POISE, FITC, Phillips Consulting — local deliveries only), each
-  // pre-tagged against the same taxonomies the PDP form uses. Safe to click more than once — upserts
-  // by (title, provider), so a second click just re-confirms the data rather than duplicating it.
-  // Driven in batches from here (not one giant server-side pass) — a single request covering all
-  // ~993 courses risked tripping Vercel's serverless timeout and left the button spinning forever
-  // with no response ever coming back. Each batch is small and fast; looping client-side also
-  // means the admin sees live progress instead of a frozen spinner.
-  const SEED_BATCH_SIZE = 100
-  const seedCatalog = async () => {
-    if (!confirm('Load the initial ~993-course catalog from the 7 provider calendars? Safe to run more than once — existing courses are updated in place, never duplicated.')) return
+  // Shared driver for all 4 batched admin actions below — each one's API route takes {offset,
+  // limit} and returns {nextOffset, total, done, ...counts}. Looping from here (instead of one
+  // giant server-side pass) keeps every single request fast enough to never trip Vercel's
+  // serverless timeout, and lets the admin see live "Batch X of Y" progress instead of a frozen
+  // spinner with no feedback until the whole thing finishes (or silently never does).
+  const runBatched = async (
+    endpoint: string,
+    batchSize: number,
+    describe: (data: Record<string, unknown>) => string,
+    summarize: (totals: Record<string, number>, total: number) => string,
+  ) => {
     setSeeding(true)
-    setSeedMessage(null)
+    setSeedMessage('Starting…')
     let offset = 0
-    let createdTotal = 0
-    let updatedTotal = 0
+    let batchNum = 0
     let total = 0
+    const totals: Record<string, number> = {}
     try {
       while (true) {
-        const res = await fetch('/api/admin/training-catalog/seed', {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ offset, limit: SEED_BATCH_SIZE }),
+          body: JSON.stringify({ offset, limit: batchSize }),
         })
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'Failed to load the catalog.')
-        createdTotal += data.created
-        updatedTotal += data.updated
-        total = data.total
-        offset = data.nextOffset
-        setSeedMessage(`Loading… ${Math.min(offset, total)} / ${total} processed (${createdTotal} added, ${updatedTotal} updated so far).`)
+        if (!res.ok) throw new Error(data.error || 'Request failed.')
+        batchNum += 1
+        total = typeof data.total === 'number' ? data.total : total
+        const totalBatches = total > 0 ? Math.ceil(total / batchSize) : batchNum
+        for (const [key, val] of Object.entries(data)) {
+          if (typeof val === 'number' && key !== 'nextOffset' && key !== 'total') totals[key] = (totals[key] || 0) + val
+        }
+        setSeedMessage(`Batch ${batchNum} of ${totalBatches} complete — ${describe(data)}`)
+        offset = typeof data.nextOffset === 'number' ? data.nextOffset : offset + batchSize
         if (data.done) break
       }
-      setSeedMessage(`Done — ${createdTotal} added, ${updatedTotal} updated (${total} total).`)
+      setSeedMessage(summarize(totals, total))
       load()
     } catch (err) {
-      setSeedMessage(err instanceof Error ? err.message : 'Failed to load the catalog.')
+      setSeedMessage(err instanceof Error ? err.message : 'Request failed.')
     } finally {
       setSeeding(false)
     }
   }
 
-  const stripYears = async () => {
-    setSeeding(true)
-    setSeedMessage(null)
-    try {
-      const res = await fetch('/api/admin/training-catalog/strip-years', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to clean up titles.')
-      setSeedMessage(data.updated > 0 ? `Removed the year from ${data.updated} title(s).` : 'No course titles had a year to remove.')
-      load()
-    } catch (err) {
-      setSeedMessage(err instanceof Error ? err.message : 'Failed to clean up titles.')
-    } finally {
-      setSeeding(false)
-    }
-  }
+  // One-time initial load of ~1,100 courses from 9 providers' 2026 calendars plus Udemy/Coursera,
+  // each pre-tagged against the same taxonomies the PDP form uses. Safe to click more than once —
+  // upserts by (title, provider), so a second click just re-confirms the data rather than
+  // duplicating it.
+  const seedCatalog = () => runBatched(
+    '/api/admin/training-catalog/seed',
+    100,
+    (d) => `${d.created} added, ${d.updated} updated, ${d.unchanged} unchanged this batch.`,
+    (t) => `Done — ${t.created || 0} added, ${t.updated || 0} updated (${(t.created || 0) + (t.updated || 0) + (t.unchanged || 0)} processed).`,
+  )
+
+  const stripYears = () => runBatched(
+    '/api/admin/training-catalog/strip-years',
+    150,
+    (d) => `${d.updated} title(s) cleaned this batch.`,
+    (t) => (t.updated > 0 ? `Done — removed the year from ${t.updated} title(s).` : 'Done — no course titles had a year to remove.'),
+  )
 
   // Conservative one-off pass — only flags clearly board/C-suite titles (e.g. "Chief Information
   // Officers' Continuous Education Programme") as Tier 4, never touches a course that already has
   // a grade level set. Everything else stays unrestricted; review/adjust via the table.
-  const autoTagGrade = async () => {
-    setSeeding(true)
-    setSeedMessage(null)
-    try {
-      const res = await fetch('/api/admin/training-catalog/auto-tag-grade', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to auto-tag grade levels.')
-      setSeedMessage(data.tagged > 0 ? `Set "AVP and Above" on ${data.tagged} clearly board/C-suite course(s). Everything else stays unrestricted — review via the table.` : 'No untagged courses matched an obvious board/C-suite title.')
-      load()
-    } catch (err) {
-      setSeedMessage(err instanceof Error ? err.message : 'Failed to auto-tag grade levels.')
-    } finally {
-      setSeeding(false)
-    }
-  }
+  const autoTagGrade = () => runBatched(
+    '/api/admin/training-catalog/auto-tag-grade',
+    150,
+    (d) => `${d.tagged} course(s) set to "AVP and Above" this batch.`,
+    (t) => (t.tagged > 0 ? `Done — set "AVP and Above" on ${t.tagged} clearly board/C-suite course(s). Everything else stays unrestricted — review via the table.` : 'Done — no untagged courses matched an obvious board/C-suite title.'),
+  )
 
   // One-off pass: tags courses against Meristem's currently-configured Differentiating
   // Capabilities, via keyword overlap on title/category. Never removes an existing tag, so it's
   // safe to re-run after adding new capabilities or new courses.
-  const autoTagCapabilities = async () => {
-    setSeeding(true)
-    setSeedMessage(null)
-    try {
-      const res = await fetch('/api/admin/training-catalog/auto-tag-capabilities', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to auto-tag capabilities.')
-      setSeedMessage(data.tagged > 0 ? `Added a Meristem Strategic Capability tag to ${data.tagged} course(s) based on title/category keyword matches. Spot-check via the table — this is keyword matching, not a guarantee of true relevance.` : (data.note || 'No courses matched a configured capability by keyword.'))
-      load()
-    } catch (err) {
-      setSeedMessage(err instanceof Error ? err.message : 'Failed to auto-tag capabilities.')
-    } finally {
-      setSeeding(false)
-    }
-  }
+  const autoTagCapabilities = () => runBatched(
+    '/api/admin/training-catalog/auto-tag-capabilities',
+    150,
+    (d) => `${d.tagged} course(s) tagged this batch.`,
+    (t) => (t.tagged > 0 ? `Done — added a Meristem Strategic Capability tag to ${t.tagged} course(s) based on title/category keyword matches. Spot-check via the table — this is keyword matching, not a guarantee of true relevance.` : 'Done — no courses matched a configured capability by keyword.'),
+  )
 
   const deleteCourse = async (c: Course) => {
     if (!confirm(`Delete "${c.title}" (${c.provider}) from the training catalog? This can't be undone, but doesn't affect any PDP already filled.`)) return
@@ -365,7 +352,7 @@ export function TrainingCatalogPanel() {
             <button
               onClick={seedCatalog}
               disabled={seeding}
-              title="One-time load of ~993 courses from 7 providers' 2026 calendars, pre-tagged against the PDP taxonomies. Safe to click more than once."
+              title="One-time load of ~1,100 courses from 9 providers' 2026 calendars plus Udemy/Coursera, pre-tagged against the PDP taxonomies. Safe to click more than once — runs in batches, with progress shown below."
               className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50"
             >
               {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -407,7 +394,12 @@ export function TrainingCatalogPanel() {
           </div>
         </div>
 
-        {seedMessage && <p className="text-[11px] text-slate-500">{seedMessage}</p>}
+        {seedMessage && (
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${seeding ? 'bg-navy-50 text-navy-700 border border-navy-200' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+            {seeding && <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />}
+            {seedMessage}
+          </div>
+        )}
 
         {showAddForm && (
           <CourseForm draft={addDraft} setDraft={setAddDraft} providers={providers} capabilityNames={capabilityNames} onSave={addCourse} onCancel={() => setShowAddForm(false)} saving={saving} error={formError} />

@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
 // Same bounded-concurrency helper as data-quality-audit.ts's roster backfill — awaiting one
 // update at a time over ~1000 courses serialized into a multi-minute (apparently hung) request.
@@ -38,23 +38,30 @@ function significantWords(text: string): string[] {
     .filter((w) => w.length >= 4 && !STOPWORDS.has(w))
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
 
-  const [capabilities, courses] = await Promise.all([
-    prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } }),
-    prisma.trainingCatalogCourse.findMany({ select: { id: true, title: true, category: true, tags: true } }),
-  ])
-  if (capabilities.length === 0) {
-    return NextResponse.json({ success: true, tagged: 0, titles: [], note: 'No Differentiating Capabilities are configured yet.' })
-  }
+  const body = await req.json().catch(() => ({}))
+  const offset = Number.isFinite(body.offset) ? Math.max(0, body.offset) : 0
+  const limit = Number.isFinite(body.limit) && body.limit > 0 ? Math.min(body.limit, 300) : 150
 
+  const capabilities = await prisma.differentiatingCapability.findMany({ orderBy: { order: 'asc' } })
+  if (capabilities.length === 0) {
+    return NextResponse.json({ success: true, tagged: 0, titles: [], nextOffset: offset, total: 0, done: true, note: 'No Differentiating Capabilities are configured yet.' })
+  }
   const capKeywords = capabilities.map((c) => ({ name: c.name, words: significantWords(c.name) })).filter((c) => c.words.length > 0)
 
-  const toTag: { id: string; title: string; addedTags: string[] }[] = []
+  // Ordered by id over the whole catalog, sliced by offset — stable across batches regardless of
+  // which rows get tagged (same reasoning as auto-tag-grade).
+  const all = await prisma.trainingCatalogCourse.findMany({
+    select: { id: true, title: true, category: true, tags: true },
+    orderBy: { id: 'asc' },
+  })
+  const batch = all.slice(offset, offset + limit)
+
   const pending: { id: string; title: string; nextTags: string[]; addedTags: string[] }[] = []
-  for (const course of courses) {
+  for (const course of batch) {
     const existingTags: string[] = JSON.parse(course.tags)
     const courseWords = new Set(significantWords(`${course.title} ${course.category ?? ''}`))
     const matches = capKeywords
@@ -65,10 +72,19 @@ export async function POST() {
     }
   }
 
+  const toTag: { id: string; title: string; addedTags: string[] }[] = []
   await runConcurrent(pending, 10, async (c) => {
     await prisma.trainingCatalogCourse.update({ where: { id: c.id }, data: { tags: JSON.stringify(c.nextTags) } })
     toTag.push({ id: c.id, title: c.title, addedTags: c.addedTags })
   })
 
-  return NextResponse.json({ success: true, tagged: toTag.length, titles: toTag.map((t) => `${t.title} → ${t.addedTags.join(', ')}`) })
+  const nextOffset = offset + batch.length
+  return NextResponse.json({
+    success: true,
+    tagged: toTag.length,
+    titles: toTag.map((t) => `${t.title} → ${t.addedTags.join(', ')}`),
+    nextOffset,
+    total: all.length,
+    done: nextOffset >= all.length,
+  })
 }

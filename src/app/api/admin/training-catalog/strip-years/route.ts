@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
 
@@ -23,12 +23,22 @@ function stripYear(title: string): string {
   return t
 }
 
-export async function POST() {
+export const maxDuration = 30
+
+// Batched, client-driven (same shape as the seed route) — the full id+title list is cheap to
+// re-read each call (no joins, no tags blob), so slicing it by offset/limit per batch gives the
+// admin panel visible "batch X of Y" progress instead of one long silent request.
+export async function POST(req: NextRequest) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
 
-  const courses = await prisma.trainingCatalogCourse.findMany({ select: { id: true, title: true } })
-  const toUpdate = courses
+  const body = await req.json().catch(() => ({}))
+  const offset = Number.isFinite(body.offset) ? Math.max(0, body.offset) : 0
+  const limit = Number.isFinite(body.limit) && body.limit > 0 ? Math.min(body.limit, 300) : 150
+
+  const all = await prisma.trainingCatalogCourse.findMany({ select: { id: true, title: true }, orderBy: { id: 'asc' } })
+  const batch = all.slice(offset, offset + limit)
+  const toUpdate = batch
     .map((c) => ({ id: c.id, title: c.title, next: stripYear(c.title) }))
     .filter((c) => c.next !== c.title)
 
@@ -36,5 +46,13 @@ export async function POST() {
     await prisma.trainingCatalogCourse.update({ where: { id: c.id }, data: { title: c.next } })
   }
 
-  return NextResponse.json({ success: true, updated: toUpdate.length, changes: toUpdate.map((c) => ({ from: c.title, to: c.next })) })
+  const nextOffset = offset + batch.length
+  return NextResponse.json({
+    success: true,
+    updated: toUpdate.length,
+    changes: toUpdate.map((c) => ({ from: c.title, to: c.next })),
+    nextOffset,
+    total: all.length,
+    done: nextOffset >= all.length,
+  })
 }

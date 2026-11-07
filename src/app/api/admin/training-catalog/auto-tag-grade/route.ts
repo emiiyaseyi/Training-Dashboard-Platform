@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requirePermission } from '@/lib/session-guard'
+
+export const maxDuration = 30
 
 // One-off, conservative pass over the already-loaded catalog: flags only CLEARLY board/C-suite-
 // level titles (e.g. "Chief Information Officers' Continuous Education Programme") as Tier 4 (AVP
@@ -25,19 +27,35 @@ function isSeniorSignal(title: string): boolean {
   return SENIOR_SIGNAL_PATTERNS.some((re) => re.test(title))
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const gate = await requirePermission('admin-settings', 'admin')
   if (gate instanceof NextResponse) return gate
 
-  const candidates = await prisma.trainingCatalogCourse.findMany({
-    where: { minTier: null },
-    select: { id: true, title: true },
+  const body = await req.json().catch(() => ({}))
+  const offset = Number.isFinite(body.offset) ? Math.max(0, body.offset) : 0
+  const limit = Number.isFinite(body.limit) && body.limit > 0 ? Math.min(body.limit, 300) : 150
+
+  // Ordered by id over the WHOLE catalog (not just untagged rows) so offset/limit stays stable
+  // across batches — filtering to minTier:null first would shift which rows land at a given
+  // offset as earlier batches tag rows, silently skipping some.
+  const all = await prisma.trainingCatalogCourse.findMany({
+    select: { id: true, title: true, minTier: true },
+    orderBy: { id: 'asc' },
   })
-  const toTag = candidates.filter((c) => isSeniorSignal(c.title))
+  const batch = all.slice(offset, offset + limit)
+  const toTag = batch.filter((c) => c.minTier == null && isSeniorSignal(c.title))
 
   for (const c of toTag) {
     await prisma.trainingCatalogCourse.update({ where: { id: c.id }, data: { minTier: 4 } })
   }
 
-  return NextResponse.json({ success: true, tagged: toTag.length, titles: toTag.map((c) => c.title) })
+  const nextOffset = offset + batch.length
+  return NextResponse.json({
+    success: true,
+    tagged: toTag.length,
+    titles: toTag.map((c) => c.title),
+    nextOffset,
+    total: all.length,
+    done: nextOffset >= all.length,
+  })
 }
