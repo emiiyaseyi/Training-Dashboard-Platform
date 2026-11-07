@@ -34,6 +34,10 @@ export interface PDPLaunchResult {
   created: number
   sent: number
   skipped: { name: string; reason: string }[]
+  // Only ever non-zero for an audience:'all' launch — stale, never-answered rows for people no
+  // longer active or now excluded, removed so the cycle's total reconciles back to the current
+  // live audience size instead of only ever growing. See sendPDPStaffSurvey's comment.
+  removed?: number
   // Present only when called with a `batch` option (see sendPDPStaffSurvey) — lets a caller loop
   // across multiple requests instead of emailing everyone in one request.
   nextOffset?: number
@@ -79,9 +83,28 @@ export async function sendPDPStaffSurvey(
   const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
   const active = await filterStaffByAudience(activeAll, audience)
 
-  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { staffId: true } })
+  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { id: true, staffId: true, respondedAt: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.staffId)))
   const toCreate = active.filter((s) => !existingKeys.has(normalizeStaffIdKey(s.staffId)))
+
+  // Reconciliation, "Everyone" launches only: a PDPStaffSurvey row created on an earlier launch
+  // can become stale — the person was deactivated or added to the exclusion list sometime after
+  // their row was created — and without this, the cycle's total only ever grows, never shrinks,
+  // so "N / total" drifts away from "N / (current active minus current exclusions)" with no way
+  // to reconcile it back. Only done for type:'all' (the authoritative full-audience definition) —
+  // a narrower launch (one BU, a hand-picked list) must never delete rows outside that slice, or
+  // it would wipe out people who were legitimately included by an earlier, wider launch. Never
+  // deletes a row that's already been answered (respondedAt set) — that's real submitted data,
+  // kept regardless of the person's current roster/exclusion status.
+  let removed = 0
+  if (audience.type === 'all') {
+    const activeKeys = new Set(active.map((s) => normalizeStaffIdKey(s.staffId)))
+    const orphaned = existing.filter((r) => !r.respondedAt && !activeKeys.has(normalizeStaffIdKey(r.staffId)))
+    if (orphaned.length > 0) {
+      await prisma.pDPStaffSurvey.deleteMany({ where: { id: { in: orphaned.map((r) => r.id) } } })
+      removed = orphaned.length
+    }
+  }
 
   const prefillIndex = await buildPDPPrefillIndex()
   if (toCreate.length > 0) {
@@ -100,7 +123,7 @@ export async function sendPDPStaffSurvey(
     })
   }
 
-  const result: PDPLaunchResult = { created: toCreate.length, sent: 0, skipped: [] }
+  const result: PDPLaunchResult = { created: toCreate.length, sent: 0, skipped: [], removed }
   if (!(await hasSmtpCredentials())) {
     result.skipped = toCreate.filter((s) => s.email).map((s) => ({ name: s.name, reason: 'SMTP is not configured yet.' }))
     if (batch) { result.nextOffset = batch.offset; result.total = 0; result.done = true }

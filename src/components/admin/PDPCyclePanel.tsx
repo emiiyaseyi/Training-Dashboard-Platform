@@ -451,7 +451,7 @@ export function PDPCyclePanel() {
   const [launchingStaff, setLaunchingStaff] = useState(false)
   const [launchProgress, setLaunchProgress] = useState<string | null>(null)
   const [launchingManagers, setLaunchingManagers] = useState(false)
-  const [launchResult, setLaunchResult] = useState<{ track: string; created: number; sent: number; skipped: { name: string; reason: string }[] } | null>(null)
+  const [launchResult, setLaunchResult] = useState<{ track: string; created: number; sent: number; skipped: { name: string; reason: string }[]; removed?: number } | null>(null)
 
   const [savingOverride, setSavingOverride] = useState(false)
   const [overrideError, setOverrideError] = useState('')
@@ -627,6 +627,7 @@ export function PDPCyclePanel() {
     let offset = 0
     let createdTotal = 0
     let sentTotal = 0
+    let removedTotal = 0
     const skippedTotal: { name: string; reason: string }[] = []
     let batchNum = 0
     try {
@@ -641,6 +642,7 @@ export function PDPCyclePanel() {
         batchNum += 1
         createdTotal += data.created || 0
         sentTotal += data.sent || 0
+        removedTotal += data.removed || 0
         skippedTotal.push(...(data.skipped || []))
         const total = typeof data.total === 'number' ? data.total : 0
         const totalBatches = total > 0 ? Math.ceil(total / LAUNCH_BATCH_SIZE) : batchNum
@@ -648,7 +650,7 @@ export function PDPCyclePanel() {
         offset = typeof data.nextOffset === 'number' ? data.nextOffset : offset + LAUNCH_BATCH_SIZE
         if (data.done) break
       }
-      setLaunchResult({ track: 'Staff Self-Fill', created: createdTotal, sent: sentTotal, skipped: skippedTotal })
+      setLaunchResult({ track: 'Staff Self-Fill', created: createdTotal, sent: sentTotal, skipped: skippedTotal, removed: removedTotal })
       setLaunchProgress(null)
       setStaffAudienceSelected([])
       await loadCycles()
@@ -1314,13 +1316,13 @@ export function PDPCyclePanel() {
                 </button>
 
                 <p className="text-[11px] text-slate-400">
-                  Re-running either only sends to people/managers not already created for this cycle — safe to re-run with a wider audience later (e.g. test with a few people first, then launch to everyone).
+                  Re-running either only sends to people/managers not already created for this cycle — safe to re-run with a wider audience later (e.g. test with a few people first, then launch to everyone). Launching Track A to &quot;Everyone&quot; also reconciles the total: anyone no longer active or now excluded, who never actually filled their plan, is removed, so the count stays an accurate match to the current roster instead of only ever growing.
                 </p>
                 {launchResult && (
                   <div className="flex items-start gap-2 text-sm bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-emerald-800 font-medium">{launchResult.track} launched — {launchResult.created} created, {launchResult.sent} sent.</p>
+                      <p className="text-emerald-800 font-medium">{launchResult.track} launched — {launchResult.created} created, {launchResult.sent} sent{launchResult.removed ? `, ${launchResult.removed} stale/unanswered removed` : ''}.</p>
                       {launchResult.skipped.length > 0 && (
                         <p className="text-amber-700 mt-1 text-xs">{launchResult.skipped.length} skipped: {launchResult.skipped.slice(0, 5).map((s) => `${s.name} (${s.reason})`).join('; ')}{launchResult.skipped.length > 5 ? '…' : ''}</p>
                       )}
