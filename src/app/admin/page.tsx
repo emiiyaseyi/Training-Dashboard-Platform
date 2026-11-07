@@ -10,6 +10,7 @@ import { loadSignatureSettings, saveSignatureSettings, type SignatureSettings } 
 import { TaxonomyPanel } from '@/components/admin/TaxonomyPanel'
 import { SkillsGapSettingsPanel } from '@/components/admin/SkillsGapSettingsPanel'
 import { TrainingCatalogPanel } from '@/components/admin/TrainingCatalogPanel'
+import { PDPCyclePanel } from '@/components/admin/PDPCyclePanel'
 import { GroupCostDistribution } from '@/components/admin/GroupCostDistribution'
 import { TalentMemberExemptionPanel } from '@/components/admin/TalentMemberExemptionPanel'
 import { TalentMemberRosterPanel } from '@/components/admin/TalentMemberRosterPanel'
@@ -62,7 +63,7 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
   { id: 'skills-gap-settings', label: 'Skills Gap Settings', tab: 'taxonomies' },
   { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
-  { id: 'pdp-cycles-link', label: 'PDP Cycles — launch, deadlines, questions, exclusions', tab: 'pdp' },
+  { id: 'pdp-cycles', label: 'PDP Cycles — launch, deadlines, questions, exclusions', tab: 'pdp' },
   { id: 'training-catalog', label: 'Training Catalog', tab: 'pdp' },
   { id: 'google-sheets', label: 'Live Data Source — Google Sheets', tab: 'data-quality' },
   { id: 'training-record-changes', label: 'Training Data Changes to Review', tab: 'data-quality' },
@@ -732,22 +733,8 @@ export default function AdminPage() {
         {/* ── Tab: PDP Admin Settings ── */}
         {tab === 'pdp' && (
           <div className="space-y-8">
-            <div id="pdp-cycles-link" className={sectionWrapClass('pdp-cycles-link')}>
-              <Link
-                href="/pdp"
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start gap-3">
-                  <FileText className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">PDP Cycles — launch, deadlines, questions, exclusions</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Create/launch a cycle, edit Track A/B reminder and deadline timing, edit the questions respondents see (and push option updates to an already-launched cycle), and manage exclusions. Per-cycle, so it lives on its own page rather than here.
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
-              </Link>
+            <div id="pdp-cycles" className={sectionWrapClass('pdp-cycles')}>
+              <PDPCyclePanel />
             </div>
             <div id="training-catalog" className={sectionWrapClass('training-catalog')}>
               <TrainingCatalogPanel />
