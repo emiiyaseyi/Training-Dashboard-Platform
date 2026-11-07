@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Search, Plus, Loader2, Pencil, UserX, UserCheck, Trash2, X } from 'lucide-react'
+import { Search, Plus, Loader2, Pencil, UserX, UserCheck, Trash2, X, Download } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Pagination, paginate } from '@/components/ui/Pagination'
 
@@ -275,6 +275,32 @@ export default function EmployeesPage() {
 
   const pageRows = paginate(filtered, page, PAGE_SIZE)
 
+  const EXPORT_HEADERS = [
+    'Staff ID', 'Name', 'Email', 'Department', 'Business Unit', 'Job Role', 'Line Manager',
+    'Employment Type', 'Date of Birth', 'Join Date', 'Status',
+  ]
+  function csvEscape(val: string): string {
+    return /[",\n]/.test(val) ? `"${val.replace(/"/g, '""')}"` : val
+  }
+  // Exports exactly the currently-filtered list (Status/Employment Type/Department/Business
+  // Unit/Job Role, plus search and the data-gap toggles) — not a separate export-time filter
+  // set, so "what's on screen" and "what's in the file" always match.
+  const exportCSV = () => {
+    const rows = filtered.map((e) => [
+      e.staffId, e.name, e.email || '', e.department || '', e.businessUnit, e.role || '',
+      lineManagerName(e.lineManagerStaffId) || '', e.employmentType || '', e.dateOfBirth || '',
+      e.employmentDate || '', e.active ? 'Active' : 'Inactive',
+    ])
+    const csv = [EXPORT_HEADERS, ...rows].map((r) => r.map((v) => csvEscape(String(v))).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `employees_${statusFilter}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const addEmployee = async () => {
     setSaving(true)
     setFormError(null)
@@ -486,6 +512,14 @@ export default function EmployeesPage() {
               Missing Line Manager ({summary.missingLineManager})
             </button>
           </div>
+
+          <button
+            onClick={exportCSV}
+            title="Exports exactly the list currently shown below, with all active filters applied"
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg px-2.5 py-1.5 hover:bg-slate-50 ml-auto"
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV ({filtered.length})
+          </button>
         </div>
 
         {statusMessage && (
