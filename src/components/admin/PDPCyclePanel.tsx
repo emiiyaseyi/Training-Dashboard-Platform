@@ -1001,6 +1001,33 @@ export function PDPCyclePanel() {
     else if (m.lastSendError) deliveryIssues.push({ track: 'Track B', name: m.managerName, staffId: m.managerStaffId, email: m.email, reason: m.lastSendError, neverSent: !m.sentAt })
   }
 
+  // Reconciliation check for the Track A tile — computed independently from the SAME roster data
+  // already loaded for this page, so a mismatch against selfTotal is visible rather than silently
+  // trusted. A nonzero gap most likely means some of the 366-style total comes from entries this
+  // roster view doesn't carry (e.g. the comprehensive-staff-list merge in staff-directory.ts can
+  // include people not present in the main roster upload, defaulting to active:true) rather than a
+  // bug in the count itself — surfaced here instead of guessed at.
+  const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => e.staffId.trim().toUpperCase()))
+  const rosterEligible = roster.filter((r) => !excludedStaffIdKeys.has(r.staffId.trim().toUpperCase()))
+  const rosterEligibleCount = rosterEligible.length
+  const rosterEligibleNoEmail = rosterEligible.filter((r) => !r.email).length
+  const totalReconcileGap = selfTotal - rosterEligibleCount
+
+  // Each distinct reason among the "not yet delivered" (has email, send attempted, never
+  // succeeded) group, with a few names each — the Delivery Issues panel further down has the full
+  // list, but surfacing this right under the Track A tile means an admin doesn't have to go
+  // hunting for WHY 19 people are stuck before they can fix the actual email addresses.
+  const trackAFailures = deliveryIssues.filter((d) => d.track === 'Track A' && d.email)
+  const trackAFailureGroups = (() => {
+    const byReason = new Map<string, { name: string; email: string | null }[]>()
+    for (const f of trackAFailures) {
+      const list = byReason.get(f.reason) ?? []
+      list.push({ name: f.name, email: f.email })
+      byReason.set(f.reason, list)
+    }
+    return [...byReason.entries()].map(([reason, people]) => ({ reason, people })).sort((a, b) => b.people.length - a.people.length)
+  })()
+
   // Completion rate by Business Unit and Department — denominator is every ACTIVE staff member
   // currently in that BU/department company-wide (the `roster` state, already active-only) MINUS
   // anyone on the Track A exclusion list, not just whoever this cycle happened to launch to, so
@@ -1171,6 +1198,21 @@ export function PDPCyclePanel() {
                   {selfSendFailed > 0 && <> · {selfSendFailed} not yet delivered — re-click Launch Track A to retry them</>}
                   {selfNoEmail > 0 && <> · {selfNoEmail} have no email on file (see Delivery Issues below)</>}
                 </p>
+                {trackAFailureGroups.length > 0 && (
+                  <div className="mt-1.5 text-[11px] text-amber-700 space-y-0.5">
+                    {trackAFailureGroups.map((g) => (
+                      <p key={g.reason}>
+                        <span className="font-medium">{g.people.length}×</span> &quot;{g.reason}&quot; — {g.people.slice(0, 4).map((p) => p.name).join(', ')}{g.people.length > 4 ? ` +${g.people.length - 4} more` : ''}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {totalReconcileGap !== 0 && (
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Roster check: {roster.length} active − {excludedStaffIdKeys.size} excluded = {rosterEligibleCount} expected (of which {rosterEligibleNoEmail} have no email). This cycle&apos;s total is {selfTotal}
+                    {totalReconcileGap > 0 ? `, ${totalReconcileGap} more than that — likely people not in the main roster upload (e.g. the comprehensive staff list) who were still eligible at launch time.` : `, ${Math.abs(totalReconcileGap)} fewer — likely people removed from the roster since launch who haven't yet reconciled; relaunch to Everyone to clean this up.`}
+                  </p>
+                )}
                 <p className="text-xs text-slate-400 mt-1">Manager validations: {validationsSubmitted} / {validationsTotal}</p>
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4">
