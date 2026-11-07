@@ -38,11 +38,12 @@ interface CSVRow { name: string; staffCount: number; budget: number }
 interface CSVImportResult { imported: number; skipped: number; errors: string[] }
 interface YearConfig { id: string; buName: string; year: number; budget: number; staffCount: number }
 
-type TabKey = 'business-units' | 'taxonomies' | 'data-quality' | 'people' | 'communication' | 'integrations'
+type TabKey = 'business-units' | 'taxonomies' | 'data-quality' | 'people' | 'communication' | 'integrations' | 'pdp'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'business-units', label: 'Business Units & Budget' },
   { key: 'taxonomies', label: 'Taxonomies' },
+  { key: 'pdp', label: 'PDP Admin Settings' },
   { key: 'data-quality', label: 'Data & Quality' },
   { key: 'people', label: 'People & Talent' },
   { key: 'communication', label: 'Communication & Security' },
@@ -61,7 +62,8 @@ const SECTIONS: { id: string; label: string; tab: TabKey }[] = [
   { id: 'capabilities', label: 'Differentiating Capabilities', tab: 'taxonomies' },
   { id: 'skills-gap-settings', label: 'Skills Gap Settings', tab: 'taxonomies' },
   { id: 'vendors', label: 'Vendors', tab: 'taxonomies' },
-  { id: 'training-catalog', label: 'Training Catalog', tab: 'taxonomies' },
+  { id: 'pdp-cycles-link', label: 'PDP Cycles — launch, deadlines, questions, exclusions', tab: 'pdp' },
+  { id: 'training-catalog', label: 'Training Catalog', tab: 'pdp' },
   { id: 'google-sheets', label: 'Live Data Source — Google Sheets', tab: 'data-quality' },
   { id: 'training-record-changes', label: 'Training Data Changes to Review', tab: 'data-quality' },
   { id: 'data-quality-audit', label: 'Data Quality Audit', tab: 'data-quality' },
@@ -724,7 +726,30 @@ export default function AdminPage() {
                 namePlaceholder="e.g. Lagos Business School"
               />
             </div>
-            <div id="training-catalog" className={`lg:col-span-2 ${sectionWrapClass('training-catalog')}`}>
+          </div>
+        )}
+
+        {/* ── Tab: PDP Admin Settings ── */}
+        {tab === 'pdp' && (
+          <div className="space-y-8">
+            <div id="pdp-cycles-link" className={sectionWrapClass('pdp-cycles-link')}>
+              <Link
+                href="/pdp"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white shadow-sm p-5 hover:border-navy-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <FileText className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">PDP Cycles — launch, deadlines, questions, exclusions</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Create/launch a cycle, edit Track A/B reminder and deadline timing, edit the questions respondents see (and push option updates to an already-launched cycle), and manage exclusions. Per-cycle, so it lives on its own page rather than here.
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-navy-500 shrink-0" />
+              </Link>
+            </div>
+            <div id="training-catalog" className={sectionWrapClass('training-catalog')}>
               <TrainingCatalogPanel />
             </div>
           </div>
