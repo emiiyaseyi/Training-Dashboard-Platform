@@ -17,6 +17,7 @@ interface PDPQuestion { id: string; label: string; type: string }
 interface Section { id: string; key: string; title: string; questions: PDPQuestion[] }
 interface Answers { answers: Record<string, string | string[]>; developmentNeeds: Record<string, string | string[]>[] }
 interface Person { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers }
+interface InProgressPerson extends Person { draftSavedAt: string | null }
 
 interface GroupOpportunity { area: string; businessUnit: string; count: number; people: string[] }
 
@@ -29,6 +30,7 @@ interface AnalysisData {
   questions: QuestionBreakdown[]
   sections: Section[]
   people: Person[]
+  inProgress: InProgressPerson[]
 }
 
 // Tabular AND graphical in one: a real table (Option / Count / Share) with an inline bar inside
@@ -113,7 +115,7 @@ function PersonRecap({ sections, answers }: { sections: Section[]; answers: Answ
 export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
   const [data, setData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'aggregate' | 'people'>('aggregate')
+  const [tab, setTab] = useState<'aggregate' | 'people' | 'inProgress'>('aggregate')
   const [scope, setScope] = useState<'all' | 'businessUnit' | 'department'>('all')
   const [scopeValue, setScopeValue] = useState('')
   const [peopleQuery, setPeopleQuery] = useState('')
@@ -165,15 +167,22 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
     return data.people.filter((p) => !q || p.staffName.toLowerCase().includes(q) || p.staffId.toLowerCase().includes(q) || p.businessUnit.toLowerCase().includes(q))
   }, [data, peopleQuery])
 
+  const filteredInProgress = useMemo(() => {
+    if (!data) return []
+    const q = peopleQuery.trim().toLowerCase()
+    return data.inProgress.filter((p) => !q || p.staffName.toLowerCase().includes(q) || p.staffId.toLowerCase().includes(q) || p.businessUnit.toLowerCase().includes(q))
+  }, [data, peopleQuery])
+
   if (loading) return <p className="text-xs text-slate-400">Loading…</p>
   if (!data) return <p className="text-xs text-slate-400">Could not load analysis.</p>
-  if (data.totalPlans === 0) return <p className="text-xs text-slate-400">No submitted plans yet — this fills in once people start completing their PDPs.</p>
+  if (data.totalPlans === 0 && data.inProgress.length === 0) return <p className="text-xs text-slate-400">No submitted or in-progress plans yet — this fills in once people start their PDPs.</p>
 
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-1.5">
         <button onClick={() => setTab('aggregate')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'aggregate' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Aggregate Counts</button>
         <button onClick={() => setTab('people')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'people' ? 'bg-navy-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Per-Person ({data.people.length})</button>
+        <button onClick={() => setTab('inProgress')} className={`px-2.5 py-1 rounded-md text-xs font-medium ${tab === 'inProgress' ? 'bg-amber-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>In Progress ({data.inProgress.length})</button>
       </div>
 
       {tab === 'aggregate' && (
@@ -300,6 +309,43 @@ export function PDPAnalysisPanel({ cycleId }: { cycleId: string }) {
               </div>
             ))}
             {filteredPeople.length === 0 && <p className="text-xs text-slate-400">No match.</p>}
+          </div>
+        </div>
+      )}
+
+      {tab === 'inProgress' && (
+        <div>
+          <p className="text-[11px] text-slate-400 mb-3">Started but not yet submitted — what they&apos;ve filled in so far, autosaved as they move between pages. Not counted in the aggregate numbers above.</p>
+          <div className="relative max-w-xs mb-3">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={peopleQuery}
+              onChange={(e) => setPeopleQuery(e.target.value)}
+              placeholder="Search by name, Staff ID, or BU…"
+              className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-md text-xs"
+            />
+          </div>
+          <div className="space-y-1.5">
+            {filteredInProgress.map((p) => (
+              <div key={p.staffId} className="border border-amber-200 bg-amber-50/40 rounded-lg">
+                <button onClick={() => setExpandedStaffId(expandedStaffId === p.staffId ? null : p.staffId)} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <div>
+                    <p className="text-xs font-medium text-slate-700">{p.staffName} <span className="text-slate-400">({p.staffId})</span></p>
+                    <p className="text-[11px] text-amber-700">
+                      {p.businessUnit}{p.department ? ` · ${p.department}` : ''} · In Progress
+                      {p.draftSavedAt && ` · last saved ${new Date(p.draftSavedAt).toLocaleString()}`}
+                    </p>
+                  </div>
+                  {expandedStaffId === p.staffId ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                </button>
+                {expandedStaffId === p.staffId && (
+                  <div className="px-3 pb-3 border-t border-amber-100">
+                    <PersonRecap sections={data.sections} answers={p.answers} />
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredInProgress.length === 0 && <p className="text-xs text-slate-400">No one in progress right now.</p>}
           </div>
         </div>
       )}

@@ -1237,9 +1237,18 @@ model PDPStaffSurvey {
   role            String?
   surveyToken     String    @unique @default(cuid())
   prefillSnapshot String    // JSON: computed capability gaps + role/BU context + recent feedback hints, frozen at send time
-  answers         String?   // JSON: staff's submitted plan, null until submitted
+  // JSON: the respondent's answers. Set on every draft autosave (see the token route's PUT) as
+  // well as on final submit — a non-null value does NOT by itself mean "submitted," only
+  // respondedAt does. Anything reading this to mean "finished" (the Analysis panel, the export)
+  // must check respondedAt too, or it will wrongly count someone still mid-form as done.
+  answers         String?
   sentAt          DateTime?
   respondedAt     DateTime?
+  // Set only by a draft autosave, never touched by final submit — lets the admin see who's
+  // actively working through their plan and when they last touched it, distinct from whether
+  // they've finished (respondedAt). Stays at whatever it was before submission; use respondedAt
+  // to tell a finished plan apart from one still being worked on.
+  draftSavedAt    DateTime?
   reminderAt      DateTime?
   // Snapshot of whether this launch batch requires line-manager validation, captured from the
   // Launch Track A panel at send time — NOT read live from PDPCycle.requireManagerValidation, so
@@ -1336,8 +1345,13 @@ model PDPManagerTeamMemberEntry {
   role            String?
   status          String    @default("pending") // "pending" | "accepted" | "declined" | "added"
   prefillSnapshot String?   // JSON
-  answers         String?   // JSON
+  // JSON: this team member's answers. Set on every draft autosave (see the manager token route's
+  // PUT, body.draft) as well as on final per-member submit — non-null alone does NOT mean
+  // "finished," only submittedAt does (same caveat as PDPStaffSurvey.answers).
+  answers         String?
   submittedAt     DateTime?
+  // Set only by a draft autosave — see PDPStaffSurvey.draftSavedAt for the full reasoning.
+  draftSavedAt    DateTime?
   // True when `answers` was prefilled from this person's own Track A self-fill submission rather
   // than left blank for the manager to fill from scratch — lets the per-member page frame it as
   // "review what they selected" instead of "fill their plan", and lets the manager-survey email

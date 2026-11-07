@@ -43,24 +43,39 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     resolveRespondentSections(cycleId),
   ])
 
+  // Separate from `plans` — someone mid-form (a draft autosave has run, see the token routes'
+  // PUT) but not yet actually submitted. `answers` being non-null does NOT mean finished; only
+  // respondedAt/submittedAt does. This used to be missed entirely — an in-progress Track A draft
+  // was counted as a finalized, "filled" plan (both aggregated into the counts AND shown in the
+  // per-person list as if submitted), because the only check was "does answers parse," not "did
+  // they actually submit." Fixed by requiring respondedAt/submittedAt below, with everyone who
+  // has a draft but no submission reported here instead, as genuinely in progress.
+  interface InProgressPlan { staffId: string; staffName: string; businessUnit: string; department: string | null; source: string; answers: Answers; draftSavedAt: string | null }
   const plans: FinalizedPlan[] = []
+  const inProgress: InProgressPlan[] = []
   for (const s of staffSurveys) {
+    if (!s.respondedAt) {
+      const draft = parseAnswers(s.answers)
+      if (draft) inProgress.push({ staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department, source: 'Self-Fill — in progress', answers: draft, draftSavedAt: s.draftSavedAt?.toISOString() ?? null })
+      continue
+    }
     const completedValidation = s.validations.find((v) => v.respondedAt && v.editedAnswers)
     const answers = completedValidation ? parseAnswers(completedValidation.editedAnswers) : parseAnswers(s.answers)
     if (!answers) continue
     plans.push({
       staffId: s.staffId, staffName: s.staffName, businessUnit: s.businessUnit || 'Unassigned', department: s.department,
-      // Every person who reaches this list has, by construction, actually submitted (s.answers is
-      // only ever written at submit time) — this panel never contains anyone still in progress.
-      // Phrased explicitly as "Filled" rather than the old, easy-to-misread "(not yet validated)"
-      // (which looked like it could mean "not yet filled").
       source: completedValidation ? `Filled — validated by ${completedValidation.managerName || 'manager'}` : 'Filled — awaiting manager validation',
       answers,
     })
   }
   for (const m of managerSurveys) {
     for (const t of m.teamMembers) {
-      if ((t.status !== 'accepted' && t.status !== 'added') || !t.submittedAt) continue
+      if (t.status !== 'accepted' && t.status !== 'added') continue
+      if (!t.submittedAt) {
+        const draft = parseAnswers(t.answers)
+        if (draft) inProgress.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName}) — in progress`, answers: draft, draftSavedAt: t.draftSavedAt?.toISOString() ?? null })
+        continue
+      }
       const answers = parseAnswers(t.answers)
       if (!answers) continue
       plans.push({ staffId: t.staffId, staffName: t.staffName, businessUnit: t.businessUnit || 'Unassigned', department: null, source: `Manager Team-Fill (${m.managerName})`, answers })
@@ -180,5 +195,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cyc
     people: plans.map((p) => ({
       staffId: p.staffId, staffName: p.staffName, businessUnit: p.businessUnit, department: p.department, source: p.source, answers: p.answers,
     })),
+    // Never counted in totalPlans or any of the aggregate breakdowns above — this is purely a
+    // visibility list ("who's actively working on theirs, and when did they last save") so the
+    // admin can see what someone has filled in so far without it polluting the org-wide numbers
+    // with an unfinished plan.
+    inProgress: inProgress
+      .sort((a, b) => (b.draftSavedAt || '').localeCompare(a.draftSavedAt || ''))
+      .map((p) => ({
+        staffId: p.staffId, staffName: p.staffName, businessUnit: p.businessUnit, department: p.department,
+        source: p.source, answers: p.answers, draftSavedAt: p.draftSavedAt,
+      })),
   })
 }

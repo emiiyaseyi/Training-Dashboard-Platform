@@ -79,7 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     if (survey.respondedAt) return NextResponse.json({ error: 'This plan has already been submitted.' }, { status: 400 })
 
     const body = (await req.json()) as PDPFormAnswers
-    await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { answers: JSON.stringify(body) } })
+    await prisma.pDPStaffSurvey.update({ where: { id: survey.id }, data: { answers: JSON.stringify(body), draftSavedAt: new Date() } })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('[pdp/staff PUT]', err)

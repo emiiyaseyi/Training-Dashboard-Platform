@@ -160,7 +160,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ toke
     // (a draft can be partial), so coming back later resumes exactly where they left off; the
     // overall survey is never marked responded from a draft save.
     if (body.draft) {
-      await prisma.pDPManagerTeamMemberEntry.update({ where: { id: entryId }, data: { answers: JSON.stringify(body.answers) } })
+      await prisma.pDPManagerTeamMemberEntry.update({ where: { id: entryId }, data: { answers: JSON.stringify(body.answers), draftSavedAt: new Date() } })
       return NextResponse.json({ success: true })
     }
 
