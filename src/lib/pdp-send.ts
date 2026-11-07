@@ -83,7 +83,7 @@ export async function sendPDPStaffSurvey(
   const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
   const active = await filterStaffByAudience(activeAll, audience)
 
-  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { id: true, staffId: true, respondedAt: true } })
+  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { id: true, staffId: true, respondedAt: true, sentAt: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.staffId)))
   const toCreate = active.filter((s) => !existingKeys.has(normalizeStaffIdKey(s.staffId)))
 
@@ -100,9 +100,36 @@ export async function sendPDPStaffSurvey(
   if (audience.type === 'all') {
     const activeKeys = new Set(active.map((s) => normalizeStaffIdKey(s.staffId)))
     const orphaned = existing.filter((r) => !r.respondedAt && !activeKeys.has(normalizeStaffIdKey(r.staffId)))
-    if (orphaned.length > 0) {
-      await prisma.pDPStaffSurvey.deleteMany({ where: { id: { in: orphaned.map((r) => r.id) } } })
-      removed = orphaned.length
+    const orphanedIds = new Set(orphaned.map((r) => r.id))
+
+    // Duplicate merge: two PDPStaffSurvey rows for the same real person, one created under an
+    // old-format Staff ID before a roster re-upload changed their spelling (e.g. "MSBL-0106"),
+    // one created fresh by a later launch under the new spelling ("MSBL-106") — both individually
+    // match the current roster fine (normalizeStaffIdKey handles the zero-padding difference), so
+    // neither looks orphaned, but together they double-count that one person. Only merges a group
+    // where at most one row has respondedAt (a real submission is never deleted); if two rows in
+    // the same group somehow both have respondedAt, it's left alone rather than guessed at.
+    const byKey = new Map<string, typeof existing>()
+    for (const r of existing) {
+      if (orphanedIds.has(r.id)) continue
+      const key = normalizeStaffIdKey(r.staffId)
+      const arr = byKey.get(key) ?? []
+      arr.push(r)
+      byKey.set(key, arr)
+    }
+    const duplicatesToRemove: string[] = []
+    for (const group of byKey.values()) {
+      if (group.length < 2) continue
+      const responded = group.filter((r) => r.respondedAt)
+      if (responded.length > 1) continue
+      const keeper = responded[0] ?? group.find((r) => r.sentAt) ?? group[0]
+      for (const r of group) if (r.id !== keeper.id) duplicatesToRemove.push(r.id)
+    }
+
+    const toDelete = [...orphaned.map((r) => r.id), ...duplicatesToRemove]
+    if (toDelete.length > 0) {
+      await prisma.pDPStaffSurvey.deleteMany({ where: { id: { in: toDelete } } })
+      removed = toDelete.length
     }
   }
 

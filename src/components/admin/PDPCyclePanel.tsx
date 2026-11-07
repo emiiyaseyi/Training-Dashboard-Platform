@@ -1040,6 +1040,24 @@ export function PDPCyclePanel() {
   const unaccountedStaffSurveys = totalReconcileGap > 0
     ? eligibleStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(normalizeStaffIdKey(s.staffId)))
     : []
+  // The other way a gap can exist even when EVERY row individually resolves to someone real: two
+  // separate PDPStaffSurvey rows for the SAME person (one created under an old-format Staff ID
+  // before a roster re-upload changed their spelling, one created fresh by a later launch under
+  // the new spelling) — each one matches the roster fine on its own, so unaccountedStaffSurveys
+  // above comes back empty, but together they double-count that one person. Grouping by the same
+  // normalized key surfaces exactly that.
+  const duplicateStaffSurveyGroups = totalReconcileGap > 0
+    ? (() => {
+        const byKey = new Map<string, StaffSurvey[]>()
+        for (const s of eligibleStaffSurveys) {
+          const key = normalizeStaffIdKey(s.staffId)
+          const arr = byKey.get(key) ?? []
+          arr.push(s)
+          byKey.set(key, arr)
+        }
+        return [...byKey.values()].filter((group) => group.length > 1)
+      })()
+    : []
 
   // Each distinct reason among the "not yet delivered" (has email, send attempted, never
   // succeeded) group, with a few names each — the Delivery Issues panel further down has the full
@@ -1257,12 +1275,20 @@ export function PDPCyclePanel() {
                   </div>
                 )}
                 {totalReconcileGap !== 0 && (
-                  <p className="text-[11px] text-slate-400 mt-1.5">
-                    Roster check: {roster.length} active − {excludedStaffIdKeys.size} excluded = {rosterEligibleCount} expected (of which {rosterEligibleNoEmail} have no email). This cycle&apos;s total is {selfTotal}
-                    {totalReconcileGap > 0
-                      ? `, ${totalReconcileGap} more than that — their Staff ID doesn't match anyone currently in the active roster: ${unaccountedStaffSurveys.slice(0, 8).map((s) => `${s.staffName} (${s.staffId})`).join(', ')}${unaccountedStaffSurveys.length > 8 ? ` +${unaccountedStaffSurveys.length - 8} more` : ''}.`
-                      : `, ${Math.abs(totalReconcileGap)} fewer — likely people removed from the roster since launch who haven't yet reconciled; relaunch to Everyone to clean this up.`}
-                  </p>
+                  <div className="text-[11px] text-slate-400 mt-1.5 space-y-1">
+                    <p>
+                      Roster check: {roster.length} active − {excludedStaffIdKeys.size} excluded = {rosterEligibleCount} expected (of which {rosterEligibleNoEmail} have no email). This cycle&apos;s total is {selfTotal}
+                      {totalReconcileGap > 0 ? `, ${totalReconcileGap} more than that.` : `, ${Math.abs(totalReconcileGap)} fewer — likely people removed from the roster since launch who haven't yet reconciled; relaunch to Everyone to clean this up.`}
+                    </p>
+                    {unaccountedStaffSurveys.length > 0 && (
+                      <p>Staff ID doesn&apos;t match anyone currently in the active roster: {unaccountedStaffSurveys.slice(0, 8).map((s) => `${s.staffName} (${s.staffId})`).join(', ')}{unaccountedStaffSurveys.length > 8 ? ` +${unaccountedStaffSurveys.length - 8} more` : ''}.</p>
+                    )}
+                    {duplicateStaffSurveyGroups.length > 0 && (
+                      <p>
+                        {duplicateStaffSurveyGroups.length} {duplicateStaffSurveyGroups.length === 1 ? 'person has' : 'people have'} two survey records each (same person, under two differently-formatted Staff IDs — one from before a roster re-upload changed their spelling): {duplicateStaffSurveyGroups.slice(0, 6).map((g) => `${g[0].staffName} (${g.map((s) => s.staffId).join(' / ')})`).join('; ')}{duplicateStaffSurveyGroups.length > 6 ? `; +${duplicateStaffSurveyGroups.length - 6} more` : ''}. Relaunch Track A to Everyone to merge these.
+                      </p>
+                    )}
+                  </div>
                 )}
                 <p className="text-xs text-slate-400 mt-1">Manager validations: {validationsSubmitted} / {validationsTotal}</p>
               </div>
