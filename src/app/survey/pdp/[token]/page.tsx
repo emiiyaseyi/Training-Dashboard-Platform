@@ -286,14 +286,20 @@ export default function PDPStaffSurveyPage() {
                   />
                 ) : null
               })()}
-              {current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
-                <button onClick={addNeed} className="flex items-center gap-1.5 text-[15px] font-medium text-navy-700 hover:underline mt-4">
-                  <Plus className="w-3.5 h-3.5" /> Add another Development Need
-                </button>
-              )}
             </div>
           )}
         </div>
+
+        {current?.type === 'need' && current.index === form.developmentNeeds.length - 1 && form.developmentNeeds.length < (needsSection?.maxRepeats ?? 1) && (
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={addNeed}
+              className="flex items-center gap-2 text-[16px] font-semibold text-navy-700 bg-navy-50 border border-navy-200 rounded-lg px-4 py-2.5 hover:bg-navy-100"
+            >
+              <Plus className="w-4 h-4" /> Add another Development Need
+            </button>
+          </div>
+        )}
 
         {pageError && <p className="text-[15px] text-red-600 mt-3">{pageError}</p>}
         {submitError && <p className="text-[15px] text-red-600 mt-3">{submitError}</p>}
