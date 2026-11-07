@@ -957,22 +957,26 @@ export function PDPCyclePanel() {
   // it; that row gets actually cleaned up the next time Launch Track A runs with audience
   // "Everyone" — see sendPDPStaffSurvey's reconciliation — but the display shouldn't wait on
   // that to be correct).
-  // No-email people are NOT filtered out here — they stay counted in the denominator (358 =
-  // 366 active − 8 excluded; confirmed explicitly against the admin's own expected figure) and
-  // stay listed in the Response Report, since they're still genuinely eligible, just missing
-  // contact info — which is exactly what Delivery Issues (below) exists to flag so it gets fixed.
   const excludedStaffIdKeys = new Set((detail?.staffExclusions ?? []).map((e) => normalizeStaffIdKey(e.staffId)))
   const eligibleStaffSurveys = (detail?.staffSurveys ?? []).filter((s) => !excludedStaffIdKeys.has(normalizeStaffIdKey(s.staffId)))
+  // The Track A tile, Response Report list and Manager validations count all go further still —
+  // per the admin's explicit instruction, someone with no email on file isn't counted toward "to
+  // fill and validate" at all, only Delivery Issues (which stays on eligibleStaffSurveys, not
+  // this) still surfaces them. This recomputes live on every page load/action, not a frozen
+  // snapshot — so adding that person's email (and relaunching Track A, which now also backfills
+  // a previously-missing email onto their existing row — see sendPDPStaffSurvey) makes them
+  // reappear automatically, same as a newly-added employee would.
+  const trackedStaffSurveys = eligibleStaffSurveys.filter((s) => !!s.email)
 
-  const selfSubmitted = eligibleStaffSurveys.filter((s) => s.respondedAt).length
-  const selfTotal = eligibleStaffSurveys.length
+  const selfSubmitted = trackedStaffSurveys.filter((s) => s.respondedAt).length
+  const selfTotal = trackedStaffSurveys.length
   // Distinct from "Filled" above — this is the actual delivery count (sentAt set), which is what
   // answers "did everyone receive the email" (the big Filled/Total number does NOT answer that —
   // it's how many have submitted so far, which starts at 0 right after a launch regardless of how
   // many emails went out).
-  const selfSent = eligibleStaffSurveys.filter((s) => s.sentAt).length
+  const selfSent = trackedStaffSurveys.filter((s) => s.sentAt).length
   const selfNoEmail = eligibleStaffSurveys.filter((s) => !s.email).length
-  const selfSendFailed = eligibleStaffSurveys.filter((s) => s.email && !s.sentAt).length
+  const selfSendFailed = trackedStaffSurveys.filter((s) => !s.sentAt).length
   const managerLinksSent = detail?.managerSurveys.filter((m) => m.sentAt).length ?? 0
   // Whichever manager-review mechanism actually applies per person, not just the old
   // one-link-per-person PDPManagerValidation flow — new submissions go through the one-link-
@@ -992,7 +996,7 @@ export function PDPCyclePanel() {
   const reviewCompleteStaffIds = new Set(
     [...needsReviewEntriesByStaffId.entries()].filter(([, entries]) => entries.some((e) => e.submittedAt)).map(([staffId]) => staffId),
   )
-  const needsValidationSurveys = eligibleStaffSurveys.filter((s) => s.requireManagerValidation)
+  const needsValidationSurveys = trackedStaffSurveys.filter((s) => s.requireManagerValidation)
   const validationsTotal = needsValidationSurveys.length
   const validationsSubmitted = needsValidationSurveys.filter(
     (s) => s.validations.some((v) => v.respondedAt) || reviewCompleteStaffIds.has(s.staffId),
@@ -1030,15 +1034,19 @@ export function PDPCyclePanel() {
   // record, re-entered without zero-padding at some point since) are the same person, and a naive
   // string comparison was flagging 8 genuinely active, non-excluded people as an unaccounted
   // "roster gap" purely because of that formatting drift, when they were never actually a problem.
-  const rosterEligible = roster.filter((r) => !excludedStaffIdKeys.has(normalizeStaffIdKey(r.staffId)))
+  const rosterEligibleAll = roster.filter((r) => !excludedStaffIdKeys.has(normalizeStaffIdKey(r.staffId)))
+  const rosterEligibleNoEmail = rosterEligibleAll.filter((r) => !r.email).length
+  // Compared against trackedStaffSurveys (selfTotal), so this also excludes no-email roster rows
+  // — otherwise every no-email person would show up here as a permanent, spurious "N fewer than
+  // expected" gap instead of the dedicated "X have no email on file" line already covering them.
+  const rosterEligible = rosterEligibleAll.filter((r) => !!r.email)
   const rosterEligibleCount = rosterEligible.length
-  const rosterEligibleNoEmail = rosterEligible.filter((r) => !r.email).length
   const totalReconcileGap = selfTotal - rosterEligibleCount
-  // Named, not just counted — anyone with a (non-excluded) survey row whose Staff ID genuinely
-  // doesn't resolve against the current active roster at all, even after normalizing.
+  // Named, not just counted — anyone with a (non-excluded, has-email) survey row whose Staff ID
+  // genuinely doesn't resolve against the current active roster at all, even after normalizing.
   const rosterEligibleIdKeys = new Set(rosterEligible.map((r) => normalizeStaffIdKey(r.staffId)))
   const unaccountedStaffSurveys = totalReconcileGap > 0
-    ? eligibleStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(normalizeStaffIdKey(s.staffId)))
+    ? trackedStaffSurveys.filter((s) => !rosterEligibleIdKeys.has(normalizeStaffIdKey(s.staffId)))
     : []
   // The other way a gap can exist even when EVERY row individually resolves to someone real: two
   // separate PDPStaffSurvey rows for the SAME person (one created under an old-format Staff ID
@@ -1049,7 +1057,7 @@ export function PDPCyclePanel() {
   const duplicateStaffSurveyGroups = totalReconcileGap > 0
     ? (() => {
         const byKey = new Map<string, StaffSurvey[]>()
-        for (const s of eligibleStaffSurveys) {
+        for (const s of trackedStaffSurveys) {
           const key = normalizeStaffIdKey(s.staffId)
           const arr = byKey.get(key) ?? []
           arr.push(s)
@@ -1127,7 +1135,7 @@ export function PDPCyclePanel() {
     }
     return true
   }
-  const filteredStaffSurveys = detail ? eligibleStaffSurveys.filter((s) =>
+  const filteredStaffSurveys = detail ? trackedStaffSurveys.filter((s) =>
     (!q || s.staffName.toLowerCase().includes(q) || s.staffId.toLowerCase().includes(q)) && matchesStatusAndDate(s.sentAt, s.respondedAt)
   ) : []
   const filteredManagerSurveys = detail ? detail.managerSurveys.filter((m) =>
@@ -1263,7 +1271,7 @@ export function PDPCyclePanel() {
                 <p className={`text-xs mt-1 font-medium ${selfSendFailed > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                   Emailed: {selfSent} / {selfTotal}
                   {selfSendFailed > 0 && <> · {selfSendFailed} not yet delivered — re-click Launch Track A to retry them</>}
-                  {selfNoEmail > 0 && <> · {selfNoEmail} have no email on file (see Delivery Issues below)</>}
+                  {selfNoEmail > 0 && <> · {selfNoEmail} more have no email on file, so aren&apos;t counted above yet (see Delivery Issues below — they&apos;ll count automatically once an email is added and Track A is relaunched)</>}
                 </p>
                 {trackAFailureGroups.length > 0 && (
                   <div className="mt-1.5 text-[11px] text-amber-700 space-y-0.5">

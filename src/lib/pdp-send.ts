@@ -83,9 +83,21 @@ export async function sendPDPStaffSurvey(
   const activeAll = [...directory.values()].filter((s) => s.active && s.firstName.trim() && s.lastName.trim())
   const active = await filterStaffByAudience(activeAll, audience)
 
-  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { id: true, staffId: true, respondedAt: true, sentAt: true } })
+  const existing = await prisma.pDPStaffSurvey.findMany({ where: { cycleId: cycle.id }, select: { id: true, staffId: true, email: true, respondedAt: true, sentAt: true } })
   const existingKeys = new Set(existing.map((r) => normalizeStaffIdKey(r.staffId)))
   const toCreate = active.filter((s) => !existingKeys.has(normalizeStaffIdKey(s.staffId)))
+
+  // An existing row's email is frozen at the moment its row was created — if someone had no email
+  // on file then, got one added to the roster later, and the admin relaunches, this picks it up
+  // rather than leaving the row permanently stuck with no address. Only ever fills in a currently-
+  // null email; never overwrites one that's already set (so a since-changed roster email doesn't
+  // silently redirect an already-sent link's "who it's addressed to" mid-cycle).
+  const activeByKey = new Map(active.map((s) => [normalizeStaffIdKey(s.staffId), s]))
+  const toBackfillEmail = existing.filter((r) => !r.email && activeByKey.get(normalizeStaffIdKey(r.staffId))?.email)
+  for (const r of toBackfillEmail) {
+    const match = activeByKey.get(normalizeStaffIdKey(r.staffId))!
+    await prisma.pDPStaffSurvey.update({ where: { id: r.id }, data: { email: match.email } })
+  }
 
   // Reconciliation, "Everyone" launches only: a PDPStaffSurvey row created on an earlier launch
   // can become stale — the person was deactivated or added to the exclusion list sometime after
